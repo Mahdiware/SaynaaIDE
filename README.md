@@ -94,13 +94,28 @@ activity.setContentView(view)
 Callback example:
 
 ```sa
+import java
+
+activity = getActivity()
+Button = java.bindClass("android.widget.Button")
+LinearLayout = java.bindClass("android.widget.LinearLayout")
+
 click_cb = {
 	onClick: function(v)
+		v.setText("Button clicked")
 		print("clicked")
 	end
 }
 
+button = Button(activity)
+button.setText("Click me")
 button.setOnClickListener(java.createProxy('android.view.View$OnClickListener', click_cb))
+
+layout = LinearLayout(activity)
+layout.setOrientation(LinearLayout.VERTICAL)
+layout.addView(button)
+
+activity.setContentView(layout)
 ```
 
 ## Important runtime files
