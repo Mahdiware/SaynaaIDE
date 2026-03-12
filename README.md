@@ -2,6 +2,9 @@
 
 Saynaa Android is an Android application runtime for the Saynaa programming language. It combines the Saynaa VM with a JNI-based Android bridge so Saynaa scripts can create views, call Java APIs, register listener proxies, and build Android UI directly on-device.
 
+## Screenshot of the demo app running on an Android device:
+![Screenshot of Saynaa Android demo app](assets/screenshot.png)
+
 ## Highlights
 
 - Run Saynaa scripts inside an Android app.
