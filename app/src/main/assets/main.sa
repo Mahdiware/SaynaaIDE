@@ -1,0 +1,84 @@
+from module import path as module_path
+import java
+
+# add import path saynaadir to load hello.sa
+module_path.append(java.saynaadir)
+
+import hello
+
+activity = getActivity()
+
+LinearLayout = java.bindClass("android.widget.LinearLayout")
+TextView = java.bindClass("android.widget.TextView")
+Button = java.bindClass("android.widget.Button")
+EditText = java.bindClass("android.widget.EditText")
+Toast = java.bindClass("android.widget.Toast")
+
+activity.setTitle("Saynaa Demo")
+
+root = LinearLayout(activity)
+root.setOrientation(1)
+root.setPadding(40, 40, 40, 40)
+
+title = TextView(activity)
+title.setText("Saynaa UI")
+title.setTextSize(24)
+
+subtitle = TextView(activity)
+subtitle.setText("Simple, clean callback demo")
+subtitle.setTextSize(14)
+
+status = TextView(activity)
+status.setText("Status: waiting...")
+status.setTextSize(16)
+
+input = EditText(activity)
+input.setHint("Type to trigger TextWatcher")
+
+btn = Button(activity)
+btn.setText("Tap / Long Press")
+
+root.addView(title)
+root.addView(subtitle)
+root.addView(status)
+root.addView(input)
+root.addView(btn)
+
+activity.setContentView(root)
+
+click_cb = {
+	onClick: function(v)
+		v.setText("Tapped ✅")
+		status.setText("Status: button clicked")
+		t = Toast.makeText(activity, "Clicked", Toast.LENGTH_SHORT)
+		t.show()
+	end
+}
+btn.setOnClickListener(java.createProxy("android.view.View\$OnClickListener", click_cb))
+
+long_click_cb = {
+	onLongClick: function(v)
+		v.setText("Long Pressed ✅")
+		status.setText("Status: long click detected")
+		t = Toast.makeText(activity, "Long click", Toast.LENGTH_SHORT)
+		t.show()
+		return true
+	end
+}
+btn.setOnLongClickListener(java.createProxy('android.view.View$OnLongClickListener', long_click_cb))
+
+textWatcher_cb = {
+	beforeTextChanged: function(s, start, count, after)
+		print("beforeTextChanged")
+	end,
+	onTextChanged: function(s, start, before, count)
+		status.setText("Typing: " + s.toString())
+	end,
+	afterTextChanged: function(s)
+		print("afterTextChanged")
+	end
+}
+
+input.addTextChangedListener(java.createProxy('android.text.TextWatcher', textWatcher_cb))
+
+Toast.makeText(activity, "Welcome 👋 ${hello.hello()}", Toast.LENGTH_SHORT).show()
