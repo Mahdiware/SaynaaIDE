@@ -78,7 +78,7 @@ saynaa_function(
   }
 
   double count;
-  if (!ValidateSlotNumber(vm, 1, &count))
+  if (!ValidateSlotNumber(vm, 2, &count))
     return;
 
   ByteBuffer* thiz = GetThis(vm);

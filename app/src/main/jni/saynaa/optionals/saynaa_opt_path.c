@@ -35,7 +35,6 @@
 // override the functions from the host application. Since this is very much
 // platform specific we're defining a more general limit.
 // See: https://insanecoding.blogspot.com/2007/11/pathmax-simply-isnt.html
-#define MAX_PATH_LEN 4096
 
 // The cstring pointer buffer size used in path.join(p1, p2, ...). Tune this
 // value as needed.

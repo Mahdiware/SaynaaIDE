@@ -494,6 +494,8 @@ saynaa_function(coreDir, "dir(v:Var) -> List[String]",
     case vRANGE:
     case vCLOSURE:
     case vFIBER:
+    case vMETHOD_BIND:
+    case vPOINTER:
       {
         List* list = newList(vm, 8);
         vmPushTempRef(vm, &list->_super); // list.
@@ -586,6 +588,21 @@ saynaa_function(
   }
 }
 
+saynaa_function(coreError, "error(value:var) -> Null",
+                "Terminates the current fiber with the given error value.") {
+  String* msg;
+  if (!IS_OBJ_TYPE(ARG(1), OBJ_STRING)) {
+    msg = varToString(vm, ARG(1), false);
+    if (msg == NULL)
+      return; // Error from _to_string
+  } else {
+    msg = (String*) AS_OBJ(ARG(1));
+  }
+  vmPushTempRef(vm, &msg->_super); // msg.
+  VM_SET_ERROR(vm, msg);
+  vmPopTempRef(vm); // msg.
+}
+
 saynaa_function(coreBin, "bin(value:Number) -> String",
                 "Returns as a binary value string with '0b' prefix.") {
   int64_t value;
@@ -666,6 +683,11 @@ saynaa_function(coreToString, "str(valueVar) -> String",
   if (str == NULL)
     RET(VAR_NULL);
   RET(VAR_OBJ(str));
+}
+
+saynaa_function(coreType, "type(value:Var) -> String", "Returns the type of the value.") {
+  const char* type_name = varTypeName(ARG(1));
+  RET(VAR_OBJ(newString(vm, type_name)));
 }
 
 saynaa_function(coreToInt, "int(value:Num) -> Integer",
@@ -883,6 +905,90 @@ saynaa_function(coreDefine, "define(variable:String, value:Var) -> Null",
   RET(VAR_NULL);
 }
 
+saynaa_function(
+    corePcall, "pcall(fn:Closure, ...args) -> List",
+    ""
+    "Calls function in protected mode. Returns [success, result/error].") {
+  int arg_count = ARGC;
+  if (arg_count < 1) {
+    RET_ERR(newString(vm, "Expected at least 1 argument (the function)."));
+  }
+
+  Closure* closure;
+  if (!validateArgClosure(vm, 1, &closure))
+    return;
+
+  // Prepare arguments
+  int call_argc = arg_count - 1;
+  Var* call_argv = NULL;
+  if (call_argc > 0) {
+    call_argv = &vm->fiber->ret[2];
+  }
+
+  // Create fiber
+  Fiber* fiber = newFiber(vm, closure);
+  fiber->native = vm->fiber;
+  vmPushTempRef(vm, &fiber->_super); // fiber.
+
+  bool success = vmPrepareFiber(vm, fiber, call_argc, call_argv);
+
+  List* ret_list = newList(vm, 2);
+  vmPushTempRef(vm, &ret_list->_super); // ret_list.
+
+  if (!success) {
+    String* err = vm->fiber->error;
+    vm->fiber->error = NULL; // clear error
+
+    listAppend(vm, ret_list, VAR_FALSE);
+    listAppend(vm, ret_list, VAR_OBJ(err));
+
+  } else {
+    // Suppress error reporting
+    WriteFn old_stderr = vm->config.stderr_write;
+    vm->config.stderr_write = NULL;
+
+    Result result;
+    Fiber* last = vm->fiber;
+
+    if (fiber->closure->fn->is_native) {
+      ASSERT(fiber->closure->fn->native != NULL, "Native function was NULL");
+      vm->fiber = fiber;
+      fiber->closure->fn->native(vm);
+      if (VM_HAS_ERROR(vm)) {
+        result = RESULT_RUNTIME_ERROR;
+      } else {
+        result = RESULT_SUCCESS;
+      }
+    } else {
+      result = vmRunFiber(vm, fiber);
+    }
+
+    // Restore stderr
+    vm->config.stderr_write = old_stderr;
+
+    // Restore fiber
+    vm->fiber = last;
+
+    if (result == RESULT_SUCCESS) {
+      listAppend(vm, ret_list, VAR_TRUE);
+      listAppend(vm, ret_list, *fiber->ret);
+    } else {
+      listAppend(vm, ret_list, VAR_FALSE);
+      if (fiber->error) {
+        listAppend(vm, ret_list, VAR_OBJ(fiber->error));
+      } else {
+        listAppend(vm, ret_list, VAR_OBJ(newString(vm, "Unknown Error")));
+      }
+      fiber->error = NULL;
+    }
+  }
+
+  vmPopTempRef(vm); // ret_list.
+  vmPopTempRef(vm); // fiber.
+
+  RET(VAR_OBJ(ret_list));
+}
+
 // List functions.
 // ---------------
 
@@ -941,6 +1047,7 @@ static void initializeBuiltinFunctions(VM* vm) {
   INITIALIZE_BUILTIN_FN("hex", coreHex, 1);
   INITIALIZE_BUILTIN_FN("yield", coreYield, -1);
   INITIALIZE_BUILTIN_FN("str", coreToString, 1);
+  INITIALIZE_BUILTIN_FN("type", coreType, 1);
   INITIALIZE_BUILTIN_FN("int", coreToInt, 1);
   INITIALIZE_BUILTIN_FN("chr", coreChr, 1);
   INITIALIZE_BUILTIN_FN("ord", coreOrd, 1);
@@ -952,6 +1059,8 @@ static void initializeBuiltinFunctions(VM* vm) {
   INITIALIZE_BUILTIN_FN("compile", coreCompile, 1);
   INITIALIZE_BUILTIN_FN("eval", coreEval, 1);
   INITIALIZE_BUILTIN_FN("define", coreDefine, 2);
+  INITIALIZE_BUILTIN_FN("pcall", corePcall, -1);
+  INITIALIZE_BUILTIN_FN("error", coreError, 1);
 
   // List functions.
   INITIALIZE_BUILTIN_FN("list_append", coreListAppend, 2);
@@ -1737,22 +1846,39 @@ saynaa_function(_classMethods, "Class.methods() -> List",
 }
 
 saynaa_function(
-    _moduleGlobals, "Module.globals() -> List",
-    "Returns a list of all the globals in the module. Since classes and "
-    "functinos are also globals to a module it'll contain them too.") {
+    _moduleGlobals, "Module.globals() -> Map",
+    "Returns a map of all the globals in the module. Since classes and "
+    "functions are also globals to a module it'll contain them too.") {
   Module* thiz = (Module*) AS_OBJ(THIS);
 
-  List* list = newList(vm, thiz->globals.count);
-  vmPushTempRef(vm, &list->_super); // list.
+  Map* map = newMap(vm);
+  vmPushTempRef(vm, &map->_super); // map.
   for (int i = 0; i < (int) thiz->globals.count; i++) {
-    if (moduleGetStringAt(thiz, thiz->global_names.data[i])->data[0] == SPECIAL_NAME_CHAR) {
+    String* name = moduleGetStringAt(thiz, thiz->global_names.data[i]);
+    if (name->data[0] == SPECIAL_NAME_CHAR) {
       continue;
     }
-    listAppend(vm, list, thiz->globals.data[i]);
+    mapSet(vm, map, VAR_OBJ(name), thiz->globals.data[i]);
   }
-  vmPopTempRef(vm); // list.
+  vmPopTempRef(vm); // map.
 
-  RET(VAR_OBJ(list));
+  RET(VAR_OBJ(map));
+}
+
+saynaa_function(_moduleDefine, "Module.define(variable:String, value:Var) -> Null",
+                "Define a global variable in the module."
+                " with the name [variable] and value [value]") {
+  String* variable;
+  if (!validateArgString(vm, 1, &variable))
+    return;
+
+  Var valua = ARG(2);
+
+  Module* thiz = (Module*) AS_OBJ(THIS);
+
+  moduleSetGlobal(vm, thiz, variable->data, variable->length, valua);
+
+  RET(VAR_NULL);
 }
 
 saynaa_function(
@@ -1879,6 +2005,7 @@ static void initializePrimitiveClasses(VM* vm) {
   ADD_METHOD(vCLASS, "methods", _classMethods, 0);
 
   ADD_METHOD(vMODULE, "globals", _moduleGlobals, 0);
+  ADD_METHOD(vMODULE, "define", _moduleDefine, 2);
 
   ADD_METHOD(vFIBER, "run", _fiberRun, -1);
   ADD_METHOD(vFIBER, "resume", _fiberResume, -1);
@@ -2199,6 +2326,10 @@ Var varModulo(VM* vm, Var v1, Var v2, bool inplace) {
   double n1, n2;
   if (isNumeric(v1, &n1)) {
     if (validateNumeric(vm, v2, &n2, RIGHT_OPERAND)) {
+      if (n2 == 0) {
+        VM_SET_ERROR(vm, newString(vm, "Division by zero."));
+        return VAR_NULL;
+      }
       return VAR_NUM(fmod(n1, n2));
     }
     return VAR_NULL;
@@ -2278,7 +2409,18 @@ Var varMultiply(VM* vm, Var v1, Var v2, bool inplace) {
 }
 
 Var varDivide(VM* vm, Var v1, Var v2, bool inplace) {
-  CHECK_NUMERIC_OP(/);
+  double n1, n2;
+  if (isNumeric(v1, &n1)) {
+    if (validateNumeric(vm, v2, &n2, RIGHT_OPERAND)) {
+      if (n2 == 0) {
+        VM_SET_ERROR(vm, newString(vm, "Division by zero."));
+        return VAR_NULL;
+      }
+      return VAR_NUM(n1 / n2);
+    }
+    return VAR_NULL;
+  }
+
   CHECK_INST_BINARY_OP("/");
   UNSUPPORTED_BINARY_OP("/");
   return VAR_NULL;
@@ -2676,39 +2818,39 @@ Var varGetAttrib(VM* vm, Var on, String* attrib, bool skipGetter, bool callable)
       }
       break;
 
+    case OBJ_POINTER:
+      break;
+
     case OBJ_INST:
       {
         Instance* inst = (Instance*) obj;
         Var value = VAR_NULL;
 
-        if (!skipGetter) {
-          Closure* getter = getMagicMethod(inst->cls, METHOD_GETTER);
-          if (getter != NULL) {
-            Var attrib_name = VAR_OBJ(attrib);
-            vmCallMethod(vm, on, getter, 1, &attrib_name, &value);
-
-            // char* val = varToString(vm, value, false)->data;
-            // printf("value: %s, vartype: %s\n", val, getVarTypeName(getVarType(value)));
-            // char* val2 = varToString(vm, attrib_name, false)->data;
-            // printf("value: %s, vartype: %s\n", val2, getVarTypeName(getVarType(attrib_name)));
-
-            // Return the value returned by the getter.
-            return value;
-          }
-        }
-
         value = mapGet(inst->attribs, VAR_OBJ(attrib));
         if (!IS_UNDEF(value))
           return value;
-
-        Closure* method;
-        if (hasMethod(vm, on, attrib, &method)) {
-          MethodBind* mb = newMethodBind(vm, method);
-          mb->instance = on;
-          return VAR_OBJ(mb);
-        }
       }
       break;
+  }
+
+  {
+    Closure* method;
+    if (hasMethod(vm, on, attrib, &method)) {
+      MethodBind* mb = newMethodBind(vm, method);
+      mb->instance = on;
+      return VAR_OBJ(mb);
+    }
+  }
+
+  if (IS_OBJ_TYPE(on, OBJ_INST) && !skipGetter) {
+    Instance* inst = (Instance*) AS_OBJ(on);
+    Closure* getter = getMagicMethod(inst->cls, METHOD_GETTER);
+    if (getter != NULL) {
+      Var attrib_name = VAR_OBJ(attrib);
+      Var value = VAR_NULL;
+      vmCallMethod(vm, on, getter, 1, &attrib_name, &value);
+      return value;
+    }
   }
 
   ERR_NO_ATTRIB(vm, on, attrib);

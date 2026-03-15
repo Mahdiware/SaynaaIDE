@@ -14,7 +14,10 @@ void registerModulePath(VM* vm);
 void registerModuleOS(VM* vm);
 void registerModuleJson(VM* vm);
 void registerModuleDummy(VM* vm);
+void registerModuleTerm(VM* vm);
 void registerModuleRegex(VM* vm);
+
+void cleanupModuleTerm(VM* vm);
 
 // Registers the modules.
 void registerLibs(VM* vm) {
@@ -26,10 +29,11 @@ void registerLibs(VM* vm) {
   registerModuleOS(vm);
   registerModuleJson(vm);
   registerModuleDummy(vm);
+  registerModuleTerm(vm);
   registerModuleRegex(vm);
 }
 
 // Cleanup the modules.
 void cleanupLibs(VM* vm) {
-  // No cleanup needed for now.
+  cleanupModuleTerm(vm);
 }

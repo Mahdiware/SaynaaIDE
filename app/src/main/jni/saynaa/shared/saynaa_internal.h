@@ -45,12 +45,12 @@
 
 // The maximum path length for a module to import.
 // This is an arbitrary value and can be changed if needed.
-#define MAX_PATH_LEN 4096
+#define MAX_PATH_LEN 8192
 
 // The maximum number of locals or global (if compiling top level module)
 // to lookup from the compiling context. Also it's limited by it's opcode
 // which is using a single byte value to identify the local.
-#define MAX_VARIABLES 256
+#define MAX_VARIABLES 65536
 
 // The maximum number of constant literal a module can contain. Also it's
 // limited by it's opcode which is using a short value to identify.
@@ -58,7 +58,7 @@
 
 // The maximum number of upvalues a literal function can capture from it's
 // enclosing function.
-#define MAX_UPVALUES 256
+#define MAX_UPVALUES 65536
 
 // The maximum number of names that were used before defined. Its just the size
 // of the Forward buffer of the compiler. Feel free to increase it if it
@@ -74,7 +74,7 @@
 // Consider a string: "a ${ b "c ${d}" } e" -- Here the depth of 'b' is 1 and
 // the depth of 'd' is 2 and so on. The maximum depth an expression can go is
 // defined as MAX_STR_INTERP_DEPTH below.
-#define MAX_STR_INTERP_DEPTH 32
+#define MAX_STR_INTERP_DEPTH 64
 
 // The maximum address possible to jump. Similar limitation as above.
 #define MAX_JUMP (1 << 16)
@@ -93,14 +93,14 @@
 #define VAR_NAN_TAGGING 1
 
 // The maximum size of the stack. This value is arbitrary. currently
-// it's 100 MB. Change this to any value upto 2147483647 (signed integer max)
+// it's 512 MB. Change this to any value upto 2147483647 (signed integer max)
 // if you want.
-#define MAX_STACK_SIZE 100 * (1024 * 1024)
+#define MAX_STACK_SIZE 512 * (1024 * 1024)
 
 // The maximum number of argument function supported to call. This
 // value is arbitrary and feel free to change it. (Just used this limit for an
 // internal buffer to store values before calling a new fiber).
-#define MAX_ARGC 32
+#define MAX_ARGC 255
 
 // The factor by which a buffer will grow when it's capacity reached.
 #define GROW_FACTOR 2
@@ -109,11 +109,11 @@
 #define MIN_CAPACITY 8
 
 // The size of the error message buffer, used ar vsnprintf (since c99) buffer.
-#define ERROR_MESSAGE_SIZE 512
+#define ERROR_MESSAGE_SIZE 1024
 
 // The maximum number of temporary object reference to protect them from being
 // garbage collected.
-#define MAX_TEMP_REFERENCE 64
+#define MAX_TEMP_REFERENCE 256
 
 // The capacity of the builtin function array in the VM.
 #define BUILTIN_FN_CAPACITY 50

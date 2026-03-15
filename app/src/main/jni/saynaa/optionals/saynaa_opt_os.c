@@ -58,7 +58,6 @@
 // override the functions from the host application. Since this is very much
 // platform specific we're defining a more general limit.
 // See: https://insanecoding.blogspot.com/2007/11/pathmax-simply-isnt.html
-#define MAX_PATH_LEN 4096
 
 bool osGetExeFilePath(char* buff, int size) {
 #if defined(_OS_WIN_)

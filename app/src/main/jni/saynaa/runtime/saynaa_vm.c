@@ -18,18 +18,60 @@ typedef struct {
   Module* target_module;
 } WildcardImportRuntimeData;
 
+// Build a dotted module name from wildcard base path and filename.
+// Example: base="foo.bar.*", name="file1.sa" -> "foo.bar.file1.sa"
+static void buildWildcardModuleName(const String* base, const char* name,
+                                    char* out, size_t out_size) {
+  ASSERT(base != NULL && name != NULL && out != NULL, OOPS);
+  ASSERT(out_size > 0, OOPS);
+
+  int base_len = (int) base->length;
+  if (base_len >= 2 && base->data[base_len - 2] == '.' && base->data[base_len - 1] == '*') {
+    base_len -= 2;
+  }
+
+  if (base_len <= 0) {
+    snprintf(out, out_size, "%s", name);
+    return;
+  }
+
+  size_t copy_len = (size_t) base_len;
+  if (copy_len >= out_size)
+    copy_len = out_size - 1;
+
+  memcpy(out, base->data, copy_len);
+  out[copy_len] = '\0';
+  snprintf(out + copy_len, out_size - copy_len, ".%s", name);
+}
+
+// Convert dotted import path to filesystem path for directory walking.
+// Example: "foo.bar.*" -> "foo/bar"
+static void wildcardImportToFsPath(const String* import_path, char* out, size_t out_size) {
+  ASSERT(import_path != NULL && out != NULL, OOPS);
+  ASSERT(out_size > 0, OOPS);
+
+  int fs_len = (int) import_path->length;
+  if (fs_len >= 2 && import_path->data[fs_len - 2] == '.'
+      && import_path->data[fs_len - 1] == '*') {
+    fs_len -= 2;
+  }
+
+  if ((size_t) fs_len >= out_size)
+    fs_len = (int) out_size - 1;
+
+  for (int i = 0; i < fs_len; i++) {
+    char c = import_path->data[i];
+    out[i] = (c == '.') ? '/' : c;
+  }
+  out[fs_len] = '\0';
+}
+
 static void wildcardRuntimeCallback(const char* name, void* user_data) {
   WildcardImportRuntimeData* data = (WildcardImportRuntimeData*) user_data;
   VM* vm = data->vm;
 
   char full_name[MAX_PATH_LEN];
-  String* base = data->base_ptr;
-
-  if (base->length == 0) {
-    snprintf(full_name, MAX_PATH_LEN, "%s", name);
-  } else {
-    snprintf(full_name, MAX_PATH_LEN, "%s/%s", base->data, name);
-  }
+  buildWildcardModuleName(data->base_ptr, name, full_name, sizeof(full_name));
 
   String* mod_name = newString(vm, full_name);
   vmPushTempRef(vm, &mod_name->_super);
@@ -37,19 +79,19 @@ static void wildcardRuntimeCallback(const char* name, void* user_data) {
   // Import relative to current module path
   Var imported = vmImportModule(vm, data->current_ptr, mod_name);
   if (IS_OBJ_TYPE(imported, OBJ_MODULE)) {
-      VarBufferWrite(data->modules, vm, imported);
+    VarBufferWrite(data->modules, vm, imported);
 
-      // Bind the module to a variable in the current module with the name of the
-      // file without extension.
-      // e.g. from test import * (where test contains debug.sa)
-      // debug = import("test/debug")
-      const char* ext = strrchr(name, '.');
-      size_t name_len = (ext != NULL) ? (size_t)(ext - name) : strlen(name);
+    // Bind the module to a variable in the current module with the name of the
+    // file without extension.
+    // e.g. from test import * (where test contains debug.sa)
+    // debug = import("test/debug")
+    const char* ext = strrchr(name, '.');
+    size_t name_len = (ext != NULL) ? (size_t) (ext - name) : strlen(name);
 
-      if (name_len > 0) {
-        moduleSetGlobal(vm, data->target_module, name, (int)name_len, imported);
-      }
+    if (name_len > 0) {
+      moduleSetGlobal(vm, data->target_module, name, (int) name_len, imported);
     }
+  }
   vmPopTempRef(vm);
 }
 
@@ -610,7 +652,45 @@ void vmStandardSearcher(VM* vm) {
     return;
   }
   String* name = AS_STRING(vm->fiber->ret[1]);
-  Var result = _importPathSearch(vm, name);
+
+  // Convert dots to slashes for file path search. A copy is made to not
+  // verified the string passed (which could be shared or constant).
+
+  uint32_t len = name->length;
+  bool is_wildcard = false;
+
+  // Check for trailing '.*' and strip it from the file path we'll search for.
+  if (len >= 2 && name->data[len - 2] == '.' && name->data[len - 1] == '*') {
+    len -= 2;
+    is_wildcard = true;
+  }
+
+  bool has_dot = false;
+  for (uint32_t i = 0; i < len; i++) {
+    if (name->data[i] == '.') {
+      has_dot = true;
+      break;
+    }
+  }
+
+  String* path = name;
+  if (has_dot || is_wildcard) {
+    path = newStringLength(vm, name->data, len);
+    for (uint32_t i = 0; i < path->length; i++) {
+      if (path->data[i] == '.') {
+        path->data[i] = '/';
+      }
+    }
+    path->hash = utilHashString(path->data);
+    vmPushTempRef(vm, &path->_super);
+  }
+
+  Var result = _importPathSearch(vm, path);
+
+  if (has_dot || is_wildcard) {
+    vmPopTempRef(vm);
+  }
+
   vm->fiber->ret[0] = result;
 }
 
@@ -673,22 +753,18 @@ Var vmImportModule(VM* vm, String* from, String* path) {
         return VAR_NULL; // Error in searcher
       }
 
-      if (IS_OBJ(result)) {
-        // If result is Module, we are done (Standard Searcher does this)
-        if (AS_OBJ(result)->type == OBJ_MODULE) {
+      if (!IS_NULL(result)) {
+        // The searcher returned 'true'.
+        // This indicates that the searcher already handled the import.
+        // Do not perform any extra global lookup here.
+        if (IS_BOOL(result) && AS_BOOL(result) == true) {
           return result;
         }
-        // If result is Closure (Loader), call it.
-        if (AS_OBJ(result)->type == OBJ_CLOSURE) {
-          Closure* loader = (Closure*) AS_OBJ(result);
-          Var loaded_mod;
-          if (vmCallMethod(vm, VAR_UNDEFINED, loader, 0, NULL, &loaded_mod) != RESULT_SUCCESS) {
-            return VAR_NULL;
-          }
-          if (IS_OBJ_TYPE(loaded_mod, OBJ_MODULE)) {
-            return loaded_mod;
-          }
-        }
+
+        // Any other object/value.
+        // The searcher returned a class, instance, string, number etc directly.
+        // We use this value as the imported result.
+        return result;
       }
     }
   }
@@ -1115,7 +1191,7 @@ L_vm_main_loop:
       DISPATCH();
     }
     OPCODE(PUSH_LOCAL_N) : {
-      uint8_t index = READ_BYTE();
+      uint16_t index = READ_SHORT();
       PUSH(rbp[index + 1]); // +1: rbp[0] is return value.
       DISPATCH();
     }
@@ -1133,20 +1209,20 @@ L_vm_main_loop:
       DISPATCH();
     }
     OPCODE(STORE_LOCAL_N) : {
-      uint8_t index = READ_BYTE();
+      uint16_t index = READ_SHORT();
       rbp[index + 1] = PEEK(-1); // +1: rbp[0] is return value.
       DISPATCH();
     }
 
     OPCODE(PUSH_GLOBAL) : {
-      uint8_t index = READ_BYTE();
+      uint16_t index = READ_SHORT();
       ASSERT_INDEX(index, module->globals.count);
       PUSH(module->globals.data[index]);
       DISPATCH();
     }
 
     OPCODE(STORE_GLOBAL) : {
-      uint8_t index = READ_BYTE();
+      uint16_t index = READ_SHORT();
       ASSERT_INDEX(index, module->globals.count);
       module->globals.data[index] = PEEK(-1);
       DISPATCH();
@@ -1169,13 +1245,13 @@ L_vm_main_loop:
     }
 
     OPCODE(PUSH_UPVALUE) : {
-      uint8_t index = READ_BYTE();
+      uint16_t index = READ_SHORT();
       PUSH(*(frame->closure->upvalues[index]->ptr));
       DISPATCH();
     }
 
     OPCODE(STORE_UPVALUE) : {
-      uint8_t index = READ_BYTE();
+      uint16_t index = READ_SHORT();
       *(frame->closure->upvalues[index]->ptr) = PEEK(-1);
       DISPATCH();
     }
@@ -1192,7 +1268,7 @@ L_vm_main_loop:
       // Capture the vaupes.
       for (int i = 0; i < fn->upvalue_count; i++) {
         uint8_t is_immediate = READ_BYTE();
-        uint8_t idx = READ_BYTE();
+        uint16_t idx = READ_SHORT();
 
         if (is_immediate) {
           // rbp[0] is the return value, rbp + 1 is the first local and so on.
@@ -1268,7 +1344,14 @@ L_vm_main_loop:
       const char* base_path = (current_path != NULL) ? current_path->data : ".";
 
       char search_path[MAX_PATH_LEN];
-      utilResolvePath(search_path, MAX_PATH_LEN, base_path, import_path->data);
+
+      // Convert import path to a filesystem path for directory walking only.
+      // Keep `import_path` unchanged so custom searchers still receive
+      // the original dotted module path.
+      char import_path_fs[MAX_PATH_LEN];
+      wildcardImportToFsPath(import_path, import_path_fs, sizeof(import_path_fs));
+
+      utilResolvePath(search_path, MAX_PATH_LEN, base_path, import_path_fs);
 
       VarBuffer modules;
       VarBufferInit(&modules);
@@ -1365,30 +1448,51 @@ L_vm_main_loop:
 
       Var _imported = vmImportModule(vm, module->path, name);
       CHECK_ERROR();
-      ASSERT(IS_OBJ_TYPE(_imported, OBJ_MODULE), OOPS);
+
+      // If a searcher returned true, it means "handled".
+      // For regular import bytecode, the next opcode is usually STORE_GLOBAL.
+      // If that global slot already has a value (e.g. set by define()),
+      // keep that value instead of overwriting it with true.
+      if (IS_BOOL(_imported) && AS_BOOL(_imported) == true) {
+        if ((Opcode) (*ip) == OP_STORE_GLOBAL) {
+          uint16_t global_index = (uint16_t) ((ip[1] << 8) | ip[2]);
+          ASSERT_INDEX(global_index, module->globals.count);
+
+          Var existing = module->globals.data[global_index];
+          if (!IS_UNDEF(existing)) {
+            _imported = existing;
+          }
+        }
+      }
+
+      // NOTE: _imported could be any value (module, class, function or just true).
+      // We only execute module body if it's a module.
+      // ASSERT(IS_OBJ_TYPE(_imported, OBJ_MODULE), OOPS);
 
       PUSH(_imported);
 
-      Module* imported = (Module*) AS_OBJ(_imported);
-      if (!imported->initialized) {
-        imported->initialized = true;
+      if (IS_OBJ_TYPE(_imported, OBJ_MODULE)) {
+        Module* imported = (Module*) AS_OBJ(_imported);
+        if (!imported->initialized) {
+          imported->initialized = true;
 
-        ASSERT(imported->body != NULL, OOPS);
+          ASSERT(imported->body != NULL, OOPS);
 
-        UPDATE_FRAME(); //< Update the current frame's ip.
+          UPDATE_FRAME(); //< Update the current frame's ip.
 
-        // Note that we're setting the main function's return address to the
-        // module itself (for every other function we'll push a null at the rbp
-        // before calling them and it'll be returned without modified if the
-        // function doesn't returned anything). Also We can't return from the
-        // body of the module, so the main function will return what's at the
-        // rbp without modifying it. So at the end of the main function the
-        // stack top would be the module itself.
-        fiber->ret = fiber->sp - 1;
-        pushCallFrame(vm, imported->body);
+          // Note that we're setting the main function's return address to the
+          // module itself (for every other function we'll push a null at the
+          // rbp before calling them and it'll be returned without modified if
+          // the function doesn't returned anything). Also We can't return from
+          // the body of the module, so the main function will return what's at
+          // the rbp without modifying it. So at the end of the main function
+          // the stack top would be the module itself.
+          fiber->ret = fiber->sp - 1;
+          pushCallFrame(vm, imported->body);
 
-        LOAD_FRAME();  //< Load the top frame to vm's execution variables.
-        CHECK_ERROR(); //< Stack overflow.
+          LOAD_FRAME();  //< Load the top frame to vm's execution variables.
+          CHECK_ERROR(); //< Stack overflow.
+        }
       }
 
       DISPATCH();

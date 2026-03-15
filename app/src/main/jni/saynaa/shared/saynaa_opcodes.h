@@ -65,7 +65,7 @@ OPCODE(PUSH_LOCAL_5, 0, 1)
 OPCODE(PUSH_LOCAL_6, 0, 1)
 OPCODE(PUSH_LOCAL_7, 0, 1)
 OPCODE(PUSH_LOCAL_8, 0, 1)
-OPCODE(PUSH_LOCAL_N, 1, 1)
+OPCODE(PUSH_LOCAL_N, 2, 1)
 
 // Store the stack top value to another stack local index and don't pop since
 // it's the result of the assignment.
@@ -79,16 +79,16 @@ OPCODE(STORE_LOCAL_5, 0, 0)
 OPCODE(STORE_LOCAL_6, 0, 0)
 OPCODE(STORE_LOCAL_7, 0, 0)
 OPCODE(STORE_LOCAL_8, 0, 0)
-OPCODE(STORE_LOCAL_N, 1, 0)
+OPCODE(STORE_LOCAL_N, 2, 0)
 
 // Push the script global value on the stack.
-// params: 1 byte index.
-OPCODE(PUSH_GLOBAL, 1, 1)
+// params: 2 byte index.
+OPCODE(PUSH_GLOBAL, 2, 1)
 
 // Store the stack top value to a global value and don't pop since it's the
 // result of the assignment.
-// params: 1 byte index.
-OPCODE(STORE_GLOBAL, 1, 0)
+// params: 2 byte index.
+OPCODE(STORE_GLOBAL, 2, 0)
 
 // Push a built in function.
 // params: 1 bytes index.
@@ -100,13 +100,13 @@ OPCODE(PUSH_BUILTIN_TY, 1, 1)
 
 // Push an upvalue of the current closure at the index which is the first one
 // byte argument.
-// params: 1 byte index.
-OPCODE(PUSH_UPVALUE, 1, 1)
+// params: 2 byte index.
+OPCODE(PUSH_UPVALUE, 2, 1)
 
 // Store the stack top value to the upvalues of the current function's upvalues
 // array and don't pop it, since it's the result of the assignment.
-// params: 1 byte index.
-OPCODE(STORE_UPVALUE, 1, 0)
+// params: 2 byte index.
+OPCODE(STORE_UPVALUE, 2, 0)
 
 // Push a closure for the function at the constant pool with index of the
 // first 2 bytes arguments.
