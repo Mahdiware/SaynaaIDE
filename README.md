@@ -3,14 +3,17 @@
 Saynaa Android is an Android application runtime for the Saynaa programming language. It combines the Saynaa VM with a JNI-based Android bridge so Saynaa scripts can create views, call Java APIs, register listener proxies, and build Android UI directly on-device.
 
 ## Screenshot of the demo app running on an Android device:
-![Screenshot of Saynaa Android demo app](assets/screenshot.png)
+![Screenshot one of Saynaa Android demo app](assets/screenshot1.png)
+![Screenshot Two of Saynaa Android demo app](assets/screenshot2.png)
+![Screenshot Three of Saynaa Android demo app](assets/screenshot3.png)
+
 
 ## Highlights
 
 - Run Saynaa scripts inside an Android app.
 - Access Android and Java APIs through the `java` module.
 - Build native Android UI from Saynaa code.
-- Register Java interface callbacks with `java.createProxy(...)`.
+- Register Java interface callbacks with either `java.createProxy(...)` or interface class-call syntax such as `View.OnClickListener({...})`.
 - Use bundled scripts such as [app/src/main/assets/main.sa](app/src/main/assets/main.sa)
 - Ship native bridge code through JNI and NDK build integration.
 
@@ -33,7 +36,7 @@ Current Android config from [app/build.gradle](app/build.gradle):
 - `minSdkVersion`: `21`
 - `targetSdkVersion`: `34`
 - `compileSdkVersion`: `34`
-- supported ABIs: `armeabi-v7a`, `arm64-v8a`
+- supported ABIs: `x86`, `x86_64`
 
 ## Build
 
@@ -52,6 +55,10 @@ The debug APK is generated under [app/build/outputs/apk](app/build/outputs/apk).
 ### Install the debug build on a connected device:
 
 - `adb install -r app/build/outputs/apk/debug/app-debug.apk`
+
+or
+
+- `gradle :app:installDebug`
 
 ### Launch the app:
 
@@ -78,7 +85,7 @@ Typical script flow:
 - import the `java` module
 - bind Java classes with `java.bindClass(...)`
 - create Android objects
-- register interface callbacks with `java.createProxy(...)`
+- register interface callbacks with `java.createProxy(...)` or interface class-call syntax
 
 See the main example in [app/src/main/assets/main.sa](app/src/main/assets/main.sa).
 
@@ -103,6 +110,7 @@ import java
 activity = getActivity()
 Button = java.bindClass("android.widget.Button")
 LinearLayout = java.bindClass("android.widget.LinearLayout")
+View = java.bindClass("android.view.View")
 
 click_cb = {
 	onClick: function(v)
@@ -113,7 +121,7 @@ click_cb = {
 
 button = Button(activity)
 button.setText("Click me")
-button.setOnClickListener(java.createProxy('android.view.View$OnClickListener', click_cb))
+button.setOnClickListener(View.OnClickListener(click_cb))
 
 layout = LinearLayout(activity)
 layout.setOrientation(LinearLayout.VERTICAL)
@@ -125,8 +133,11 @@ activity.setContentView(layout)
 ## Important runtime files
 
 - [app/src/main/assets/main.sa](app/src/main/assets/main.sa) — main Saynaa demo.
+- [app/src/main/assets/proxy_test.sa](app/src/main/assets/proxy_test.sa) — proxy feature verification script.
 - [app/src/main/assets/hello.sa](app/src/main/assets/hello.sa) — simple imported module example.
-- [app/src/main/jni/saynaajava/saynaajava.c](app/src/main/jni/saynaajava/saynaajava.c) — native bridge implementation.
+- [app/src/main/jni/saynaajava/main.c](app/src/main/jni/saynaajava/main.c) — JNI bridge APIs and conversions.
+- [app/src/main/jni/saynaajava/wrappers.c](app/src/main/jni/saynaajava/wrappers.c) — `JavaClass`/`JavaObject`/`JavaMethod` wrapper behavior.
+- [app/src/main/jni/saynaajava/exports.c](app/src/main/jni/saynaajava/exports.c) — JNI exports for `Saynaa` native methods.
 - [app/src/main/java/com/android/saynaa/saynaajava/JavaBridge.java](app/src/main/java/com/android/saynaa/saynaajava/JavaBridge.java) — Java reflection and proxy bridge.
 
 ## Architecture summary
