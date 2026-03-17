@@ -24,7 +24,7 @@ public class Saynaa {
   }
 
   public synchronized void executeSnippet(String code) {
-    executeSnippetNative(code);
+    executeSnippetWithViewNative(code, null);
   }
 
   public synchronized void executeSnippetWithView(String code, View view) {
@@ -43,6 +43,18 @@ public class Saynaa {
     return invokeCallbackMethodWithResultNative(callbackId, methodName, args);
   }
 
+  public synchronized int pcall(String functionName, Object... args) {
+    return saynaa_pcall(functionName, args);
+  }
+
+  public synchronized int doFile(String fileName) {
+    return saynaa_doFile(fileName);
+  }
+
+  public synchronized int doString(String code) {
+    return saynaa_doString(code);
+  }
+
   public synchronized void close() {
     if (this.vm != null && this.vm.getPointer() != 0) {
       saynaa_close();
@@ -58,10 +70,12 @@ public class Saynaa {
   }
 
   private synchronized native void execute(Context context);
-  private synchronized native void executeSnippetNative(String code);
   private synchronized native void executeSnippetWithViewNative(String code, View view);
   private synchronized native void invokeCallbackNative(int callbackId, Object arg0);
   private synchronized native CPtr saynaa_open();
+  private synchronized native int saynaa_pcall(String functionName, Object[] args);
+  private synchronized native int saynaa_doFile(String fileName);
+  private synchronized native int saynaa_doString(String code);
   private synchronized native void saynaa_close();
   private String source;
   private CPtr vm;

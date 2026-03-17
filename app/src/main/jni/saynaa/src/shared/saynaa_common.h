@@ -9,6 +9,15 @@
 #define __has_builtin(x) 0
 #endif
 
+#ifdef __ANDROID__
+#include <android/log.h>
+#define SAYNAA_DEBUG_TAG "saynaa"
+#define SAYNAA_DEBUG_LOG(...) \
+  __android_log_print(ANDROID_LOG_ERROR, SAYNAA_DEBUG_TAG, __VA_ARGS__)
+#else
+#define SAYNAA_DEBUG_LOG(...) fprintf(stderr, __VA_ARGS__)
+#endif
+
 #include <stdio.h> //< Only needed here for ASSERT() macro and for release mode
                    //< TODO; macro use this to print a crash report.
 
@@ -26,10 +35,9 @@
 #define __ASSERT(condition, message) \
   do { \
     if (!(condition)) { \
-      fprintf(stderr, \
-              "Assertion failed: %s\n\tat %s() (%s:%i)\n" \
-              "\tcondition: %s\n", \
-              message, __func__, __FILE__, __LINE__, #condition); \
+      SAYNAA_DEBUG_LOG("Assertion failed: %s\n\tat %s() (%s:%i)\n" \
+                       "\tcondition: %s\n", \
+                       message, __func__, __FILE__, __LINE__, #condition); \
       DEBUG_BREAK(); \
       abort(); \
     } \
@@ -59,10 +67,9 @@
 
 #define UNREACHABLE() \
   do { \
-    fprintf(stderr, \
-            "Execution reached an unreachable path\n" \
-            "\tat %s() (%s:%i)\n", \
-            __func__, __FILE__, __LINE__); \
+    SAYNAA_DEBUG_LOG("Execution reached an unreachable path\n" \
+                     "\tat %s() (%s:%i)\n", \
+                     __func__, __FILE__, __LINE__); \
     DEBUG_BREAK(); \
     abort(); \
   } while (false)

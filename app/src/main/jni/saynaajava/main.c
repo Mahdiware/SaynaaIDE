@@ -1,117 +1,10 @@
-#include "../saynaa/cli/saynaa.h"
-#include "../saynaa/runtime/saynaa_vm.h"
+#include "internal.h"
 
-#include <android/log.h>
-#include <jni.h>
-#include <stdlib.h>
-#include <string.h>
-
-#define SAYNAAJAVA_TAG "saynaajava"
-#define JAVA_REF_MAGIC 0x534A5246u /* SJRF */
-
-typedef struct JavaRef {
-  unsigned int magic;
-  JavaVM* jvm;
-  jobject global;
-} JavaRef;
-
-typedef struct CallbackEntry CallbackEntry;
-typedef struct JavaPackageEntry JavaPackageEntry;
-
-struct JavaPackageEntry {
-  char* prefix;
-  JavaPackageEntry* next;
-};
-
-typedef struct BridgeState {
-  JavaVM* jvm;
-  jclass javaBridgeClass;
-  jobject activity;
-  jobject saynaaObject;
-  jobject lastEventView;
-
-  Handle* javaModule;
-  Handle* javaWrapperModule;
-  Handle* clsJavaClass;
-  Handle* clsJavaObject;
-  Handle* clsJavaMethod;
-
-  jmethodID mFindClass;
-  jmethodID mCreateJavaObject;
-  jmethodID mCallJavaMethod;
-  jmethodID mCallStaticJavaMethod;
-  jmethodID mGetFieldValue;
-  jmethodID mSetFieldValue;
-  jmethodID mCreateProxy;
-  jmethodID mCreateNativeCallbackProxy;
-  jmethodID mGetDefaultInterfaceMethodName;
-
-  int nextCallbackId;
-  CallbackEntry* callbacks;
-  JavaPackageEntry* packages;
-  bool filesSearchPathAdded;
-} BridgeState;
-
-struct CallbackEntry {
-  int id;
-  Handle* fnHandle;
-  Handle* mapHandle;
-  char* methodName;
-  CallbackEntry* next;
-};
-
-typedef struct JavaClassNative {
-  JavaRef* class_ref;
-} JavaClassNative;
-
-typedef struct JavaObjectNative {
-  JavaRef* object_ref;
-} JavaObjectNative;
-
-typedef struct JavaMethodNative {
-  JavaRef* target_ref;
-  char* method_name;
-  bool is_static;
-} JavaMethodNative;
-
-static BridgeState* bridge_from_vm(VM* vm) {
+BridgeState* bridge_from_vm(VM* vm) {
   return (BridgeState*) GetUserData(vm);
 }
 
-static void throw_if_exception(VM* vm, JNIEnv* env, const char* prefix);
-static char* str_dup_c(const char* s);
-static char* normalize_java_package_prefix(const char* prefix);
-static char* massage_java_classname(const char* name);
-static Module* current_module_from_vm(VM* vm);
-static JNIEnv* env_from_jvm(JavaVM* jvm);
-static JavaRef* make_java_ref(JNIEnv* env, JavaVM* jvm, jobject obj);
-static bool create_java_instance(VM* vm, Handle** clsHandlePtr, JavaRef* ref, int outSlot);
-static void fn_bindClass(VM* vm);
-static void fn_new(VM* vm);
-static void fn_createProxy(VM* vm);
-static void fn_loadLib(VM* vm);
-static void fn_astable(VM* vm);
-static void fn_instanceof(VM* vm);
-static void fn_javaToString(VM* vm);
-static bool java_to_slot(JNIEnv* env, VM* vm, BridgeState* bridge, int slot, jobject obj);
-static jobject slot_to_java(JNIEnv* env, VM* vm, BridgeState* bridge, int slot);
-static bool ensure_java_module(VM* vm);
-static bool ensure_wrapper_classes(VM* vm);
-
-typedef struct JavaSimpleClasses {
-  jclass stringClass;
-  jclass booleanClass;
-  jclass numberClass;
-} JavaSimpleClasses;
-
-typedef struct JavaExport {
-  const char* name;
-  nativeFn fn;
-  int arity;
-  const char* docstring;
-} JavaExport;
-
-static void release_bridge_handle(VM* vm, Handle** handle) {
+void release_bridge_handle(VM* vm, Handle** handle) {
   if (vm == NULL || handle == NULL || *handle == NULL)
     return;
 
@@ -119,18 +12,18 @@ static void release_bridge_handle(VM* vm, Handle** handle) {
   *handle = NULL;
 }
 
-static bool load_java_simple_classes(JNIEnv* env, JavaSimpleClasses* classes) {
+bool load_java_simple_classes(JNIEnv* env, JavaSimpleClasses* classes) {
   if (env == NULL || classes == NULL)
     return false;
 
-  classes->stringClass = (*env)->FindClass(env, "java/lang/String");
-  classes->booleanClass = (*env)->FindClass(env, "java/lang/Boolean");
-  classes->numberClass = (*env)->FindClass(env, "java/lang/Number");
+  classes->stringClass = safe_find_class(NULL, env, "java/lang/String", "load_java_simple_classes:string");
+  classes->booleanClass = safe_find_class(NULL, env, "java/lang/Boolean", "load_java_simple_classes:boolean");
+  classes->numberClass = safe_find_class(NULL, env, "java/lang/Number", "load_java_simple_classes:number");
 
   return classes->stringClass != NULL && classes->booleanClass != NULL && classes->numberClass != NULL;
 }
 
-static void release_java_simple_classes(JNIEnv* env, JavaSimpleClasses* classes) {
+void release_java_simple_classes(JNIEnv* env, JavaSimpleClasses* classes) {
   if (env == NULL || classes == NULL)
     return;
 
@@ -146,8 +39,7 @@ static void release_java_simple_classes(JNIEnv* env, JavaSimpleClasses* classes)
   classes->numberClass = NULL;
 }
 
-static bool object_to_slot(
-    JNIEnv* env, VM* vm, BridgeState* bridge, int slot, jobject obj, const char* wrapErrorMessage) {
+bool object_to_slot(JNIEnv* env, VM* vm, BridgeState* bridge, int slot, jobject obj, const char* wrapErrorMessage) {
   if (obj == NULL) {
     setSlotNull(vm, slot);
     return true;
@@ -188,7 +80,7 @@ static bool object_to_slot(
   return true;
 }
 
-static jstring get_java_object_name(JNIEnv* env, VM* vm, BridgeState* bridge, jobject target,
+jstring get_java_object_name(JNIEnv* env, VM* vm, BridgeState* bridge, jobject target,
     const char* errorPrefix, const char* nullMessage) {
   if (target == NULL) {
     SetRuntimeError(vm, nullMessage);
@@ -196,9 +88,25 @@ static jstring get_java_object_name(JNIEnv* env, VM* vm, BridgeState* bridge, jo
   }
 
   jstring jGetName = (*env)->NewStringUTF(env, "getName");
-  jclass objClass = (*env)->FindClass(env, "java/lang/Object");
+  if (jGetName == NULL) {
+    clear_jni_exception_with_log(env, "get_java_object_name:NewStringUTF");
+    SetRuntimeError(vm, "Failed to allocate JNI method name string.");
+    return NULL;
+  }
+
+  jclass objClass = safe_find_class(vm, env, "java/lang/Object", "get_java_object_name:Object");
+  if (objClass == NULL) {
+    (*env)->DeleteLocalRef(env, jGetName);
+    return NULL;
+  }
   jobjectArray noArgs = (*env)->NewObjectArray(env, 0, objClass, NULL);
   (*env)->DeleteLocalRef(env, objClass);
+  if (noArgs == NULL) {
+    clear_jni_exception_with_log(env, "get_java_object_name:NewObjectArray");
+    (*env)->DeleteLocalRef(env, jGetName);
+    SetRuntimeError(vm, "Failed to allocate JNI argument array.");
+    return NULL;
+  }
 
   jobject classNameObj = (*env)->CallStaticObjectMethod(
       env, bridge->javaBridgeClass, bridge->mCallJavaMethod, target, jGetName, noArgs);
@@ -219,7 +127,7 @@ static jstring get_java_object_name(JNIEnv* env, VM* vm, BridgeState* bridge, jo
   return (jstring) classNameObj;
 }
 
-static bool wrap_bridge_global(VM* vm, jobject globalRef, int outSlot) {
+bool wrap_bridge_global(VM* vm, jobject globalRef, int outSlot) {
   if (!ensure_wrapper_classes(vm)) {
     SetRuntimeError(vm, "Java wrappers are not initialized.");
     return false;
@@ -254,7 +162,7 @@ static bool wrap_bridge_global(VM* vm, jobject globalRef, int outSlot) {
   return true;
 }
 
-static void add_java_exports(VM* vm, Handle* mod) {
+void add_java_exports(VM* vm, Handle* mod) {
   static const JavaExport exports[] = {
       {"bindClass", fn_bindClass, 1, "java.bindClass(className) -> Java Class object."},
       {"new", fn_new, -1, "java.new(classOrName, args...) -> Java object."},
@@ -271,7 +179,7 @@ static void add_java_exports(VM* vm, Handle* mod) {
   }
 }
 
-static void clear_java_packages(BridgeState* bridge) {
+void clear_java_packages(BridgeState* bridge) {
   if (bridge == NULL)
     return;
 
@@ -287,7 +195,7 @@ static void clear_java_packages(BridgeState* bridge) {
   bridge->packages = NULL;
 }
 
-static bool java_package_exists(BridgeState* bridge, const char* prefix) {
+bool java_package_exists(BridgeState* bridge, const char* prefix) {
   if (bridge == NULL || prefix == NULL)
     return false;
 
@@ -299,7 +207,7 @@ static bool java_package_exists(BridgeState* bridge, const char* prefix) {
   return false;
 }
 
-static bool append_java_package(BridgeState* bridge, const char* prefix) {
+bool append_java_package(BridgeState* bridge, const char* prefix) {
   if (bridge == NULL || prefix == NULL)
     return false;
 
@@ -333,7 +241,7 @@ static bool append_java_package(BridgeState* bridge, const char* prefix) {
   return true;
 }
 
-static void ensure_default_java_packages(BridgeState* bridge) {
+void ensure_default_java_packages(BridgeState* bridge) {
   static const char* defaults[] = {
       "",
       "java.lang.",
@@ -355,7 +263,7 @@ static void ensure_default_java_packages(BridgeState* bridge) {
   }
 }
 
-static void clear_callbacks(VM* vm) {
+void clear_callbacks(VM* vm) {
   BridgeState* bridge = bridge_from_vm(vm);
   if (bridge == NULL)
     return;
@@ -377,7 +285,7 @@ static void clear_callbacks(VM* vm) {
   bridge->nextCallbackId = 1;
 }
 
-static int register_callback(VM* vm, int slot) {
+int register_callback(VM* vm, int slot) {
   BridgeState* bridge = bridge_from_vm(vm);
   if (bridge == NULL)
     return 0;
@@ -415,7 +323,7 @@ static int register_callback(VM* vm, int slot) {
   return entry->id;
 }
 
-static int register_map_callback(VM* vm, int mapSlot, const char* methodName) {
+int register_map_callback(VM* vm, int mapSlot, const char* methodName) {
   BridgeState* bridge = bridge_from_vm(vm);
   if (bridge == NULL)
     return 0;
@@ -460,7 +368,7 @@ static int register_map_callback(VM* vm, int mapSlot, const char* methodName) {
   return entry->id;
 }
 
-static CallbackEntry* find_callback(VM* vm, int callbackId) {
+CallbackEntry* find_callback(VM* vm, int callbackId) {
   BridgeState* bridge = bridge_from_vm(vm);
   if (bridge == NULL)
     return NULL;
@@ -479,8 +387,8 @@ static CallbackEntry* find_callback(VM* vm, int callbackId) {
 // - function callback  : call directly with all Java args converted to Saynaa slots.
 // - map/table callback : resolve by runtime method name (exact match), then call if function
 // exists. Missing map key is intentionally treated as a no-op.
-static bool invoke_registered_callback(JNIEnv* env, VM* vm, BridgeState* bridge,
-    CallbackEntry* entry, const char* runtimeMethodName, jobjectArray argsArray, jobject* outResult) {
+bool invoke_registered_callback(JNIEnv* env, VM* vm, BridgeState* bridge, CallbackEntry* entry,
+    const char* runtimeMethodName, jobjectArray argsArray, jobject* outResult) {
   if (vm == NULL || bridge == NULL || entry == NULL)
     return false;
 
@@ -542,8 +450,8 @@ static bool invoke_registered_callback(JNIEnv* env, VM* vm, BridgeState* bridge,
   return ok;
 }
 
-static jobject create_native_callback_proxy(JNIEnv* env, VM* vm, BridgeState* bridge,
-    jstring jInterface, const char* methodName, int callbackId) {
+jobject create_native_callback_proxy(JNIEnv* env, VM* vm, BridgeState* bridge, jstring jInterface,
+    const char* methodName, int callbackId) {
   if (env == NULL || vm == NULL || bridge == NULL || bridge->saynaaObject == NULL
       || bridge->mCreateNativeCallbackProxy == NULL || jInterface == NULL) {
     SetRuntimeError(vm, "Native callback proxy bridge is not initialized.");
@@ -577,17 +485,17 @@ static jobject create_native_callback_proxy(JNIEnv* env, VM* vm, BridgeState* br
   return proxy;
 }
 
-static void android_stdout_write(VM* vm, const char* text) {
+void android_stdout_write(VM* vm, const char* text) {
   (void) vm;
   __android_log_print(ANDROID_LOG_INFO, SAYNAAJAVA_TAG, "%s", text == NULL ? "" : text);
 }
 
-static void android_stderr_write(VM* vm, const char* text) {
+void android_stderr_write(VM* vm, const char* text) {
   (void) vm;
   __android_log_print(ANDROID_LOG_ERROR, SAYNAAJAVA_TAG, "%s", text == NULL ? "" : text);
 }
 
-static void ensure_files_search_path(VM* vm, BridgeState* bridge, JNIEnv* env, jobject context) {
+void ensure_files_search_path(VM* vm, BridgeState* bridge, JNIEnv* env, jobject context) {
   if (vm == NULL || bridge == NULL || env == NULL || context == NULL)
     return;
   if (bridge->filesSearchPathAdded)
@@ -675,7 +583,7 @@ static void ensure_files_search_path(VM* vm, BridgeState* bridge, JNIEnv* env, j
   (*env)->DeleteLocalRef(env, absPath);
 }
 
-static char* str_dup_c(const char* s) {
+char* str_dup_c(const char* s) {
   if (s == NULL)
     return NULL;
   size_t n = strlen(s);
@@ -686,7 +594,7 @@ static char* str_dup_c(const char* s) {
   return out;
 }
 
-static char* normalize_java_package_prefix(const char* prefix) {
+char* normalize_java_package_prefix(const char* prefix) {
   if (prefix == NULL)
     return str_dup_c("");
 
@@ -719,7 +627,7 @@ static char* normalize_java_package_prefix(const char* prefix) {
   return out;
 }
 
-static char* massage_java_classname(const char* name) {
+char* massage_java_classname(const char* name) {
   char* out = str_dup_c(name == NULL ? "" : name);
   if (out == NULL)
     return NULL;
@@ -731,7 +639,7 @@ static char* massage_java_classname(const char* name) {
   return out;
 }
 
-static jobject bridge_find_class_exact(JNIEnv* env, VM* vm, BridgeState* bridge, const char* className) {
+jobject bridge_find_class_exact(JNIEnv* env, VM* vm, BridgeState* bridge, const char* className) {
   jstring jName = (*env)->NewStringUTF(env, className == NULL ? "" : className);
   jobject cls = (*env)->CallStaticObjectMethod(env, bridge->javaBridgeClass, bridge->mFindClass, jName);
   (*env)->DeleteLocalRef(env, jName);
@@ -744,8 +652,8 @@ static jobject bridge_find_class_exact(JNIEnv* env, VM* vm, BridgeState* bridge,
   return cls;
 }
 
-static jobject bridge_find_class(JNIEnv* env, VM* vm, BridgeState* bridge,
-    const char* requestedName, bool searchPackages, char** resolvedNameOut) {
+jobject bridge_find_class(JNIEnv* env, VM* vm, BridgeState* bridge, const char* requestedName,
+    bool searchPackages, char** resolvedNameOut) {
   if (resolvedNameOut != NULL)
     *resolvedNameOut = NULL;
 
@@ -803,14 +711,14 @@ static jobject bridge_find_class(JNIEnv* env, VM* vm, BridgeState* bridge,
   return NULL;
 }
 
-static bool is_java_wildcard_import(const char* name) {
+bool is_java_wildcard_import(const char* name) {
   if (name == NULL)
     return false;
   size_t len = strlen(name);
   return len >= 2 && name[len - 2] == '.' && name[len - 1] == '*';
 }
 
-static bool inject_java_global(VM* vm, const char* alias, int slot) {
+bool inject_java_global(VM* vm, const char* alias, int slot) {
   if (alias == NULL || alias[0] == '\0')
     return true;
 
@@ -823,7 +731,7 @@ static bool inject_java_global(VM* vm, const char* alias, int slot) {
   return true;
 }
 
-static JNIEnv* env_from_jvm(JavaVM* jvm) {
+JNIEnv* env_from_jvm(JavaVM* jvm) {
   if (jvm == NULL)
     return NULL;
 
@@ -839,7 +747,7 @@ static JNIEnv* env_from_jvm(JavaVM* jvm) {
   return env;
 }
 
-static void throw_if_exception(VM* vm, JNIEnv* env, const char* prefix) {
+void throw_if_exception(VM* vm, JNIEnv* env, const char* prefix) {
   if (!(*env)->ExceptionCheck(env))
     return;
 
@@ -848,7 +756,7 @@ static void throw_if_exception(VM* vm, JNIEnv* env, const char* prefix) {
   SetRuntimeErrorFmt(vm, "%s (JNI exception).", prefix);
 }
 
-static void java_ref_destructor(void* ptr) {
+void java_ref_destructor(void* ptr) {
   JavaRef* ref = (JavaRef*) ptr;
   if (ref == NULL)
     return;
@@ -865,7 +773,7 @@ static void java_ref_destructor(void* ptr) {
   free(ref);
 }
 
-static JavaRef* make_java_ref(JNIEnv* env, JavaVM* jvm, jobject obj) {
+JavaRef* make_java_ref(JNIEnv* env, JavaVM* jvm, jobject obj) {
   if (obj == NULL)
     return NULL;
   JavaRef* ref = (JavaRef*) malloc(sizeof(JavaRef));
@@ -884,7 +792,7 @@ static JavaRef* make_java_ref(JNIEnv* env, JavaVM* jvm, jobject obj) {
   return ref;
 }
 
-static JavaRef* clone_java_ref(JNIEnv* env, JavaRef* src) {
+JavaRef* clone_java_ref(JNIEnv* env, JavaRef* src) {
   if (src == NULL || src->global == NULL)
     return NULL;
   jobject local = (*env)->NewLocalRef(env, src->global);
@@ -895,9 +803,9 @@ static JavaRef* clone_java_ref(JNIEnv* env, JavaRef* src) {
   return out;
 }
 
-static bool ensure_wrapper_classes(VM* vm);
+bool ensure_wrapper_classes(VM* vm);
 
-static bool create_java_instance(VM* vm, Handle** clsHandlePtr, JavaRef* ref, int outSlot) {
+bool create_java_instance(VM* vm, Handle** clsHandlePtr, JavaRef* ref, int outSlot) {
   if (clsHandlePtr == NULL) {
     if (ref != NULL)
       java_ref_destructor(ref);
@@ -932,8 +840,7 @@ static bool create_java_instance(VM* vm, Handle** clsHandlePtr, JavaRef* ref, in
   return true;
 }
 
-static bool create_java_method_instance(
-    VM* vm, JavaRef* target, const char* method_name, bool is_static, int outSlot) {
+bool create_java_method_instance(VM* vm, JavaRef* target, const char* method_name, bool is_static, int outSlot) {
   BridgeState* bridge = bridge_from_vm(vm);
   if (bridge != NULL && bridge->clsJavaMethod == NULL) {
     if (!ensure_wrapper_classes(vm)) {
@@ -963,27 +870,49 @@ static bool create_java_method_instance(
   return true;
 }
 
-static bool put_java_result(VM* vm, JNIEnv* env, BridgeState* bridge, jobject obj, int slot) {
+bool put_java_result(VM* vm, JNIEnv* env, BridgeState* bridge, jobject obj, int slot) {
   return object_to_slot(env, vm, bridge, slot, obj, "Failed to wrap Java result object.");
 }
 
-static jobject slot_to_java(JNIEnv* env, VM* vm, BridgeState* bridge, int slot) {
+jobject slot_to_java(JNIEnv* env, VM* vm, BridgeState* bridge, int slot) {
   VarType type = GetSlotType(vm, slot);
   switch (type) {
   case vNULL:
     return NULL;
   case vBOOL: {
-    jclass cls = (*env)->FindClass(env, "java/lang/Boolean");
-    jmethodID valueOf = (*env)->GetStaticMethodID(env, cls, "valueOf", "(Z)Ljava/lang/Boolean;");
+    jclass cls = safe_find_class(vm, env, "java/lang/Boolean", "slot_to_java:vBOOL:FindClass");
+    if (cls == NULL)
+      return NULL;
+    jmethodID valueOf = safe_get_static_method_id(
+        vm, env, cls, "valueOf", "(Z)Ljava/lang/Boolean;", "slot_to_java:vBOOL:valueOf");
+    if (valueOf == NULL) {
+      (*env)->DeleteLocalRef(env, cls);
+      return NULL;
+    }
     jobject v = (*env)->CallStaticObjectMethod(env, cls, valueOf, GetSlotBool(vm, slot) ? JNI_TRUE : JNI_FALSE);
     (*env)->DeleteLocalRef(env, cls);
+    if ((*env)->ExceptionCheck(env)) {
+      throw_if_exception(vm, env, "slot_to_java bool boxing failed");
+      return NULL;
+    }
     return v;
   }
   case vNUMBER: {
-    jclass cls = (*env)->FindClass(env, "java/lang/Double");
-    jmethodID valueOf = (*env)->GetStaticMethodID(env, cls, "valueOf", "(D)Ljava/lang/Double;");
+    jclass cls = safe_find_class(vm, env, "java/lang/Double", "slot_to_java:vNUMBER:FindClass");
+    if (cls == NULL)
+      return NULL;
+    jmethodID valueOf = safe_get_static_method_id(
+        vm, env, cls, "valueOf", "(D)Ljava/lang/Double;", "slot_to_java:vNUMBER:valueOf");
+    if (valueOf == NULL) {
+      (*env)->DeleteLocalRef(env, cls);
+      return NULL;
+    }
     jobject v = (*env)->CallStaticObjectMethod(env, cls, valueOf, (jdouble) GetSlotNumber(vm, slot));
     (*env)->DeleteLocalRef(env, cls);
+    if ((*env)->ExceptionCheck(env)) {
+      throw_if_exception(vm, env, "slot_to_java number boxing failed");
+      return NULL;
+    }
     return v;
   }
   case vSTRING: {
@@ -1002,11 +931,12 @@ static jobject slot_to_java(JNIEnv* env, VM* vm, BridgeState* bridge, int slot) 
     if (bridge == NULL)
       return NULL;
 
-    int base = GetSlotsCount(vm);
-    reserveSlots(vm, base + 3);
-    int clsSlot = base;
-    int objSlot = base + 1;
-    int methodSlot = base + 2;
+    // Use bounded temporary slots near the source slot. Using GetSlotsCount()
+    // here can become unstable under deep/native callback stacks.
+    int clsSlot = slot + 4;
+    int objSlot = slot + 5;
+    int methodSlot = slot + 6;
+    reserveSlots(vm, methodSlot + 1);
 
     bool isClass = false, isObject = false, isMethod = false;
     if (bridge->clsJavaClass != NULL) {
@@ -1052,28 +982,45 @@ static jobject slot_to_java(JNIEnv* env, VM* vm, BridgeState* bridge, int slot) 
   }
 }
 
-static bool java_to_slot(JNIEnv* env, VM* vm, BridgeState* bridge, int slot, jobject obj) {
+bool java_to_slot(JNIEnv* env, VM* vm, BridgeState* bridge, int slot, jobject obj) {
   return object_to_slot(env, vm, bridge, slot, obj, "Failed to wrap Java object.");
 }
 
-static jobject make_args_array(JNIEnv* env, VM* vm, BridgeState* bridge, int startSlot, int argc) {
-  jclass objClass = (*env)->FindClass(env, "java/lang/Object");
+jobject make_args_array(JNIEnv* env, VM* vm, BridgeState* bridge, int startSlot, int argc) {
+  jclass objClass = safe_find_class(vm, env, "java/lang/Object", "make_args_array:Object");
+  if (objClass == NULL)
+    return NULL;
+
   jobjectArray args = (*env)->NewObjectArray(env, (jsize) argc, objClass, NULL);
   (*env)->DeleteLocalRef(env, objClass);
+  if (args == NULL) {
+    clear_jni_exception_with_log(env, "make_args_array:NewObjectArray");
+    SetRuntimeError(vm, "Failed to allocate Java argument array.");
+    return NULL;
+  }
 
   for (int i = 0; i < argc; i++) {
     jobject arg = slot_to_java(env, vm, bridge, startSlot + i);
     if (GetSlotType(vm, startSlot + i) != vNULL && arg == NULL && (*env)->ExceptionCheck(env) == JNI_FALSE) {
+      SetRuntimeErrorFmt(vm, "Argument conversion failed at index %d", i);
+      (*env)->DeleteLocalRef(env, args);
       return NULL;
     }
     (*env)->SetObjectArrayElement(env, args, (jsize) i, arg);
+    if ((*env)->ExceptionCheck(env)) {
+      if (arg != NULL)
+        (*env)->DeleteLocalRef(env, arg);
+      (*env)->DeleteLocalRef(env, args);
+      throw_if_exception(vm, env, "make_args_array:SetObjectArrayElement failed");
+      return NULL;
+    }
     if (arg != NULL)
       (*env)->DeleteLocalRef(env, arg);
   }
   return args;
 }
 
-static const char* java_simple_name(const char* className) {
+const char* java_simple_name(const char* className) {
   if (className == NULL)
     return NULL;
 
@@ -1088,9 +1035,15 @@ static const char* java_simple_name(const char* className) {
 }
 
 // Best-effort resolve of the currently executing module for global injection.
-static Module* current_module_from_vm(VM* vm) {
-  if (vm == NULL || vm->fiber == NULL || vm->fiber->frame_count <= 0)
+Module* current_module_from_vm(VM* vm) {
+  if (vm == NULL || vm->fiber == NULL)
     return NULL;
+
+  if (vm->fiber->frame_count <= 0) {
+    if (vm->fiber->closure != NULL && vm->fiber->closure->fn != NULL)
+      return vm->fiber->closure->fn->owner;
+    return NULL;
+  }
 
   CallFrame* frame = &vm->fiber->frames[vm->fiber->frame_count - 1];
   if (frame == NULL || frame->closure == NULL || frame->closure->fn == NULL)
@@ -1099,7 +1052,7 @@ static Module* current_module_from_vm(VM* vm) {
   return frame->closure->fn->owner;
 }
 
-static bool ensure_slot_java_class(JNIEnv* env, VM* vm, BridgeState* bridge, int slot, jobject* classObj) {
+bool ensure_slot_java_class(JNIEnv* env, VM* vm, BridgeState* bridge, int slot, jobject* classObj) {
   if (classObj == NULL)
     return false;
 
@@ -1145,7 +1098,7 @@ static bool ensure_slot_java_class(JNIEnv* env, VM* vm, BridgeState* bridge, int
   return true;
 }
 
-static jstring class_name_from_slot(JNIEnv* env, VM* vm, BridgeState* bridge, int slot) {
+jstring class_name_from_slot(JNIEnv* env, VM* vm, BridgeState* bridge, int slot) {
   if (GetSlotType(vm, slot) == vSTRING) {
     const char* className = GetSlotString(vm, slot, NULL);
     return (*env)->NewStringUTF(env, className == NULL ? "" : className);
@@ -1165,7 +1118,7 @@ static jstring class_name_from_slot(JNIEnv* env, VM* vm, BridgeState* bridge, in
   return className;
 }
 
-static void fn_instanceof(VM* vm) {
+void fn_instanceof(VM* vm) {
   int argc = GetArgc(vm);
   if (argc != 2) {
     SetRuntimeError(vm, "instanceof expects (object, classOrName).");
@@ -1199,7 +1152,7 @@ static void fn_instanceof(VM* vm) {
   (*env)->DeleteLocalRef(env, target);
 }
 
-static void fn_astable(VM* vm) {
+void fn_astable(VM* vm) {
   int argc = GetArgc(vm);
   if (argc != 1) {
     SetRuntimeError(vm, "astable expects exactly one Java value.");
@@ -1367,7 +1320,7 @@ astable_cleanup:
   (*env)->DeleteLocalRef(env, target);
 }
 
-static void fn_loadLib(VM* vm) {
+void fn_loadLib(VM* vm) {
   int argc = GetArgc(vm);
   if (argc != 2) {
     SetRuntimeError(vm, "loadLib expects (className, methodName).");
@@ -1418,7 +1371,7 @@ static void fn_loadLib(VM* vm) {
     (*env)->DeleteLocalRef(env, ret);
 }
 
-static void fn_javaToString(VM* vm) {
+void fn_javaToString(VM* vm) {
   if (GetArgc(vm) != 1) {
     SetRuntimeError(vm, "tostring expects exactly one value.");
     return;
@@ -1434,9 +1387,29 @@ static void fn_javaToString(VM* vm) {
   }
 
   jstring jMethodName = (*env)->NewStringUTF(env, "toString");
-  jclass objClass = (*env)->FindClass(env, "java/lang/Object");
+  if (jMethodName == NULL) {
+    clear_jni_exception_with_log(env, "fn_javaToString:NewStringUTF");
+    (*env)->DeleteLocalRef(env, target);
+    setSlotString(vm, 0, "null");
+    return;
+  }
+
+  jclass objClass = safe_find_class(vm, env, "java/lang/Object", "fn_javaToString:Object");
+  if (objClass == NULL) {
+    (*env)->DeleteLocalRef(env, jMethodName);
+    (*env)->DeleteLocalRef(env, target);
+    setSlotString(vm, 0, "null");
+    return;
+  }
   jobjectArray noArgs = (*env)->NewObjectArray(env, 0, objClass, NULL);
   (*env)->DeleteLocalRef(env, objClass);
+  if (noArgs == NULL) {
+    clear_jni_exception_with_log(env, "fn_javaToString:NewObjectArray");
+    (*env)->DeleteLocalRef(env, jMethodName);
+    (*env)->DeleteLocalRef(env, target);
+    setSlotString(vm, 0, "null");
+    return;
+  }
 
   jobject ret = (*env)->CallStaticObjectMethod(
       env, bridge->javaBridgeClass, bridge->mCallJavaMethod, target, jMethodName, noArgs);
@@ -1455,7 +1428,7 @@ static void fn_javaToString(VM* vm) {
     (*env)->DeleteLocalRef(env, ret);
 }
 
-static void fn_bindClass(VM* vm) {
+void fn_bindClass(VM* vm) {
   if (!ensure_wrapper_classes(vm)) {
     SetRuntimeError(vm, "Java wrappers are not initialized.");
     return;
@@ -1486,7 +1459,7 @@ static void fn_bindClass(VM* vm) {
     (*env)->DeleteLocalRef(env, cls);
 }
 
-static void fn_javaAddPackage(VM* vm) {
+void fn_javaAddPackage(VM* vm) {
   if (!ValidateSlotString(vm, 1, NULL, NULL))
     return;
 
@@ -1500,7 +1473,7 @@ static void fn_javaAddPackage(VM* vm) {
   setSlotNull(vm, 0);
 }
 
-static void fn_jclass(VM* vm) {
+void fn_jclass(VM* vm) {
   int argc = GetArgc(vm);
   if (argc != 1 && argc != 2) {
     SetRuntimeError(vm, "jclass expects (className) or (className, alias).");
@@ -1555,7 +1528,7 @@ static void fn_jclass(VM* vm) {
   (*env)->DeleteLocalRef(env, cls);
 }
 
-static void fn_importJava(VM* vm) {
+void fn_importJava(VM* vm) {
   int argc = GetArgc(vm);
   if (argc != 1 && argc != 2) {
     SetRuntimeError(vm, "importJava expects (className) or (className, alias).");
@@ -1621,7 +1594,7 @@ static void fn_importJava(VM* vm) {
   (*env)->DeleteLocalRef(env, cls);
 }
 
-static void fn_new(VM* vm) {
+void fn_new(VM* vm) {
   int argc = GetArgc(vm);
   if (argc < 1) {
     SetRuntimeError(vm, "java.new expects class name and optional arguments.");
@@ -1659,7 +1632,7 @@ static void fn_new(VM* vm) {
     (*env)->DeleteLocalRef(env, obj);
 }
 
-static void fn_call(VM* vm) {
+void fn_call(VM* vm) {
   int argc = GetArgc(vm);
   if (argc < 2) {
     SetRuntimeError(vm, "java.call expects target, methodName and optional arguments.");
@@ -1698,7 +1671,7 @@ static void fn_call(VM* vm) {
     (*env)->DeleteLocalRef(env, ret);
 }
 
-static void fn_callStatic(VM* vm) {
+void fn_callStatic(VM* vm) {
   int argc = GetArgc(vm);
   if (argc < 2) {
     SetRuntimeError(vm, "java.callStatic expects className, methodName and optional arguments.");
@@ -1737,7 +1710,7 @@ static void fn_callStatic(VM* vm) {
     (*env)->DeleteLocalRef(env, ret);
 }
 
-static void fn_getField(VM* vm) {
+void fn_getField(VM* vm) {
   if (!ValidateSlotType(vm, 1, vPOINTER))
     return;
   if (!ValidateSlotString(vm, 2, NULL, NULL))
@@ -1767,7 +1740,7 @@ static void fn_getField(VM* vm) {
     (*env)->DeleteLocalRef(env, ret);
 }
 
-static void fn_setField(VM* vm) {
+void fn_setField(VM* vm) {
   int argc = GetArgc(vm);
   if (argc != 3) {
     SetRuntimeError(vm, "java.setField expects (target, fieldName, value).");
@@ -1804,335 +1777,11 @@ static void fn_setField(VM* vm) {
   setSlotBool(vm, 0, ok == JNI_TRUE);
 }
 
-static void* new_java_class_instance(VM* vm) {
-  (void) vm;
-  return calloc(1, sizeof(JavaClassNative));
-}
-
-static void delete_java_class_instance(VM* vm, void* ptr) {
-  (void) vm;
-  JavaClassNative* inst = (JavaClassNative*) ptr;
-  if (inst != NULL) {
-    if (inst->class_ref != NULL)
-      java_ref_destructor(inst->class_ref);
-    free(inst);
-  }
-}
-
-static void* new_java_object_instance(VM* vm) {
-  (void) vm;
-  return calloc(1, sizeof(JavaObjectNative));
-}
-
-static void delete_java_object_instance(VM* vm, void* ptr) {
-  (void) vm;
-  JavaObjectNative* inst = (JavaObjectNative*) ptr;
-  if (inst != NULL) {
-    if (inst->object_ref != NULL)
-      java_ref_destructor(inst->object_ref);
-    free(inst);
-  }
-}
-
-static void* new_java_method_instance(VM* vm) {
-  (void) vm;
-  return calloc(1, sizeof(JavaMethodNative));
-}
-
-static void delete_java_method_instance(VM* vm, void* ptr) {
-  (void) vm;
-  JavaMethodNative* inst = (JavaMethodNative*) ptr;
-  if (inst != NULL) {
-    if (inst->target_ref != NULL)
-      java_ref_destructor(inst->target_ref);
-    if (inst->method_name != NULL)
-      free(inst->method_name);
-    free(inst);
-  }
-}
-
-static void java_class_init(VM* vm) {
-  JavaClassNative* thiz = (JavaClassNative*) GetThis(vm);
-  if (thiz == NULL)
-    return;
-  if (!ValidateSlotType(vm, 1, vPOINTER))
-    return;
-  thiz->class_ref = (JavaRef*) GetSlotPointer(vm, 1, NULL, NULL);
-}
-
-static void java_object_init(VM* vm) {
-  JavaObjectNative* thiz = (JavaObjectNative*) GetThis(vm);
-  if (thiz == NULL)
-    return;
-  if (!ValidateSlotType(vm, 1, vPOINTER))
-    return;
-  thiz->object_ref = (JavaRef*) GetSlotPointer(vm, 1, NULL, NULL);
-}
-
-static void java_method_init(VM* vm) {
-  JavaMethodNative* thiz = (JavaMethodNative*) GetThis(vm);
-  if (thiz == NULL)
-    return;
-  if (!ValidateSlotType(vm, 1, vPOINTER))
-    return;
-  if (!ValidateSlotString(vm, 2, NULL, NULL))
-    return;
-
-  thiz->target_ref = (JavaRef*) GetSlotPointer(vm, 1, NULL, NULL);
-  const char* method_name = GetSlotString(vm, 2, NULL);
-  thiz->method_name = str_dup_c(method_name);
-
-  if (GetArgc(vm) >= 3) {
-    thiz->is_static = GetSlotBool(vm, 3);
-  }
-}
-
-static void java_class_getter(VM* vm) {
-  JavaClassNative* thiz = (JavaClassNative*) GetThis(vm);
-  if (thiz == NULL || thiz->class_ref == NULL)
-    return;
-  if (!ValidateSlotString(vm, 1, NULL, NULL))
-    return;
-
-  const char* name = GetSlotString(vm, 1, NULL);
-  JNIEnv* env = env_from_jvm(thiz->class_ref->jvm);
-  if (env == NULL) {
-    SetRuntimeError(vm, "Invalid JNI Environment.");
-    return;
-  }
-
-  BridgeState* bridge = bridge_from_vm(vm);
-  if (bridge != NULL && bridge->javaBridgeClass != NULL && bridge->mGetFieldValue != NULL) {
-    jobject classObj = (*env)->NewLocalRef(env, thiz->class_ref->global);
-    jstring jField = (*env)->NewStringUTF(env, name == NULL ? "" : name);
-
-    jobject fieldValue = (*env)->CallStaticObjectMethod(
-        env, bridge->javaBridgeClass, bridge->mGetFieldValue, classObj, jField);
-
-    (*env)->DeleteLocalRef(env, jField);
-    if (classObj != NULL)
-      (*env)->DeleteLocalRef(env, classObj);
-
-    if ((*env)->ExceptionCheck(env)) {
-      throw_if_exception(vm, env, "JavaClass._getter field access failed");
-      return;
-    }
-
-    if (fieldValue != NULL) {
-      put_java_result(vm, env, bridge, fieldValue, 0);
-      (*env)->DeleteLocalRef(env, fieldValue);
-      return;
-    }
-  }
-
-  JavaRef* target = clone_java_ref(env, thiz->class_ref);
-  if (target == NULL) {
-    SetRuntimeError(vm, "Failed to clone Java class reference.");
-    return;
-  }
-
-  create_java_method_instance(vm, target, name, true, 0);
-}
-
-static void java_class_call(VM* vm) {
-  JavaClassNative* thiz = (JavaClassNative*) GetThis(vm);
-  if (thiz == NULL || thiz->class_ref == NULL) {
-    SetRuntimeError(vm, "Invalid JavaClass instance.");
-    return;
-  }
-
-  BridgeState* bridge = bridge_from_vm(vm);
-  JNIEnv* env = env_from_jvm(bridge->jvm);
-
-  jobject classObj = (*env)->NewLocalRef(env, thiz->class_ref->global);
-  jstring classNameObj = get_java_object_name(env, vm, bridge, classObj,
-      "JavaClass._call getName() failed", "JavaClass._call failed to resolve class name.");
-  (*env)->DeleteLocalRef(env, classObj);
-  if (classNameObj == NULL)
-    return;
-
-  int argc = GetArgc(vm);
-  jobjectArray args = make_args_array(env, vm, bridge, 1, argc);
-  if (VM_HAS_ERROR(vm) || (args == NULL && argc > 0)) {
-    if (!VM_HAS_ERROR(vm) && argc > 0)
-      SetRuntimeError(vm, "JavaClass._call argument conversion failed.");
-    if (args != NULL)
-      (*env)->DeleteLocalRef(env, args);
-    if (classNameObj != NULL)
-      (*env)->DeleteLocalRef(env, classNameObj);
-    return;
-  }
-
-  jobject obj = (*env)->CallStaticObjectMethod(
-      env, bridge->javaBridgeClass, bridge->mCreateJavaObject, classNameObj, args);
-
-  if (args != NULL)
-    (*env)->DeleteLocalRef(env, args);
-  (*env)->DeleteLocalRef(env, classNameObj);
-
-  if ((*env)->ExceptionCheck(env)) {
-    throw_if_exception(vm, env, "JavaClass._call constructor failed");
-    return;
-  }
-
-  put_java_result(vm, env, bridge, obj, 0);
-  if (obj != NULL)
-    (*env)->DeleteLocalRef(env, obj);
-}
-
-static void java_object_getter(VM* vm) {
-  JavaObjectNative* thiz = (JavaObjectNative*) GetThis(vm);
-  if (thiz == NULL || thiz->object_ref == NULL)
-    return;
-  if (!ValidateSlotString(vm, 1, NULL, NULL))
-    return;
-
-  const char* name = GetSlotString(vm, 1, NULL);
-  JNIEnv* env = env_from_jvm(thiz->object_ref->jvm);
-  if (env == NULL) {
-    SetRuntimeError(vm, "Invalid JNI Environment.");
-    return;
-  }
-
-  BridgeState* bridge = bridge_from_vm(vm);
-  if (bridge != NULL && bridge->javaBridgeClass != NULL && bridge->mGetFieldValue != NULL) {
-    jobject obj = (*env)->NewLocalRef(env, thiz->object_ref->global);
-    jstring jField = (*env)->NewStringUTF(env, name == NULL ? "" : name);
-
-    jobject fieldValue = (*env)->CallStaticObjectMethod(
-        env, bridge->javaBridgeClass, bridge->mGetFieldValue, obj, jField);
-
-    (*env)->DeleteLocalRef(env, jField);
-    if (obj != NULL)
-      (*env)->DeleteLocalRef(env, obj);
-
-    if ((*env)->ExceptionCheck(env)) {
-      throw_if_exception(vm, env, "JavaObject._getter field access failed");
-      return;
-    }
-
-    if (fieldValue != NULL) {
-      put_java_result(vm, env, bridge, fieldValue, 0);
-      (*env)->DeleteLocalRef(env, fieldValue);
-      return;
-    }
-  }
-
-  JavaRef* target = clone_java_ref(env, thiz->object_ref);
-  if (target == NULL) {
-    SetRuntimeError(vm, "Failed to clone Java object reference.");
-    return;
-  }
-
-  create_java_method_instance(vm, target, name, false, 0);
-}
-
-static void java_object_setter(VM* vm) {
-  JavaObjectNative* thiz = (JavaObjectNative*) GetThis(vm);
-  if (thiz == NULL || thiz->object_ref == NULL)
-    return;
-  if (!ValidateSlotString(vm, 1, NULL, NULL))
-    return;
-
-  BridgeState* bridge = bridge_from_vm(vm);
-  JNIEnv* env = env_from_jvm(bridge->jvm);
-  jobject target = (*env)->NewLocalRef(env, thiz->object_ref->global);
-  const char* fieldName = GetSlotString(vm, 1, NULL);
-  jobject value = slot_to_java(env, vm, bridge, 2);
-
-  jstring jFieldName = (*env)->NewStringUTF(env, fieldName);
-  jboolean ok = (*env)->CallStaticBooleanMethod(
-      env, bridge->javaBridgeClass, bridge->mSetFieldValue, target, jFieldName, value);
-
-  if (value != NULL)
-    (*env)->DeleteLocalRef(env, value);
-  (*env)->DeleteLocalRef(env, target);
-  (*env)->DeleteLocalRef(env, jFieldName);
-
-  if ((*env)->ExceptionCheck(env)) {
-    throw_if_exception(vm, env, "JavaObject._setter failed");
-    return;
-  }
-
-  setSlotBool(vm, 0, ok == JNI_TRUE);
-}
-
-static void java_method_call(VM* vm) {
-  JavaMethodNative* thiz = (JavaMethodNative*) GetThis(vm);
-  if (thiz == NULL || thiz->target_ref == NULL || thiz->method_name == NULL) {
-    SetRuntimeError(vm, "Invalid JavaMethod instance.");
-    return;
-  }
-
-  BridgeState* bridge = bridge_from_vm(vm);
-  JNIEnv* env = env_from_jvm(bridge->jvm);
-  int argc = GetArgc(vm);
-  jobjectArray args = make_args_array(env, vm, bridge, 1, argc);
-  jobject ret = NULL;
-
-  if (thiz->is_static) {
-    jobject classObj = (*env)->NewLocalRef(env, thiz->target_ref->global);
-    jstring classNameObj = get_java_object_name(env, vm, bridge, classObj,
-        "JavaMethod._call static getName failed", "JavaMethod._call static getName failed");
-    (*env)->DeleteLocalRef(env, classObj);
-
-    if (classNameObj == NULL) {
-      if (args != NULL)
-        (*env)->DeleteLocalRef(env, args);
-      return;
-    }
-
-    jstring jMethod = (*env)->NewStringUTF(env, thiz->method_name);
-    ret = (*env)->CallStaticObjectMethod(
-        env, bridge->javaBridgeClass, bridge->mCallStaticJavaMethod, classNameObj, jMethod, args);
-
-    (*env)->DeleteLocalRef(env, jMethod);
-    (*env)->DeleteLocalRef(env, classNameObj);
-  } else {
-    jobject target = (*env)->NewLocalRef(env, thiz->target_ref->global);
-    jstring jMethod = (*env)->NewStringUTF(env, thiz->method_name);
-    ret = (*env)->CallStaticObjectMethod(
-        env, bridge->javaBridgeClass, bridge->mCallJavaMethod, target, jMethod, args);
-    (*env)->DeleteLocalRef(env, jMethod);
-    (*env)->DeleteLocalRef(env, target);
-  }
-
-  if (args != NULL)
-    (*env)->DeleteLocalRef(env, args);
-
-  if ((*env)->ExceptionCheck(env)) {
-    throw_if_exception(vm, env, "JavaMethod._call failed");
-    return;
-  }
-
-  put_java_result(vm, env, bridge, ret, 0);
-  if (ret != NULL)
-    (*env)->DeleteLocalRef(env, ret);
-}
-
-static void fn_activity(VM* vm) {
-  BridgeState* bridge = bridge_from_vm(vm);
-  if (bridge == NULL) {
-    setSlotNull(vm, 0);
-    return;
-  }
-  wrap_bridge_global(vm, bridge->activity, 0);
-}
-
-static void fn_eventView(VM* vm) {
-  BridgeState* bridge = bridge_from_vm(vm);
-  if (bridge == NULL) {
-    setSlotNull(vm, 0);
-    return;
-  }
-  wrap_bridge_global(vm, bridge->lastEventView, 0);
-}
-
 // Resolve interface slot into Java class name string expected by JavaBridge APIs.
 // Accepts either:
 // - string class name: "android.view.View$OnClickListener"
 // - Java class object wrapper: bind("android.view.View$OnClickListener")
-static jstring resolve_proxy_interface_name(
+jstring resolve_proxy_interface_name(
     VM* vm, JNIEnv* env, BridgeState* bridge, int interfaceSlot, const char* errorPrefix) {
   VarType interfaceType = GetSlotType(vm, interfaceSlot);
   if (interfaceType == vSTRING) {
@@ -2174,7 +1823,7 @@ static jstring resolve_proxy_interface_name(
   return classNameObj;
 }
 
-static void fn_createProxy(VM* vm) {
+void fn_createProxy(VM* vm) {
   int argc = GetArgc(vm);
   if (argc != 2 && argc != 3) {
     SetRuntimeError(vm, "createProxy expects (interfaceOrName, callback) or (interfaceOrName, "
@@ -2301,7 +1950,7 @@ static void fn_createProxy(VM* vm) {
     (*env)->DeleteLocalRef(env, proxy);
 }
 
-static void register_java_api(VM* vm) {
+void register_java_api(VM* vm) {
   RegisterBuiltinFn(vm, "bindClass", fn_bindClass, 1, "bindClass(\"java.class.Name\") -> Java Class object.");
   RegisterBuiltinFn(vm, "jclass", fn_jclass,
       -1, "jclass(className[, alias]) -> resolve Java class using registered packages and inject into module globals.");
@@ -2330,7 +1979,7 @@ static void register_java_api(VM* vm) {
   RegisterBuiltinFn(vm, "loadLib", fn_loadLib, 2, "loadLib(className, methodName).");
 }
 
-static bool ensure_java_module(VM* vm) {
+bool ensure_java_module(VM* vm) {
   BridgeState* bridge = bridge_from_vm(vm);
   if (bridge == NULL)
     return false;
@@ -2355,7 +2004,7 @@ static bool ensure_java_module(VM* vm) {
   return true;
 }
 
-static bool register_java_wrapper_classes(VM* vm) {
+bool register_java_wrapper_classes(VM* vm) {
   BridgeState* bridge = bridge_from_vm(vm);
   if (bridge == NULL)
     return false;
@@ -2377,6 +2026,7 @@ static bool register_java_wrapper_classes(VM* vm) {
   ClassAddMethod(vm, clsJavaClass, "_init", java_class_init, 1, "");
   ClassAddMethod(vm, clsJavaClass, "_call", java_class_call, -1, "");
   ClassAddMethod(vm, clsJavaClass, "_getter", java_class_getter, 1, "");
+  ClassAddMethod(vm, clsJavaClass, "_str", java_class_str, 0, "");
   bridge->clsJavaClass = clsJavaClass;
 
   Handle* clsJavaObject = NewClass(vm, "JavaObject", NULL, mod, new_java_object_instance,
@@ -2386,6 +2036,7 @@ static bool register_java_wrapper_classes(VM* vm) {
   ClassAddMethod(vm, clsJavaObject, "_init", java_object_init, 1, "");
   ClassAddMethod(vm, clsJavaObject, "_getter", java_object_getter, 1, "");
   ClassAddMethod(vm, clsJavaObject, "_setter", java_object_setter, 2, "");
+  ClassAddMethod(vm, clsJavaObject, "_str", java_object_str, 0, "");
   bridge->clsJavaObject = clsJavaObject;
 
   Handle* clsJavaMethod = NewClass(vm, "JavaMethod", NULL, mod, new_java_method_instance,
@@ -2394,13 +2045,14 @@ static bool register_java_wrapper_classes(VM* vm) {
     return false;
   ClassAddMethod(vm, clsJavaMethod, "_init", java_method_init, 3, "");
   ClassAddMethod(vm, clsJavaMethod, "_call", java_method_call, -1, "");
+  ClassAddMethod(vm, clsJavaMethod, "_str", java_method_str, 0, "");
   bridge->clsJavaMethod = clsJavaMethod;
 
   registerModule(vm, mod);
   return ensure_java_module(vm);
 }
 
-static bool ensure_wrapper_classes(VM* vm) {
+bool ensure_wrapper_classes(VM* vm) {
   BridgeState* bridge = bridge_from_vm(vm);
   if (bridge == NULL)
     return false;
@@ -2409,422 +2061,4 @@ static bool ensure_wrapper_classes(VM* vm) {
     return true;
   }
   return register_java_wrapper_classes(vm);
-}
-
-static VM* vm_from_saynaa(JNIEnv* env, jobject saynaaObject) {
-  jclass saynaaCls = (*env)->GetObjectClass(env, saynaaObject);
-  jfieldID vmField = (*env)->GetFieldID(env, saynaaCls, "vm", "Lcom/android/saynaa/saynaajava/CPtr;");
-  jobject cptrObj = (*env)->GetObjectField(env, saynaaObject, vmField);
-  (*env)->DeleteLocalRef(env, saynaaCls);
-
-  if (cptrObj == NULL)
-    return NULL;
-
-  jclass cptrCls = (*env)->GetObjectClass(env, cptrObj);
-  jfieldID ptrField = (*env)->GetFieldID(env, cptrCls, "pointer", "J");
-  jlong ptr = (*env)->GetLongField(env, cptrObj, ptrField);
-  (*env)->DeleteLocalRef(env, cptrCls);
-  (*env)->DeleteLocalRef(env, cptrObj);
-
-  return (VM*) (intptr_t) ptr;
-}
-
-static void set_vm_ptr_on_saynaa(JNIEnv* env, jobject saynaaObject, jlong ptr) {
-  jclass saynaaCls = (*env)->GetObjectClass(env, saynaaObject);
-  jfieldID vmField = (*env)->GetFieldID(env, saynaaCls, "vm", "Lcom/android/saynaa/saynaajava/CPtr;");
-  jobject cptrObj = (*env)->GetObjectField(env, saynaaObject, vmField);
-  (*env)->DeleteLocalRef(env, saynaaCls);
-
-  if (cptrObj == NULL)
-    return;
-
-  jclass cptrCls = (*env)->GetObjectClass(env, cptrObj);
-  jfieldID ptrField = (*env)->GetFieldID(env, cptrCls, "pointer", "J");
-  (*env)->SetLongField(env, cptrObj, ptrField, ptr);
-  (*env)->DeleteLocalRef(env, cptrCls);
-  (*env)->DeleteLocalRef(env, cptrObj);
-}
-
-JNIEXPORT jobject JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1open(JNIEnv* env, jobject thiz) {
-  JavaVM* jvm = NULL;
-  if ((*env)->GetJavaVM(env, &jvm) != JNI_OK) {
-    return NULL;
-  }
-
-  Configuration config = NewConfiguration();
-  config.stdout_write = android_stdout_write;
-  config.stderr_write = android_stderr_write;
-
-  VM* vm = NewVM(&config);
-  if (vm == NULL) {
-    return NULL;
-  }
-
-  BridgeState* bridge = (BridgeState*) calloc(1, sizeof(BridgeState));
-  if (bridge == NULL) {
-    FreeVM(vm);
-    return NULL;
-  }
-
-  bridge->jvm = jvm;
-  ensure_default_java_packages(bridge);
-  bridge->saynaaObject = (*env)->NewGlobalRef(env, thiz);
-  if (bridge->saynaaObject == NULL) {
-    clear_java_packages(bridge);
-    free(bridge);
-    FreeVM(vm);
-    return NULL;
-  }
-
-  jclass localBridgeClass = (*env)->FindClass(env, "com/android/saynaa/saynaajava/JavaBridge");
-  if (localBridgeClass == NULL) {
-    (*env)->DeleteGlobalRef(env, bridge->saynaaObject);
-    clear_java_packages(bridge);
-    free(bridge);
-    FreeVM(vm);
-    return NULL;
-  }
-
-  bridge->javaBridgeClass = (jclass) (*env)->NewGlobalRef(env, localBridgeClass);
-  (*env)->DeleteLocalRef(env, localBridgeClass);
-
-  bridge->mFindClass = (*env)->GetStaticMethodID(
-      env, bridge->javaBridgeClass, "findClass", "(Ljava/lang/String;)Ljava/lang/Class;");
-  bridge->mCreateJavaObject = (*env)->GetStaticMethodID(env, bridge->javaBridgeClass,
-      "createJavaObject", "(Ljava/lang/String;[Ljava/lang/Object;)Ljava/lang/Object;");
-  bridge->mCallJavaMethod = (*env)->GetStaticMethodID(env, bridge->javaBridgeClass, "callJavaMethod",
-      "(Ljava/lang/Object;Ljava/lang/String;[Ljava/lang/Object;)Ljava/lang/Object;");
-  bridge->mCallStaticJavaMethod = (*env)->GetStaticMethodID(env, bridge->javaBridgeClass,
-      "callStaticJavaMethod", "(Ljava/lang/String;Ljava/lang/String;[Ljava/lang/Object;)Ljava/lang/Object;");
-  bridge->mGetFieldValue = (*env)->GetStaticMethodID(env, bridge->javaBridgeClass, "getFieldValue",
-      "(Ljava/lang/Object;Ljava/lang/String;)Ljava/lang/Object;");
-  bridge->mSetFieldValue = (*env)->GetStaticMethodID(env, bridge->javaBridgeClass, "setFieldValue",
-      "(Ljava/lang/Object;Ljava/lang/String;Ljava/lang/Object;)Z");
-  bridge->mCreateProxy = (*env)->GetStaticMethodID(env, bridge->javaBridgeClass,
-      "createProxy", "(Lcom/android/saynaa/saynaajava/Saynaa;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Ljava/lang/Object;");
-  bridge->mCreateNativeCallbackProxy = (*env)->GetStaticMethodID(env, bridge->javaBridgeClass,
-      "createNativeCallbackProxy", "(Lcom/android/saynaa/saynaajava/Saynaa;Ljava/lang/String;Ljava/lang/String;I)Ljava/lang/Object;");
-  bridge->mGetDefaultInterfaceMethodName = (*env)->GetStaticMethodID(env, bridge->javaBridgeClass,
-      "getDefaultInterfaceMethodName", "(Ljava/lang/String;)Ljava/lang/String;");
-
-  if (bridge->mFindClass == NULL || bridge->mCreateJavaObject == NULL || bridge->mCallJavaMethod == NULL
-      || bridge->mCallStaticJavaMethod == NULL || bridge->mGetFieldValue == NULL
-      || bridge->mSetFieldValue == NULL || bridge->mCreateProxy == NULL
-      || bridge->mCreateNativeCallbackProxy == NULL || bridge->mGetDefaultInterfaceMethodName == NULL) {
-    (*env)->DeleteGlobalRef(env, bridge->saynaaObject);
-    (*env)->DeleteGlobalRef(env, bridge->javaBridgeClass);
-    clear_java_packages(bridge);
-    free(bridge);
-    FreeVM(vm);
-    return NULL;
-  }
-
-  SetUserData(vm, bridge);
-  if (!register_java_wrapper_classes(vm)) {
-    (*env)->DeleteGlobalRef(env, bridge->saynaaObject);
-    (*env)->DeleteGlobalRef(env, bridge->javaBridgeClass);
-    clear_java_packages(bridge);
-    free(bridge);
-    SetUserData(vm, NULL);
-    FreeVM(vm);
-    return NULL;
-  }
-  register_java_api(vm);
-
-  jclass cptrCls = (*env)->FindClass(env, "com/android/saynaa/saynaajava/CPtr");
-  if (cptrCls == NULL) {
-    return NULL;
-  }
-
-  jobject cptrObj = (*env)->AllocObject(env, cptrCls);
-  jfieldID ptrField = (*env)->GetFieldID(env, cptrCls, "pointer", "J");
-  (*env)->SetLongField(env, cptrObj, ptrField, (jlong) (intptr_t) vm);
-  (*env)->DeleteLocalRef(env, cptrCls);
-
-  return cptrObj;
-}
-
-JNIEXPORT void JNICALL Java_com_android_saynaa_saynaajava_Saynaa_executeSnippetNative(
-    JNIEnv* env, jobject thiz, jstring snippet) {
-  VM* vm = vm_from_saynaa(env, thiz);
-  if (vm == NULL || snippet == NULL)
-    return;
-
-  const char* code = (*env)->GetStringUTFChars(env, snippet, NULL);
-  if (code == NULL)
-    return;
-
-  Result result = RunString(vm, code);
-
-  (*env)->ReleaseStringUTFChars(env, snippet, code);
-
-  if (result != RESULT_SUCCESS) {
-    __android_log_print(ANDROID_LOG_ERROR, SAYNAAJAVA_TAG,
-        "Saynaa snippet execution failed with code: %d", (int) result);
-  }
-}
-
-JNIEXPORT void JNICALL Java_com_android_saynaa_saynaajava_Saynaa_executeSnippetWithViewNative(
-    JNIEnv* env, jobject thiz, jstring snippet, jobject view) {
-  VM* vm = vm_from_saynaa(env, thiz);
-  if (vm == NULL || snippet == NULL)
-    return;
-
-  BridgeState* bridge = bridge_from_vm(vm);
-  if (bridge != NULL) {
-    if (bridge->lastEventView != NULL) {
-      (*env)->DeleteGlobalRef(env, bridge->lastEventView);
-      bridge->lastEventView = NULL;
-    }
-    if (view != NULL)
-      bridge->lastEventView = (*env)->NewGlobalRef(env, view);
-  }
-
-  const char* code = (*env)->GetStringUTFChars(env, snippet, NULL);
-  if (code == NULL)
-    return;
-
-  Result result = RunString(vm, code);
-
-  (*env)->ReleaseStringUTFChars(env, snippet, code);
-
-  if (bridge != NULL && bridge->lastEventView != NULL) {
-    (*env)->DeleteGlobalRef(env, bridge->lastEventView);
-    bridge->lastEventView = NULL;
-  }
-
-  if (result != RESULT_SUCCESS) {
-    __android_log_print(ANDROID_LOG_ERROR, SAYNAAJAVA_TAG,
-        "Saynaa snippet-with-view execution failed with code: %d", (int) result);
-  }
-}
-
-JNIEXPORT void JNICALL Java_com_android_saynaa_saynaajava_Saynaa_execute(
-    JNIEnv* env, jobject thiz, jobject context) {
-  VM* vm = vm_from_saynaa(env, thiz);
-  if (vm == NULL) {
-    __android_log_print(ANDROID_LOG_ERROR, SAYNAAJAVA_TAG, "VM not initialized.");
-    return;
-  }
-
-  BridgeState* bridge = bridge_from_vm(vm);
-  if (bridge != NULL) {
-    ensure_files_search_path(vm, bridge, env, context);
-
-    clear_callbacks(vm);
-    release_bridge_handle(vm, &bridge->javaWrapperModule);
-    release_bridge_handle(vm, &bridge->clsJavaMethod);
-    release_bridge_handle(vm, &bridge->clsJavaObject);
-    release_bridge_handle(vm, &bridge->clsJavaClass);
-
-    if (bridge->activity != NULL) {
-      (*env)->DeleteGlobalRef(env, bridge->activity);
-      bridge->activity = NULL;
-    }
-    if (bridge->lastEventView != NULL) {
-      (*env)->DeleteGlobalRef(env, bridge->lastEventView);
-      bridge->lastEventView = NULL;
-    }
-    if (context != NULL) {
-      bridge->activity = (*env)->NewGlobalRef(env, context);
-    }
-  }
-
-  jclass saynaaCls = (*env)->GetObjectClass(env, thiz);
-  jfieldID sourceField = (*env)->GetFieldID(env, saynaaCls, "source", "Ljava/lang/String;");
-  jstring source = (jstring) (*env)->GetObjectField(env, thiz, sourceField);
-  (*env)->DeleteLocalRef(env, saynaaCls);
-
-  if (source == NULL) {
-    __android_log_print(ANDROID_LOG_ERROR, SAYNAAJAVA_TAG, "Source is null.");
-    return;
-  }
-
-  const char* code = (*env)->GetStringUTFChars(env, source, NULL);
-  if (code == NULL) {
-    (*env)->DeleteLocalRef(env, source);
-    return;
-  }
-
-  __android_log_print(ANDROID_LOG_INFO, SAYNAAJAVA_TAG,
-      "Running script... source_len=%d preprocessor=disabled", (int) strlen(code));
-  Result result = RunString(vm, code);
-
-  (*env)->ReleaseStringUTFChars(env, source, code);
-  (*env)->DeleteLocalRef(env, source);
-
-  if (result != RESULT_SUCCESS) {
-    __android_log_print(ANDROID_LOG_ERROR, SAYNAAJAVA_TAG, "Saynaa execution failed with code: %d", (int) result);
-  } else {
-    __android_log_print(ANDROID_LOG_INFO, SAYNAAJAVA_TAG, "Saynaa execution finished successfully.");
-  }
-}
-
-JNIEXPORT void JNICALL Java_com_android_saynaa_saynaajava_Saynaa_invokeCallbackNative(
-    JNIEnv* env, jobject thiz, jint callbackId, jobject arg0) {
-  VM* vm = vm_from_saynaa(env, thiz);
-  if (vm == NULL || callbackId <= 0)
-    return;
-
-  BridgeState* bridge = bridge_from_vm(vm);
-  if (bridge == NULL)
-    return;
-
-  CallbackEntry* entry = find_callback(vm, (int) callbackId);
-  if (entry == NULL)
-    return;
-
-  if (!ensure_wrapper_classes(vm))
-    return;
-
-  if (vm->fiber != NULL)
-    vm->fiber->error = NULL;
-
-  jclass objClass = (*env)->FindClass(env, "java/lang/Object");
-  jobjectArray args = (*env)->NewObjectArray(env, arg0 == NULL ? 0 : 1, objClass, NULL);
-  (*env)->DeleteLocalRef(env, objClass);
-  if (arg0 != NULL)
-    (*env)->SetObjectArrayElement(env, args, 0, arg0);
-
-  bool ok = invoke_registered_callback(env, vm, bridge, entry, NULL, args, NULL);
-  if (args != NULL)
-    (*env)->DeleteLocalRef(env, args);
-
-  if (!ok) {
-    const char* err = (vm->fiber != NULL && vm->fiber->error != NULL) ? vm->fiber->error->data : "<unknown>";
-    __android_log_print(ANDROID_LOG_ERROR, SAYNAAJAVA_TAG,
-        "invokeCallbackNative failed for callbackId=%d err=%s", (int) callbackId, err);
-    if (vm->fiber != NULL)
-      vm->fiber->error = NULL;
-  } else {
-    __android_log_print(ANDROID_LOG_INFO, SAYNAAJAVA_TAG,
-        "invokeCallbackNative succeeded for callbackId=%d", (int) callbackId);
-  }
-}
-
-JNIEXPORT void JNICALL Java_com_android_saynaa_saynaajava_Saynaa_invokeCallbackMethodNative(
-    JNIEnv* env, jobject thiz, jint callbackId, jstring methodName, jobjectArray args) {
-  VM* vm = vm_from_saynaa(env, thiz);
-  if (vm == NULL || callbackId <= 0)
-    return;
-
-  BridgeState* bridge = bridge_from_vm(vm);
-  if (bridge == NULL)
-    return;
-
-  CallbackEntry* entry = find_callback(vm, (int) callbackId);
-  if (entry == NULL)
-    return;
-
-  if (!ensure_wrapper_classes(vm))
-    return;
-
-  if (vm->fiber != NULL)
-    vm->fiber->error = NULL;
-
-  const char* runtimeMethodName = NULL;
-  if (methodName != NULL)
-    runtimeMethodName = (*env)->GetStringUTFChars(env, methodName, NULL);
-
-  bool ok = invoke_registered_callback(env, vm, bridge, entry, runtimeMethodName, args, NULL);
-
-  if (methodName != NULL && runtimeMethodName != NULL)
-    (*env)->ReleaseStringUTFChars(env, methodName, runtimeMethodName);
-
-  if (!ok) {
-    const char* err = (vm->fiber != NULL && vm->fiber->error != NULL) ? vm->fiber->error->data : "<unknown>";
-    __android_log_print(ANDROID_LOG_ERROR, SAYNAAJAVA_TAG,
-        "invokeCallbackNative failed for callbackId=%d err=%s", (int) callbackId, err);
-    if (vm->fiber != NULL)
-      vm->fiber->error = NULL;
-  } else {
-    __android_log_print(ANDROID_LOG_INFO, SAYNAAJAVA_TAG,
-        "invokeCallbackNative succeeded for callbackId=%d", (int) callbackId);
-  }
-}
-
-JNIEXPORT jobject JNICALL Java_com_android_saynaa_saynaajava_Saynaa_invokeCallbackMethodWithResultNative(
-    JNIEnv* env, jobject thiz, jint callbackId, jstring methodName, jobjectArray args) {
-  VM* vm = vm_from_saynaa(env, thiz);
-  if (vm == NULL || callbackId <= 0)
-    return NULL;
-
-  BridgeState* bridge = bridge_from_vm(vm);
-  if (bridge == NULL)
-    return NULL;
-
-  CallbackEntry* entry = find_callback(vm, (int) callbackId);
-  if (entry == NULL)
-    return NULL;
-
-  if (!ensure_wrapper_classes(vm))
-    return NULL;
-
-  if (vm->fiber != NULL)
-    vm->fiber->error = NULL;
-
-  const char* runtimeMethodName = NULL;
-  if (methodName != NULL)
-    runtimeMethodName = (*env)->GetStringUTFChars(env, methodName, NULL);
-
-  jobject result = NULL;
-  bool ok = invoke_registered_callback(env, vm, bridge, entry, runtimeMethodName, args, &result);
-
-  if (methodName != NULL && runtimeMethodName != NULL)
-    (*env)->ReleaseStringUTFChars(env, methodName, runtimeMethodName);
-
-  if (!ok) {
-    const char* err = (vm->fiber != NULL && vm->fiber->error != NULL) ? vm->fiber->error->data : "<unknown>";
-    __android_log_print(ANDROID_LOG_ERROR, SAYNAAJAVA_TAG,
-        "invokeCallbackMethodWithResultNative failed for callbackId=%d err=%s", (int) callbackId, err);
-    if (vm->fiber != NULL)
-      vm->fiber->error = NULL;
-    return NULL;
-  }
-
-  return result;
-}
-
-JNIEXPORT void JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1close(JNIEnv* env, jobject thiz) {
-  VM* vm = vm_from_saynaa(env, thiz);
-  if (vm == NULL)
-    return;
-
-  BridgeState* bridge = bridge_from_vm(vm);
-  if (bridge != NULL) {
-    clear_callbacks(vm);
-    release_bridge_handle(vm, &bridge->javaWrapperModule);
-    release_bridge_handle(vm, &bridge->javaModule);
-    release_bridge_handle(vm, &bridge->clsJavaMethod);
-    release_bridge_handle(vm, &bridge->clsJavaObject);
-    release_bridge_handle(vm, &bridge->clsJavaClass);
-    if (bridge->saynaaObject != NULL) {
-      (*env)->DeleteGlobalRef(env, bridge->saynaaObject);
-      bridge->saynaaObject = NULL;
-    }
-    if (bridge->lastEventView != NULL) {
-      (*env)->DeleteGlobalRef(env, bridge->lastEventView);
-      bridge->lastEventView = NULL;
-    }
-    if (bridge->activity != NULL) {
-      (*env)->DeleteGlobalRef(env, bridge->activity);
-      bridge->activity = NULL;
-    }
-    if (bridge->javaBridgeClass != NULL) {
-      (*env)->DeleteGlobalRef(env, bridge->javaBridgeClass);
-      bridge->javaBridgeClass = NULL;
-    }
-    clear_java_packages(bridge);
-    free(bridge);
-    SetUserData(vm, NULL);
-  }
-
-  FreeVM(vm);
-  set_vm_ptr_on_saynaa(env, thiz, (jlong) 0);
-}
-
-JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void* reserved) {
-  (void) vm;
-  (void) reserved;
-  return JNI_VERSION_1_6;
 }

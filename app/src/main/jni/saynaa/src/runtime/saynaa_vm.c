@@ -242,7 +242,10 @@ void vmCollectGarbage(VM* vm) {
   }
 
 #ifdef DEBUG
-  ASSERT(bytes_allocated = vm->bytes_allocated, OOPS);
+  // Safety check: during GC sweep, freeObject() must not mutate
+  // vm->bytes_allocated. This assert helps catch accounting bugs that can
+  // break GC trigger thresholds (too frequent or too late collections).
+  ASSERT(bytes_allocated == vm->bytes_allocated, OOPS);
 #endif
 
   // Next GC heap size will be change depends on the byte we've left with now,
@@ -761,10 +764,20 @@ Var vmImportModule(VM* vm, String* from, String* path) {
           return result;
         }
 
-        // Any other object/value.
-        // The searcher returned a class, instance, string, number etc directly.
-        // We use this value as the imported result.
-        return result;
+        // Only allow runtime import values that are importable entities.
+        // Function values are represented as closures at runtime.
+        if (IS_OBJ_TYPE(result, OBJ_MODULE) || IS_OBJ_TYPE(result, OBJ_CLASS)
+            || IS_OBJ_TYPE(result, OBJ_CLOSURE)) {
+          return result;
+        }
+
+        VM_SET_ERROR(
+            vm,
+            stringFormat(vm,
+                         "Invalid import result for '@'. Searcher must return "
+                         "null, true (handled), Module, Class, or Function.",
+                         path));
+        return VAR_NULL;
       }
     }
   }
@@ -1446,23 +1459,31 @@ L_vm_main_loop:
       String* name = moduleGetStringAt(module, (int) index);
       ASSERT(name != NULL, OOPS);
 
+      // Regular import bytecode is followed by STORE_GLOBAL for the imported symbol.
+      // For handled imports (true), we bind from that target global slot.
+      bool has_target_global = false;
+      uint16_t target_global_index = 0;
+      if ((Opcode) (*ip) == OP_STORE_GLOBAL) {
+        target_global_index = (uint16_t) ((ip[1] << 8) | ip[2]);
+        ASSERT_INDEX(target_global_index, module->globals.count);
+        has_target_global = true;
+      }
+
       Var _imported = vmImportModule(vm, module->path, name);
       CHECK_ERROR();
 
       // If a searcher returned true, it means "handled".
-      // For regular import bytecode, the next opcode is usually STORE_GLOBAL.
-      // If that global slot already has a value (e.g. set by define()),
-      // keep that value instead of overwriting it with true.
+      // In this mode, true is only a sentinel and import value is read from
+      // the target global slot (supports null values set by define()).
       if (IS_BOOL(_imported) && AS_BOOL(_imported) == true) {
-        if ((Opcode) (*ip) == OP_STORE_GLOBAL) {
-          uint16_t global_index = (uint16_t) ((ip[1] << 8) | ip[2]);
-          ASSERT_INDEX(global_index, module->globals.count);
-
-          Var existing = module->globals.data[global_index];
-          if (!IS_UNDEF(existing)) {
-            _imported = existing;
-          }
+        if (!has_target_global) {
+          RUNTIME_ERROR(stringFormat(vm,
+                                     "Invalid import bytecode state for '@': "
+                                     "missing STORE_GLOBAL target.",
+                                     name));
         }
+
+        _imported = module->globals.data[target_global_index];
       }
 
       // NOTE: _imported could be any value (module, class, function or just true).
@@ -1641,6 +1662,15 @@ L_vm_main_loop:
         // execution variables.
         if (vm->fiber != fiber) {
           fiber = vm->fiber;
+
+          // A switched fiber must have at least one VM frame to resume.
+          // Native-only fibers (frame_count == 0) cannot be resumed here.
+          if (fiber == NULL || fiber->frame_count == 0) {
+            RUNTIME_ERROR(newString(
+                vm, "Cannot continue: switched fiber has no VM call frame. "
+                    "Start it with fiber_run() before resuming."));
+          }
+
           LOAD_FRAME();
         }
 
@@ -1763,6 +1793,12 @@ L_vm_main_loop:
       // Set the return value.
       Var ret_value = POP();
 
+      // Guard against corrupted return/base pointers to avoid native crashes.
+      if (fiber->ret == NULL || fiber->stack == NULL || fiber->ret < fiber->stack
+          || fiber->ret >= (fiber->stack + fiber->stack_size)) {
+        RUNTIME_ERROR(newString(vm, "Invalid fiber return pointer state."));
+      }
+
       // Pop the last frame, and if no more call frames, we're done with
       // the current fiber.
       if (--fiber->frame_count == 0) {
@@ -1780,10 +1816,22 @@ L_vm_main_loop:
         }
 
       } else {
-        *rbp = ret_value;
+        Var* return_slot = rbp;
+        if (return_slot == NULL || return_slot < fiber->stack
+            || return_slot >= (fiber->stack + fiber->stack_size)) {
+          // Fallback for rare stale frame-base states.
+          return_slot = fiber->ret;
+        }
+
+        if (return_slot == NULL || return_slot < fiber->stack
+            || return_slot >= (fiber->stack + fiber->stack_size)) {
+          RUNTIME_ERROR(newString(vm, "Invalid frame base pointer state."));
+        }
+
+        *return_slot = ret_value;
         // Pop the params (locals should have popped at this point) and
         // update stack pointer.
-        fiber->sp = rbp + 1; // +1: rbp is returned value.
+        fiber->sp = return_slot + 1; // +1: return slot is returned value.
       }
 
       LOAD_FRAME();

@@ -49,20 +49,24 @@ The debug APK is generated under [app/build/outputs/apk](app/build/outputs/apk).
 
 ## Install and run
 
-Install the debug build on a connected device:
+### Install the debug build on a connected device:
 
 - `adb install -r app/build/outputs/apk/debug/app-debug.apk`
 
-Launch the app:
+### Launch the app:
 
 - `adb shell am start -n com.android.saynaa/.activity.MainActivity`
 
-View logs:
+### View logs:
 
 - `adb logcat | grep saynaajava`
 
-One Command:
+### One Command:
 - `gradle :app:assembleDebug && adb uninstall com.android.saynaa ; adb install -r app/build/outputs/apk/debug/app-debug.apk && adb logcat -c && adb shell am start -n com.android.saynaa/.activity.MainActivity && sleep 4 && adb logcat -d | grep -E "saynaajava|SaynaaMain|AndroidRuntime|Saynaa|MainActivity"`
+
+or
+
+- `adb logcat -c && gradle :app:installDebug && adb shell am start -n com.android.saynaa/.activity.SaynaaActivity -a android.intent.action.VIEW -d file:///data/user/0/com.android.saynaa/files/proxy_test.sa && sleep 2 && adb logcat -d | grep -E "Saynaa execution failed|Saynaa execution finished|Expected statement end" | tail -n 30`
 
 ## How scripting works
 

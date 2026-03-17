@@ -15,7 +15,7 @@ import java.io.OutputStream;
 public class FileUtil {
   public final static String SDCARD_PATH = "/sdcard/saynaa/";
   private static final String ASSETS_VERSION_MARKER = ".saynaa_assets_version";
-  private static final int ASSETS_COPY_VERSION = 6;
+  private static final int ASSETS_COPY_VERSION = 8;
 
   /**
    * Copy all assets to internal storage.
@@ -34,7 +34,7 @@ public class FileUtil {
 
     try {
       copyAssetFolder(context, "", outDir);
-      writeAssetsVersion(marker, ASSETS_COPY_VERSION);
+      //writeAssetsVersion(marker, ASSETS_COPY_VERSION);
     } catch (IOException e) {
       e.printStackTrace();
     }

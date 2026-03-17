@@ -267,8 +267,7 @@ PUBLIC void* GetUserData(const VM* vm);
 // Register a new builtin function with the given [name]. [docstring] could be
 // NULL or will always valid pointer since VM doesn't allocate a string for
 // docstrings.
-PUBLIC void RegisterBuiltinFn(VM* vm, const char* name, nativeFn fn, int arity,
-                              const char* docstring);
+PUBLIC void RegisterBuiltinFn(VM* vm, const char* name, nativeFn fn, int arity, const char* docstring);
 
 // Adds a new search path to the VM, the path will be appended to the list of
 // search paths. Search path orders are the same as the registered order.
@@ -300,27 +299,25 @@ PUBLIC void registerModule(VM* vm, Handle* module);
 // the function has variadic parameters and use GetArgc() to get the argc.
 // Note that the function will be added as a global variable of the module.
 // [docstring] is optional and could be omitted with NULL.
-PUBLIC void ModuleAddFunction(VM* vm, Handle* module, const char* name,
-                              nativeFn fptr, int arity, const char* docstring);
+PUBLIC void ModuleAddFunction(
+    VM* vm, Handle* module, const char* name, nativeFn fptr, int arity, const char* docstring);
 
 // Create a new class on the [module] with the [name] and return it.
 // If the [base_class] is NULL by default it'll set to "Object" class.
 // [docstring] is optional and could be omitted with NULL.
-PUBLIC Handle* NewClass(VM* vm, const char* name, Handle* base_class,
-                        Handle* module, NewInstanceFn new_fn,
-                        DeleteInstanceFn delete_fn, const char* docstring);
+PUBLIC Handle* NewClass(VM* vm, const char* name, Handle* base_class, Handle* module,
+    NewInstanceFn new_fn, DeleteInstanceFn delete_fn, const char* docstring);
 
 // Add a native method to the given class. If the [arity] is -1 that means
 // the method has variadic parameters and use GetArgc() to get the argc.
 // [docstring] is optional and could be omitted with NULL.
-PUBLIC void ClassAddMethod(VM* vm, Handle* cls, const char* name, nativeFn fptr,
-                           int arity, const char* docstring);
+PUBLIC void ClassAddMethod(VM* vm, Handle* cls, const char* name, nativeFn fptr, int arity, const char* docstring);
 
 PUBLIC Class* NewNativeClass(VM* vm, const char* name, NewInstanceFn new_fn,
-                             DeleteInstanceFn delete_fn, const char* docstring);
+    DeleteInstanceFn delete_fn, const char* docstring);
 
-PUBLIC void NativeClassAddMethod(VM* vm, Class* cls, const char* name,
-                                 nativeFn fptr, int arity, const char* docstring);
+PUBLIC void NativeClassAddMethod(
+    VM* vm, Class* cls, const char* name, nativeFn fptr, int arity, const char* docstring);
 
 // It'll compile the [source] for the module which result all the
 // functions and classes in that [source] to register on the module.
@@ -329,6 +326,9 @@ PUBLIC void ModuleAddSource(VM* vm, Handle* module, const char* source);
 // Run the source string. The [source] is expected to be valid till this
 // function returns.
 PUBLIC Result RunString(VM* vm, const char* source);
+
+// Compile and run a source string in protected mode (pcall-like).
+PUBLIC Result RunStringPcall(VM* vm, const char* source);
 
 // Run the file at [path] relative to the current working directory.
 PUBLIC Result RunFile(VM* vm, const char* path);
@@ -446,8 +446,7 @@ PUBLIC void setSlotString(VM* vm, int index, const char* value);
 
 PUBLIC void setSlotPointer(VM* vm, int index, void* native_ptr, Destructor destructor);
 
-PUBLIC void setSlotClosure(VM* vm, int index, const char* name, nativeFn fptr,
-                           int arity, const char* docstring);
+PUBLIC void setSlotClosure(VM* vm, int index, const char* name, nativeFn fptr, int arity, const char* docstring);
 
 // Create a new String copying the [value] and set it to [index] slot.
 // Unlike the above function it'll copy only the spicified length.
@@ -500,8 +499,7 @@ PUBLIC void NewString(VM* vm, int index);
 PUBLIC void NewPointer(VM* vm, int index, void* native_ptr, Destructor destructor);
 
 // Function to create new Closure
-PUBLIC void NewClosure(VM* vm, int index, const char* name, nativeFn fptr,
-                       int arity, const char* docstring);
+PUBLIC void NewClosure(VM* vm, int index, const char* name, nativeFn fptr, int arity, const char* docstring);
 
 // Insert [value] to the [list] at the [index], if the index is less than zero,
 // it'll count from backwards. ie. insert[-1] == insert[list.length].

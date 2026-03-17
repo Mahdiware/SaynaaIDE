@@ -1,0 +1,66 @@
+import java
+
+activity = getActivity()
+
+LinearLayout = java.bindClass("android.widget.LinearLayout")
+TextView = java.bindClass("android.widget.TextView")
+Button = java.bindClass("android.widget.Button")
+Toast = java.bindClass("android.widget.Toast")
+View = java.bindClass("android.view.View")
+Runnable = java.bindClass("java.lang.Runnable")
+
+activity.setTitle("Proxy Syntax Test")
+
+root = LinearLayout(activity)
+root.setOrientation(1)
+root.setPadding(40, 40, 40, 40)
+
+title = TextView(activity)
+title.setText("AndLua-style proxy test")
+title.setTextSize(22)
+
+status = TextView(activity)
+status.setText("Status: waiting...")
+status.setTextSize(16)
+
+btnMap = Button(activity)
+btnMap.setText("Test View.OnClickListener{...}")
+
+btnFn = Button(activity)
+btnFn.setText("Test Runnable(function)")
+
+root.addView(title)
+root.addView(status)
+root.addView(btnMap)
+root.addView(btnFn)
+
+activity.setContentView(root)
+
+function toast(msg)
+	Toast.makeText(activity, msg, Toast.LENGTH_SHORT).show()
+end
+
+# Test 1: map callback style (AndLua-like)
+listener1 = View.OnClickListener({
+	onClick: function(v)
+		status.setText("PASS: View.OnClickListener{onClick: fn}")
+		toast("PASS map listener")
+	end
+})
+btnMap.setOnClickListener(listener1)
+
+# Test 2: SAM function style on interface class call
+runner = Runnable(function()
+	status.setText("PASS: Runnable(function)")
+	toast("PASS SAM function")
+end)
+
+btnFn.setOnClickListener(View.OnClickListener({
+	onClick: function(v)
+		runner.run()
+	end
+}))
+
+function onCreate(arg1)
+	toast("proxy_test loaded")
+end

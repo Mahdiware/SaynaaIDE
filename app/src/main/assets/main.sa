@@ -13,6 +13,9 @@ TextView = java.bindClass("android.widget.TextView")
 Button = java.bindClass("android.widget.Button")
 EditText = java.bindClass("android.widget.EditText")
 Toast = java.bindClass("android.widget.Toast")
+Bundle = java.bindClass("android.os.Bundle")
+View = java.bindClass("android.view.View")
+TextWatcher = java.bindClass("android.text.TextWatcher")
 
 activity.setTitle("Saynaa Demo")
 
@@ -38,23 +41,65 @@ input.setHint("Type to trigger TextWatcher")
 btn = Button(activity)
 btn.setText("Tap / Long Press")
 
+btn2 = Button(activity)
+btn2.setText("Open main2")
+
+btn3 = Button(activity)
+btn3.setText("Run proxy syntax test")
+
 root.addView(title)
 root.addView(subtitle)
 root.addView(status)
 root.addView(input)
 root.addView(btn)
+root.addView(btn2)
+root.addView(btn3)
 
 activity.setContentView(root)
+
+function print(msg)
+	Toast.makeText(activity, msg, Toast.LENGTH_SHORT).show()
+end
+
+t = Toast.makeText(activity, "Clicked", Toast.LENGTH_SHORT)
+print("toast: $t")
 
 click_cb = {
 	onClick: function(v)
 		v.setText("Tapped ✅")
 		status.setText("Status: button clicked")
-		t = Toast.makeText(activity, "Clicked", Toast.LENGTH_SHORT)
-		t.show()
+		print("Welcome 👋 ${hello.hello()}")
 	end
 }
-btn.setOnClickListener(java.createProxy("android.view.View\$OnClickListener", click_cb))
+btn.setOnClickListener(View.OnClickListener(click_cb))
+
+open2_cb = {
+	onClick: function(v)
+		b = Bundle()
+		b.putString("title", "Hello from main.sa")
+		b.putString("message", "Data passed with Bundle")
+		b.putInt("count", 42)
+		b.putBoolean("ok", true)
+
+		activity.newActivity("main2", b)
+	end
+}
+btn2.setOnClickListener(View.OnClickListener(open2_cb))
+
+open_proxy_test_cb = {
+	onClick: function(v)
+		activity.newActivity("proxy_test")
+	end
+}
+btn3.setOnClickListener(View.OnClickListener(open_proxy_test_cb))
+
+function tijaabo()
+	print("hello this is test")
+end
+
+function onCreate(arg1)
+	print("hello onCreate: $arg1")
+end
 
 long_click_cb = {
 	onLongClick: function(v)
@@ -65,7 +110,7 @@ long_click_cb = {
 		return true
 	end
 }
-btn.setOnLongClickListener(java.createProxy('android.view.View$OnLongClickListener', long_click_cb))
+btn.setOnLongClickListener(View.OnLongClickListener(long_click_cb))
 
 textWatcher_cb = {
 	beforeTextChanged: function(s, start, count, after)
@@ -79,6 +124,6 @@ textWatcher_cb = {
 	end
 }
 
-input.addTextChangedListener(java.createProxy('android.text.TextWatcher', textWatcher_cb))
+input.addTextChangedListener(TextWatcher(textWatcher_cb))
 
 Toast.makeText(activity, "Welcome 👋 ${hello.hello()}", Toast.LENGTH_SHORT).show()

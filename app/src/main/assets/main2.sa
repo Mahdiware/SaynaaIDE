@@ -1,0 +1,49 @@
+import java
+
+activity = getActivity()
+
+LinearLayout = java.bindClass("android.widget.LinearLayout")
+TextView = java.bindClass("android.widget.TextView")
+Toast = java.bindClass("android.widget.Toast")
+
+activity.setTitle("Saynaa main2")
+
+root = LinearLayout(activity)
+root.setOrientation(1)
+root.setPadding(40, 40, 40, 40)
+
+title = TextView(activity)
+title.setText("main2.sa opened")
+title.setTextSize(24)
+
+subtitle = TextView(activity)
+subtitle.setText("waiting for data...")
+subtitle.setTextSize(16)
+
+info = TextView(activity)
+info.setTextSize(14)
+info.setText("no args yet")
+
+root.addView(title)
+root.addView(subtitle)
+root.addView(info)
+activity.setContentView(root)
+
+function onCreate(arg1)
+	if arg1 != null then
+		titleText = arg1.getString("title")
+		msg = arg1.getString("message")
+		count = arg1.getInt("count")
+		ok = arg1.getBoolean("ok")
+
+		if titleText != null then
+			title.setText(titleText)
+		end
+
+		subtitle.setText(msg)
+		info.setText("count=$count, ok=$ok")
+		Toast.makeText(activity, "received data from main.sa", Toast.LENGTH_SHORT).show()
+	else
+		Toast.makeText(activity, "main2 onCreate (no data)", Toast.LENGTH_SHORT).show()
+	end
+end

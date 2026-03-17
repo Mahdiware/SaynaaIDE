@@ -3233,10 +3233,12 @@ static void compileBlockBody(Compiler* compiler, BlockType type) {
   compilerExitBlock(compiler);
 }
 
-// Parse the module path syntax, emit opcode to load module at that path.
-// and return the module's name token
+// Parse import path syntax into a string constant used by bytecode.
 //
-//   ex: import foo.bar.baz   // => "foo/bar/baz"   => return token 'baz'
+// Compile phase does not resolve filesystem paths or normalize separators;
+// runtime import/searchers are responsible for path handling.
+//
+//   ex: import foo.bar.baz   // => "foo.bar.baz"   => return token 'baz'
 // Returns the index of the path string in the constant table.
 // Returns the index of the path string in the constant table.
 static int compileImportPath(Compiler* compiler, Token* name_token, bool* is_wildcard) {
@@ -3255,8 +3257,10 @@ static int compileImportPath(Compiler* compiler, Token* name_token, bool* is_wil
     String* str = (String*) AS_OBJ(value->value);
     int seg_start = 0;
     int seg_len = (int) str->length;
-    if (seg_len >= 2 && str->data[seg_len - 1] == '*' &&
-        (str->data[seg_len - 2] == '.' || str->data[seg_len - 2] == '/')) {
+    // Wildcard import syntax is language-level (".*").
+    // Filesystem separator concerns are handled at runtime.
+    if (seg_len >= 2 && str->data[seg_len - 1] == '*'
+        && str->data[seg_len - 2] == '.') {
       *is_wildcard = true;
       seg_len -= 2;
     }
