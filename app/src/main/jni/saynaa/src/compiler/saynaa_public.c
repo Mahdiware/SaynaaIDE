@@ -655,11 +655,39 @@ Result RunREPL(VM* vm) {
 /*****************************************************************************/
 
 void SetRuntimeError(VM* vm, const char* message) {
-  CHECK_FIBER_EXISTS(vm);
+  if (vm == NULL)
+    return;
+
+  if (vm->fiber == NULL) {
+    if (vm->config.stderr_write != NULL) {
+      vm->config.stderr_write(vm, "Runtime error (no fiber): ");
+      vm->config.stderr_write(vm, message == NULL ? "<null>" : message);
+      vm->config.stderr_write(vm, "\n");
+    }
+    return;
+  }
+
   VM_SET_ERROR(vm, newString(vm, message));
 }
 
 void SetRuntimeErrorFmt(VM* vm, const char* fmt, ...) {
+  if (vm == NULL)
+    return;
+
+  if (vm->fiber == NULL) {
+    if (vm->config.stderr_write != NULL) {
+      char buff[1024];
+      va_list args;
+      va_start(args, fmt);
+      vsnprintf(buff, sizeof(buff), fmt, args);
+      va_end(args);
+      vm->config.stderr_write(vm, "Runtime error (no fiber): ");
+      vm->config.stderr_write(vm, buff);
+      vm->config.stderr_write(vm, "\n");
+    }
+    return;
+  }
+
   va_list args;
   va_start(args, fmt);
   VM_SET_ERROR(vm, newStringVaArgs(vm, fmt, args));

@@ -491,8 +491,33 @@ void android_stdout_write(VM* vm, const char* text) {
 }
 
 void android_stderr_write(VM* vm, const char* text) {
-  (void) vm;
   __android_log_print(ANDROID_LOG_ERROR, SAYNAAJAVA_TAG, "%s", text == NULL ? "" : text);
+
+  if (vm == NULL || text == NULL || text[0] == '\0')
+    return;
+
+  BridgeState* bridge = bridge_from_vm(vm);
+  if (bridge == NULL || bridge->jvm == NULL || bridge->saynaaObject == NULL || bridge->mOnNativeError == NULL)
+    return;
+
+  JNIEnv* env = env_from_jvm(bridge->jvm);
+  if (env == NULL)
+    return;
+
+  jobject saynaaObj = (*env)->NewLocalRef(env, bridge->saynaaObject);
+  if (saynaaObj == NULL)
+    return;
+
+  jstring jText = (*env)->NewStringUTF(env, text);
+  if (jText != NULL) {
+    (*env)->CallVoidMethod(env, saynaaObj, bridge->mOnNativeError, jText);
+    (*env)->DeleteLocalRef(env, jText);
+    if ((*env)->ExceptionCheck(env)) {
+      clear_jni_exception_with_log(env, "android_stderr_write:onNativeError");
+    }
+  }
+
+  (*env)->DeleteLocalRef(env, saynaaObj);
 }
 
 void ensure_files_search_path(VM* vm, BridgeState* bridge, JNIEnv* env, jobject context) {

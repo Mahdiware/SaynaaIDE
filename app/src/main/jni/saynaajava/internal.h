@@ -48,6 +48,7 @@ typedef struct BridgeState {
   jmethodID mCreateProxy;
   jmethodID mCreateNativeCallbackProxy;
   jmethodID mGetDefaultInterfaceMethodName;
+  jmethodID mOnNativeError;
 
   int nextCallbackId;
   CallbackEntry* callbacks;
@@ -154,8 +155,8 @@ extern int register_map_callback(VM* vm, int mapSlot, const char* methodName);
 extern CallbackEntry* find_callback(VM* vm, int callbackId);
 extern bool invoke_registered_callback(JNIEnv* env, VM* vm, BridgeState* bridge,
     CallbackEntry* entry, const char* runtimeMethodName, jobject args, jobject* outResult);
-extern jobject create_native_callback_proxy(JNIEnv* env, VM* vm, BridgeState* bridge, jstring jInterface,
-  const char* methodName, int callbackId);
+extern jobject create_native_callback_proxy(JNIEnv* env, VM* vm, BridgeState* bridge,
+    jstring jInterface, const char* methodName, int callbackId);
 extern void release_bridge_handle(VM* vm, Handle** handlePtr);
 
 extern void java_ref_destructor(void* ptr);

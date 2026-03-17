@@ -1,0 +1,7 @@
+import "android.widget.Toast"
+
+function onCreate(savedInstanceState)
+  Toast.makeText(activity, "This line is fine", Toast.LENGTH_SHORT).show()
+  if true {
+    Toast.makeText(activity, "Missing close", Toast.LENGTH_SHORT).show()
+end

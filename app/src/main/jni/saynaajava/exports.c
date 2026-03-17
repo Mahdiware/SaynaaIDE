@@ -102,10 +102,14 @@ JNIEXPORT jobject JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1open
   bridge->mGetDefaultInterfaceMethodName = (*env)->GetStaticMethodID(env, bridge->javaBridgeClass,
       "getDefaultInterfaceMethodName", "(Ljava/lang/String;)Ljava/lang/String;");
 
+  jclass saynaaClass = (*env)->GetObjectClass(env, thiz);
+  bridge->mOnNativeError = (*env)->GetMethodID(env, saynaaClass, "onNativeError", "(Ljava/lang/String;)V");
+  (*env)->DeleteLocalRef(env, saynaaClass);
+
   if (bridge->mFindClass == NULL || bridge->mCreateJavaObject == NULL || bridge->mCallJavaMethod == NULL
-      || bridge->mCallStaticJavaMethod == NULL || bridge->mGetFieldValue == NULL
-      || bridge->mSetFieldValue == NULL || bridge->mCreateProxy == NULL
-      || bridge->mCreateNativeCallbackProxy == NULL || bridge->mGetDefaultInterfaceMethodName == NULL) {
+      || bridge->mCallStaticJavaMethod == NULL || bridge->mGetFieldValue == NULL || bridge->mSetFieldValue == NULL
+      || bridge->mCreateProxy == NULL || bridge->mCreateNativeCallbackProxy == NULL
+      || bridge->mGetDefaultInterfaceMethodName == NULL || bridge->mOnNativeError == NULL) {
     (*env)->DeleteGlobalRef(env, bridge->saynaaObject);
     (*env)->DeleteGlobalRef(env, bridge->javaBridgeClass);
     clear_java_packages(bridge);
@@ -305,26 +309,48 @@ JNIEXPORT void JNICALL Java_com_android_saynaa_saynaajava_Saynaa_execute(
 
   jclass saynaaCls = (*env)->GetObjectClass(env, thiz);
   jfieldID sourceField = (*env)->GetFieldID(env, saynaaCls, "source", "Ljava/lang/String;");
+  jfieldID scriptPathField = (*env)->GetFieldID(env, saynaaCls, "scriptPath", "Ljava/lang/String;");
   jstring source = (jstring) (*env)->GetObjectField(env, thiz, sourceField);
+  jstring scriptPath = scriptPathField == NULL ? NULL : (jstring) (*env)->GetObjectField(env, thiz, scriptPathField);
   (*env)->DeleteLocalRef(env, saynaaCls);
 
-  if (source == NULL) {
-    __android_log_print(ANDROID_LOG_ERROR, SAYNAAJAVA_TAG, "Source is null.");
+  const char* path = NULL;
+  if (scriptPath != NULL) {
+    path = (*env)->GetStringUTFChars(env, scriptPath, NULL);
+  }
+
+  const char* code = NULL;
+  if (source != NULL) {
+    code = (*env)->GetStringUTFChars(env, source, NULL);
+  }
+
+  Result result;
+  if (path != NULL && path[0] != '\0') {
+    __android_log_print(ANDROID_LOG_INFO, SAYNAAJAVA_TAG, "Running script file... path=%s", path);
+    result = RunFile(vm, path);
+  } else if (code != NULL) {
+    __android_log_print(
+        ANDROID_LOG_INFO, SAYNAAJAVA_TAG, "Running script... source_len=%d", (int) strlen(code));
+    result = RunString(vm, code);
+  } else {
+    __android_log_print(ANDROID_LOG_ERROR, SAYNAAJAVA_TAG, "Neither scriptPath nor source is available.");
+    if (source != NULL)
+      (*env)->DeleteLocalRef(env, source);
+    if (scriptPath != NULL)
+      (*env)->DeleteLocalRef(env, scriptPath);
     return;
   }
 
-  const char* code = (*env)->GetStringUTFChars(env, source, NULL);
-  if (code == NULL) {
+  if (source != NULL) {
+    if (code != NULL)
+      (*env)->ReleaseStringUTFChars(env, source, code);
     (*env)->DeleteLocalRef(env, source);
-    return;
   }
-
-  __android_log_print(ANDROID_LOG_INFO, SAYNAAJAVA_TAG,
-      "Running script... source_len=%d preprocessor=disabled", (int) strlen(code));
-  Result result = RunString(vm, code);
-
-  (*env)->ReleaseStringUTFChars(env, source, code);
-  (*env)->DeleteLocalRef(env, source);
+  if (scriptPath != NULL) {
+    if (path != NULL)
+      (*env)->ReleaseStringUTFChars(env, scriptPath, path);
+    (*env)->DeleteLocalRef(env, scriptPath);
+  }
 
   if (result != RESULT_SUCCESS) {
     __android_log_print(ANDROID_LOG_ERROR, SAYNAAJAVA_TAG, "Saynaa execution failed with code: %d", (int) result);

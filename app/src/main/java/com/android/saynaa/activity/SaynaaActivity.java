@@ -57,8 +57,6 @@ public class SaynaaActivity extends Activity {
 
   protected Handler handler;
   protected TextView status;
-  protected ListView list;
-  protected ArrayAdapter<String> adapter;
   protected LinearLayout layout;
 
   protected int mWidth;
@@ -77,6 +75,7 @@ public class SaynaaActivity extends Activity {
   // Saynaa runtime
   protected Saynaa saynaa;
   protected String source;
+  protected StringBuilder nativeErrorBuffer = new StringBuilder();
 
   // Optional compatibility placeholders
   protected Object mOnKeyDown;
@@ -125,8 +124,15 @@ public class SaynaaActivity extends Activity {
       }
 
       saynaa = new Saynaa(this);
-      saynaa.setSource(source);
+      saynaa.setScriptPath(saynaaPath);
       saynaa.run();
+
+      String startupErr = drainNativeErrors();
+      if (!startupErr.isEmpty()) {
+        showScriptError("Startup error", startupErr);
+        setContentView(layout);
+        return;
+      }
 
       isCreate = true;
       Object[] launchArgs = null;
@@ -153,7 +159,7 @@ public class SaynaaActivity extends Activity {
       }
     } catch (Throwable t) {
       Log.e(TAG, "onCreate failed", t);
-      sendMsg("onCreate error: " + t.getMessage());
+      showScriptError("onCreate error", t.getMessage());
       setContentView(layout);
     }
   }
@@ -376,12 +382,12 @@ public class SaynaaActivity extends Activity {
 
       int result = saynaa.doFile(filePath);
       if (result != 0) {
-        sendMsg("doFile runtime error: " + result + " @ " + filePath);
+        showScriptError(errorReason(result), "doFile failed @ " + filePath + "\n" + drainNativeErrors());
       }
 
       return null;
     } catch (Throwable t) {
-      sendMsg("doFile error: " + t.getMessage());
+      showScriptError("doFile error", t.getMessage());
       return null;
     }
   }
@@ -401,13 +407,67 @@ public class SaynaaActivity extends Activity {
       int result = saynaa.pcall(funcName, args);
       if (result != 0 && mDebug) {
         Log.w(TAG, "runFunc non-zero result for hook=" + funcName + ": " + result);
+        showScriptError(errorReason(result), "Hook failed: " + funcName + "\n" + drainNativeErrors());
       }
     } catch (Throwable t) {
       if (mDebug) {
         Log.w(TAG, "runFunc failed for hook=" + funcName, t);
       }
+      showScriptError("Hook error", funcName + ": " + t.getMessage());
     }
     return null;
+  }
+
+  public void onNativeError(String msg) {
+    if (msg == null || msg.trim().isEmpty()) {
+      return;
+    }
+    synchronized (nativeErrorBuffer) {
+      nativeErrorBuffer.append(msg);
+      if (!msg.endsWith("\n")) {
+        nativeErrorBuffer.append('\n');
+      }
+    }
+    if (!isSetViewed) {
+      setContentView(layout);
+    }
+  }
+
+  private String drainNativeErrors() {
+    synchronized (nativeErrorBuffer) {
+      String out = nativeErrorBuffer.toString().trim();
+      nativeErrorBuffer.setLength(0);
+      return out;
+    }
+  }
+
+  private void showScriptError(String title, String detail) {
+    String t = (title == null || title.trim().isEmpty()) ? "Script error" : title;
+    String d = (detail == null) ? "<no details>" : detail;
+    setTitle(t);
+    if (!isSetViewed) {
+      setContentView(layout);
+    }
+    sendMsg(t + "\n" + d);
+  }
+
+  private String errorReason(int error) {
+    switch (error) {
+      case 6:
+        return "Error";
+      case 5:
+        return "GC error";
+      case 4:
+        return "Out of memory";
+      case 3:
+        return "Syntax error";
+      case 2:
+        return "Runtime error";
+      case 1:
+        return "Yield error";
+      default:
+        return "Unknown error " + error;
+    }
   }
 
   private boolean hasScriptHook(String funcName) {
@@ -577,16 +637,9 @@ public class SaynaaActivity extends Activity {
     scroll.addView(status,
         new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
-    list = new ListView(this);
-    list.setFastScrollEnabled(true);
-    adapter = new ArrayAdapter<>(this, android.R.layout.simple_list_item_1, new ArrayList<String>());
-    list.setAdapter(adapter);
-
     layout.addView(scroll,
         new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-    layout.addView(list,
-        new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-  }
+}
 
   private String getDefaultExtDir() {
     if (Environment.getExternalStorageState().equals(Environment.MEDIA_MOUNTED)) {
@@ -601,11 +654,14 @@ public class SaynaaActivity extends Activity {
       super.handleMessage(msg);
       if (msg.what == 0) {
         String data = msg.getData().getString(DATA);
-        if (mDebug) {
-          showToast(data);
+        if (data == null) {
+          data = "";
         }
+        // Some sources send escaped newlines ("\\n") instead of real LF.
+        // Normalize before rendering so TextView shows proper line breaks.
+        data = data.replace("\\r\\n", "\n").replace("\\n", "\n").replace("\\r", "\n");
+
         status.append(data + "\n");
-        adapter.add(data);
       }
     }
   }

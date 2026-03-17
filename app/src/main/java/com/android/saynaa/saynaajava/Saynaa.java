@@ -4,6 +4,8 @@ import android.content.Context;
 import android.util.Log;
 import android.view.View;
 
+import com.android.saynaa.activity.SaynaaActivity;
+
 public class Saynaa {
   Context context;
   static {
@@ -17,6 +19,10 @@ public class Saynaa {
 
   public void setSource(String src) {
     this.source = src;
+  }
+
+  public void setScriptPath(String scriptPath) {
+    this.scriptPath = scriptPath;
   }
 
   public void run() {
@@ -65,6 +71,18 @@ public class Saynaa {
     return this.vm == null || this.vm.getPointer() == 0;
   }
 
+  // Called from native bridge when VM writes to stderr.
+  public synchronized void onNativeError(String message) {
+    if (message == null || message.trim().isEmpty())
+      return;
+
+    Log.e("saynaajava", message);
+
+    if (context instanceof SaynaaActivity) {
+      ((SaynaaActivity) context).onNativeError(message);
+    }
+  }
+
   public synchronized long getCPtrPeer() {
     return this.vm == null ? 0 : this.vm.getPointer();
   }
@@ -78,6 +96,7 @@ public class Saynaa {
   private synchronized native int saynaa_doString(String code);
   private synchronized native void saynaa_close();
   private String source;
+  private String scriptPath;
   private CPtr vm;
   private synchronized native void invokeCallbackMethodNative(int callbackId, String methodName, Object[] args);
   private synchronized native Object invokeCallbackMethodWithResultNative(int callbackId, String methodName, Object[] args);
