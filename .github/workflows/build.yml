@@ -1,32 +1,116 @@
-name: Android Build
+name: Build Android APK (Java + NDK, unsigned)
 
 on:
   push:
-    branches:
-      - main
-      - master
+    branches: ["main"]
   pull_request:
-
-permissions:
-  contents: read
+    branches: ["main"]
+  workflow_dispatch:
 
 jobs:
   build:
+    name: Build debug APKs (no signing, NDK enabled)
     runs-on: ubuntu-latest
 
+    permissions:
+      contents: write
+
+    env:
+      GRADLE_OPTS: -Dorg.gradle.caching=true -Dorg.gradle.parallel=true -Dorg.gradle.configureondemand=true -Dkotlin.incremental=true
+      # Note: android-actions/setup-android@v3 will populate ANDROID_SDK_ROOT/ANDROID_HOME
+
     steps:
-      - name: Checkout
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up JDK 21
+      - name: Setup Android SDK (tools + platform-tools)
+        uses: android-actions/setup-android@v3
+        with:
+          api-level: 33
+          # This action installs platform-tools and basic SDK; we will install NDK/CMake explicitly below.
+
+      - name: Set up Java (required for Gradle)
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '21'
+          java-version: '17'
           cache: gradle
 
       - name: Grant execute permission for Gradle wrapper
         run: chmod +x gradlew
 
-      - name: Build debug APK
-        run: ./gradlew :app:assembleDebug --no-daemon --stacktrace
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties', 'gradle.properties', 'settings.gradle*') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: Install Android SDK components (NDK, CMake, build-tools)
+        run: |
+          # Ensure sdkmanager is available in PATH (setup-android usually provides this)
+          echo "Android SDK root: $ANDROID_SDK_ROOT"
+          SDKMANAGER="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$SDKMANAGER" ]; then
+            # fallback for some runner images that put sdkmanager elsewhere
+            SDKMANAGER=$(which sdkmanager || true)
+          fi
+          if [ -z "$SDKMANAGER" ]; then
+            echo "sdkmanager not found in PATH; listing $ANDROID_SDK_ROOT"
+            ls -la "$ANDROID_SDK_ROOT" || true
+            exit 1
+          fi
+
+          # Install specific components; these version strings are commonly available.
+          # You may change the NDK version if you need a specific one.
+          yes | "$SDKMANAGER" "ndk;23.1.7779620" "cmake;3.22.1" "build-tools;33.0.2" "platforms;android-33"
+
+          # Accept licenses (in case they weren't accepted)
+          yes | "$SDKMANAGER" --licenses || true
+
+      - name: Show installed ndk / cmake versions
+        run: |
+          echo "NDK list under $ANDROID_SDK_ROOT/ndk:"
+          ls -la "$ANDROID_SDK_ROOT/ndk" || true
+          echo "CMake under $ANDROID_SDK_ROOT/cmake:"
+          ls -la "$ANDROID_SDK_ROOT/cmake" || true
+
+      - name: Clean previously built outputs
+        run: ./gradlew clean --no-daemon --stacktrace
+
+      - name: Build debug APK (includes native libs from NDK)
+        run: ./gradlew assembleDebug --no-daemon --stacktrace
+
+      - name: Collect APK artifacts (debug and any splits)
+        run: |
+          set -eux
+          ARTIFACT_DIR="$GITHUB_WORKSPACE/artifacts"
+          mkdir -p "$ARTIFACT_DIR"
+          # Copy any debug apks (including per-ABI splits) into artifacts folder
+          find app/build/outputs -type f -name "*debug*.apk" -exec cp {} "$ARTIFACT_DIR"/ \; || true
+          # If Gradle produced split apks at build/outputs/flutter-apk (not applicable in Java projects normally),
+          # copy that too just in case
+          find build -type f -name "*debug*.apk" -exec cp {} "$ARTIFACT_DIR"/ \; || true
+          echo "Artifacts saved to $ARTIFACT_DIR"
+          ls -la "$ARTIFACT_DIR"
+
+      - name: Upload APK artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-apks-debug
+          path: artifacts/*.apk
+
+      - name: Create GitHub Release (manual dispatch only — auto tag uses run number)
+        if: github.event_name == 'workflow_dispatch'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: Build #${{ github.run_number }}
+          generate_release_notes: true
+          files: |
+            artifacts/*.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
