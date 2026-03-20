@@ -20,6 +20,26 @@ public class FileUtil {
   /**
    * Copy all assets to internal storage.
    */
+
+  public static void saveDebug(Context context, String content) {
+    try {
+      File outDir = context.getFilesDir();
+      if (outDir == null)
+        return;
+
+      if (!outDir.exists() && !outDir.mkdirs())
+        return;
+
+      File outFile = new File(outDir, "debug.txt");
+      try (FileOutputStream output = new FileOutputStream(outFile, true)) {
+        output.write((content + "\n").getBytes());
+        output.flush();
+      }
+    } catch (IOException e) {
+      e.printStackTrace();
+    }
+  }
+
   public static void copyAllAssets(Context context) {
     File outDir = context.getFilesDir(); // /data/data/<package>/files
     if (outDir == null)

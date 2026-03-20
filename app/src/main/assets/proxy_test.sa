@@ -41,13 +41,12 @@ function toast(msg)
 end
 
 # Test 1: map callback style (AndLua-like)
-listener1 = View.OnClickListener({
+btnMap.setOnClickListener(View.OnClickListener({
 	onClick: function(v)
 		status.setText("PASS: View.OnClickListener{onClick: fn}")
 		toast("PASS map listener")
 	end
-})
-btnMap.setOnClickListener(listener1)
+}))
 
 # Test 2: SAM function style on interface class call
 runner = Runnable(function()

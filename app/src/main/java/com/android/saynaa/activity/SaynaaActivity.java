@@ -2,7 +2,9 @@ package com.android.saynaa.activity;
 
 import android.annotation.SuppressLint;
 import android.app.Activity;
+import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.graphics.Color;
 import android.net.Uri;
 import android.os.Bundle;
@@ -26,22 +28,17 @@ import android.widget.ListView;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
-
-import com.android.saynaa.saynaajava.Saynaa;
+import com.android.saynaa.saynaajava.*;
 import com.android.saynaa.utils.FileUtil;
-
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.util.ArrayList;
+import java.util.Map;
 
 /**
- * SaynaaActivity is the Saynaa-native equivalent of AndSaynaa's SaynaaActivity.
- *
- * It keeps similar public properties and lifecycle shape, but drives execution
- * through the Saynaa runtime (not SaynaaState).
+ * SaynaaActivity is the main entry point for Saynaa scripts. It initializes the
  */
-public class SaynaaActivity extends Activity {
-
+public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.OnReceiveListener, SaynaaContext {
   public static final String ARG = "arg";
   public static final String DATA = "data";
   public static final String NAME = "name";
@@ -65,6 +62,10 @@ public class SaynaaActivity extends Activity {
   protected boolean isCreate = false;
   protected boolean isSetViewed = false;
   protected boolean mDebug = true;
+
+  private ArrayList<SaynaaGcable> gclist = new ArrayList<SaynaaGcable>();
+
+  private SaynaaBroadcastReceiver mReceiver;
 
   protected StringBuilder toastbuilder = new StringBuilder();
   protected Toast toast;
@@ -165,6 +166,11 @@ public class SaynaaActivity extends Activity {
   }
 
   @Override
+  public void onReceive(Context context, Intent intent) {
+    runFunc("onReceive", context, intent);
+  }
+
+  @Override
   protected void onStart() {
     super.onStart();
     runFunc("onStart");
@@ -190,12 +196,82 @@ public class SaynaaActivity extends Activity {
 
   @Override
   protected void onDestroy() {
+    if (mReceiver != null)
+      unregisterReceiver(mReceiver);
+
+    for (SaynaaGcable obj : gclist) {
+      obj.gc();
+    }
     runFunc("onDestroy");
     if (saynaa != null) {
       saynaa.close();
       saynaa = null;
     }
     super.onDestroy();
+    System.gc();
+  }
+
+  public Intent registerReceiver(SaynaaBroadcastReceiver receiver, IntentFilter filter) {
+    // TODO: Implement this method
+    return super.registerReceiver(receiver, filter);
+  }
+
+  public Intent registerReceiver(SaynaaBroadcastReceiver.OnReceiveListener ltr, IntentFilter filter) {
+    // TODO: Implement this method
+    SaynaaBroadcastReceiver receiver = new SaynaaBroadcastReceiver(ltr);
+    return super.registerReceiver(receiver, filter);
+  }
+
+  public Intent registerReceiver(IntentFilter filter) {
+    // TODO: Implement this method
+    if (mReceiver != null)
+      unregisterReceiver(mReceiver);
+    mReceiver = new SaynaaBroadcastReceiver(this);
+    return super.registerReceiver(mReceiver, filter);
+  }
+
+  @Override
+  public Object getSharedData(String key) {
+    return SaynaaApplication.getInstance().getSharedData(key);
+  }
+
+  @Override
+  public Object getSharedData(String key, Object def) {
+    return SaynaaApplication.getInstance().getSharedData(key, def);
+  }
+
+  @Override
+  public Map getGlobalData() {
+    return ((SaynaaApplication) getApplication()).getGlobalData();
+  }
+
+  @Override
+  public boolean setSharedData(String key, Object value) {
+    return SaynaaApplication.getInstance().setSharedData(key, value);
+  }
+
+  @Override
+  protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+    // TODO: Implement this method
+    if (data != null) {
+      String name = data.getStringExtra(NAME);
+      if (name != null) {
+        Object[] res = (Object[]) data.getSerializableExtra(DATA);
+        if (res == null) {
+          runFunc("onResult", name);
+        } else {
+          Object[] arg = new Object[res.length + 1];
+          arg[0] = name;
+          for (int i = 0; i < res.length; i++)
+            arg[i + 1] = res[i];
+          Object ret = runFunc("onResult", arg);
+          if (ret != null && ret.getClass() == Boolean.class && (Boolean) ret)
+            return;
+        }
+      }
+    }
+    runFunc("onActivityResult", requestCode, resultCode, data);
+    super.onActivityResult(requestCode, resultCode, data);
   }
 
   @Override
@@ -282,6 +358,11 @@ public class SaynaaActivity extends Activity {
     getFragmentManager().beginTransaction().replace(android.R.id.content, fragment).commit();
   }
 
+  @Override
+  public void regGc(SaynaaGcable obj) {
+    gclist.add(obj);
+  }
+
   public String getSaynaaPath() {
     Intent intent = getIntent();
     if (intent == null)
@@ -309,6 +390,38 @@ public class SaynaaActivity extends Activity {
     }
 
     return path;
+  }
+
+  public void call(String func) {
+    push(2, func);
+  }
+
+  public void call(String func, Object[] args) {
+    if (args.length == 0)
+      push(2, func);
+    else
+      push(3, func, args);
+  }
+
+  public void push(int what, String s) {
+    Message message = new Message();
+    Bundle bundle = new Bundle();
+    bundle.putString(DATA, s);
+    message.setData(bundle);
+    message.what = what;
+
+    handler.sendMessage(message);
+  }
+
+  public void push(int what, String s, Object[] args) {
+    Message message = new Message();
+    Bundle bundle = new Bundle();
+    bundle.putString(DATA, s);
+    bundle.putSerializable("args", args);
+    message.setData(bundle);
+    message.what = what;
+
+    handler.sendMessage(message);
   }
 
   public String getSaynaaPath(String path) {
@@ -397,12 +510,6 @@ public class SaynaaActivity extends Activity {
       return null;
     }
 
-    // Avoid invoking undefined hooks. Saynaa logs compile/runtime errors for
-    // unknown identifiers, so we gate calls using source-level detection.
-    if (!hasScriptHook(funcName)) {
-      return null;
-    }
-
     try {
       int result = saynaa.pcall(funcName, args);
       if (result != 0 && mDebug) {
@@ -444,8 +551,9 @@ public class SaynaaActivity extends Activity {
   private void showScriptError(String title, String detail) {
     String t = (title == null || title.trim().isEmpty()) ? "Script error" : title;
     String d = (detail == null) ? "<no details>" : detail;
-    setTitle(t);
+    FileUtil.saveDebug(this, t + ": " + d);
     if (!isSetViewed) {
+      setTitle(t);
       setContentView(layout);
     }
     sendMsg(t + "\n" + d);
@@ -453,20 +561,20 @@ public class SaynaaActivity extends Activity {
 
   private String errorReason(int error) {
     switch (error) {
-      case 6:
-        return "Error";
-      case 5:
-        return "GC error";
-      case 4:
-        return "Out of memory";
-      case 3:
-        return "Syntax error";
-      case 2:
-        return "Runtime error";
-      case 1:
-        return "Yield error";
-      default:
-        return "Unknown error " + error;
+    case 6:
+      return "Error";
+    case 5:
+      return "GC error";
+    case 4:
+      return "Out of memory";
+    case 3:
+      return "Syntax error";
+    case 2:
+      return "Runtime error";
+    case 1:
+      return "Yield error";
+    default:
+      return "Unknown error " + error;
     }
   }
 
@@ -605,6 +713,25 @@ public class SaynaaActivity extends Activity {
     Log.i(TAG, msg);
   }
 
+  @Override
+  public void sendError(String title, Exception msg) {
+    Object ret = runFunc("onError", title, msg);
+    if (ret != null && ret.getClass() == Boolean.class && (Boolean) ret)
+      return;
+    else
+      sendMsg(title + ": " + msg.getMessage());
+  }
+
+  @Override
+  public SaynaaState getSaynaaState() {
+    return null;
+  }
+
+  @Override
+  public Context getContext() {
+    return this;
+  }
+
   public int getWidth() {
     return mWidth;
   }
@@ -634,12 +761,12 @@ public class SaynaaActivity extends Activity {
     status.setTextColor(Color.BLACK);
     status.setText("");
     status.setTextIsSelectable(true);
-    scroll.addView(status,
-        new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+    scroll.addView(status, new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+                               ViewGroup.LayoutParams.WRAP_CONTENT));
 
-    layout.addView(scroll,
-        new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-}
+    layout.addView(scroll, new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+                               ViewGroup.LayoutParams.WRAP_CONTENT));
+  }
 
   private String getDefaultExtDir() {
     if (Environment.getExternalStorageState().equals(Environment.MEDIA_MOUNTED)) {
