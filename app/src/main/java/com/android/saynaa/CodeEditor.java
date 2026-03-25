@@ -3,7 +3,7 @@ package com.android.saynaa;
 import android.content.Context;
 import android.graphics.Typeface;
 import android.util.AttributeSet;
-import io.github.rosemoe.sora.lang.EmptyLanguage;
+import com.android.saynaa.lang.SaynaaLanguage;
 import io.github.rosemoe.sora.widget.schemes.SchemeDarcula;
 import io.github.rosemoe.sora.widget.schemes.SchemeEclipse;
 
@@ -30,7 +30,7 @@ public class CodeEditor extends io.github.rosemoe.sora.widget.CodeEditor {
     setHighlightCurrentLine(true);
     setHighlightBracketPair(true);
     setWordwrap(false);
-    setEditorLanguage(new EmptyLanguage());
+    setEditorLanguage(new SaynaaLanguage());
   }
 
   public void setDark(boolean dark) {

@@ -8,6 +8,7 @@ Button = java.bindClass('android.widget.Button')
 Switch = java.bindClass('android.widget.Switch')
 Toast = java.bindClass('android.widget.Toast')
 View = java.bindClass("android.view.View")
+CodeEditor = java.bindClass('com.android.saynaa.CodeEditor')
 
 
 function print(msg)
@@ -51,6 +52,13 @@ DemoLayout = {
       layout_marginBottom: 20
     },
     {
+      type: CodeEditor,
+      id: 'Editor',
+      layout_width: 'match_parent',
+      layout_height: '200dp',
+      layout_marginBottom: 20
+    },
+    {
       type: Button,
       id: 'SubmitButton',
       text: 'Submit',
@@ -91,6 +99,9 @@ assert(NameInput != null, 'NameInput view missing')
 assert(EnableSwitch != null, 'EnableSwitch view missing')
 assert(SubmitButton != null, 'SubmitButton view missing')
 assert(outsideCallButton != null, 'outsideCallButton view missing')
+assert(Editor != null, 'Editor view missing')
+
+Editor.setText('print("Hello from CodeEditor")\n')
 
 outsideCallButton.setOnClickListener(View.OnClickListener({
   onClick: function(v)
