@@ -1,7 +1,5 @@
 import java
 
-activity = getActivity()
-
 LinearLayout = java.bindClass("android.widget.LinearLayout")
 TextView = java.bindClass("android.widget.TextView")
 Toast = java.bindClass("android.widget.Toast")

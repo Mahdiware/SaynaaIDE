@@ -1833,8 +1833,6 @@ void register_java_api(VM* vm) {
   RegisterBuiltinFn(vm, "java_call_static", fn_callStatic, -1, "Invoke Java static method.");
   RegisterBuiltinFn(vm, "java_get_field", fn_getField, 2, "Read Java field value.");
   RegisterBuiltinFn(vm, "java_set_field", fn_setField, 3, "Write Java field value.");
-  RegisterBuiltinFn(vm, "activity", fn_activity, 0, "Return current Android Activity object.");
-  RegisterBuiltinFn(vm, "getActivity", fn_activity, 0, "Return current Android Activity object.");
   RegisterBuiltinFn(vm, "eventView", fn_eventView, 0, "Return current event view object.");
   RegisterBuiltinFn(vm, "createProxy", fn_createProxy,
       -1, "createProxy(interface, callback) or createProxy(interface, method, callback) -> Java listener/proxy.");

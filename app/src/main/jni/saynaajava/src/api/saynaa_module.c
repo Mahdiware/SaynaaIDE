@@ -63,8 +63,6 @@ Result saynaa_run_in_main_module(VM* vm, const char* source, const char* path_la
   if (result != RESULT_SUCCESS)
     return result;
 
-  inject_builtin_global(vm, module, "getActivity");
-  inject_builtin_global(vm, module, "activity");
   inject_builtin_global(vm, module, "eventView");
 
   module->initialized = true;
@@ -132,8 +130,6 @@ Result saynaa_run_file_in_main_module(VM* vm, const char* path) {
     if (status != SAYNAA_BC_OK)
       return RESULT_COMPILE_ERROR;
 
-    inject_builtin_global(vm, module, "getActivity");
-    inject_builtin_global(vm, module, "activity");
     inject_builtin_global(vm, module, "eventView");
 
     module->initialized = true;
@@ -157,8 +153,6 @@ Result saynaa_run_file_in_main_module(VM* vm, const char* path) {
   if (result != RESULT_SUCCESS)
     return result;
 
-  inject_builtin_global(vm, module, "getActivity");
-  inject_builtin_global(vm, module, "activity");
   inject_builtin_global(vm, module, "eventView");
 
   module->initialized = true;

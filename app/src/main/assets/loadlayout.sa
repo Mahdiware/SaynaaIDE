@@ -1,0 +1,642 @@
+import java
+
+context = null
+ids = {}
+idmap = {}
+next_id = 0x7f000000
+target_module = _module
+
+ViewGroup = java.bindClass('android.view.ViewGroup')
+View = java.bindClass('android.view.View')
+LinearLayout = java.bindClass('android.widget.LinearLayout')
+LinearLayoutParams = java.bindClass('android.widget.LinearLayout$LayoutParams')
+RelativeLayout = java.bindClass('android.widget.RelativeLayout')
+RelativeLayoutParams = java.bindClass('android.widget.RelativeLayout$LayoutParams')
+TextView = java.bindClass('android.widget.TextView')
+EditText = java.bindClass('android.widget.EditText')
+Button = java.bindClass('android.widget.Button')
+Switch = java.bindClass('android.widget.Switch')
+ImageView = java.bindClass('android.widget.ImageView')
+TypedValue = java.bindClass('android.util.TypedValue')
+Color = java.bindClass('android.graphics.Color')
+Typeface = java.bindClass('android.graphics.Typeface')
+TruncateAt = java.bindClass('android.text.TextUtils$TruncateAt')
+Integer = java.bindClass('java.lang.Integer')
+RelativeLayoutRule = {
+  layout_above: 2,
+  layout_below: 3,
+  layout_alignBaseline: 4,
+  layout_alignLeft: 5,
+  layout_alignTop: 6,
+  layout_alignRight: 7,
+  layout_alignBottom: 8,
+  layout_alignParentLeft: 9,
+  layout_alignParentTop: 10,
+  layout_alignParentRight: 11,
+  layout_alignParentBottom: 12,
+  layout_centerInParent: 13,
+  layout_centerHorizontal: 14,
+  layout_centerVertical: 15,
+  layout_toLeftOf: 0,
+  layout_toRightOf: 1,
+  layout_toStartOf: 16,
+  layout_toEndOf: 17,
+  layout_alignStart: 18,
+  layout_alignEnd: 19,
+  layout_alignParentStart: 20,
+  layout_alignParentEnd: 21
+}
+InputTypeFlag = {
+  none: 0x00000000,
+  text: 0x00000001,
+  textCapCharacters: 0x00001001,
+  textCapWords: 0x00002001,
+  textCapSentences: 0x00004001,
+  textAutoCorrect: 0x00008001,
+  textAutoComplete: 0x00010001,
+  textMultiLine: 0x00020001,
+  textImeMultiLine: 0x00040001,
+  textNoSuggestions: 0x00080001,
+  textUri: 0x00000011,
+  textEmailAddress: 0x00000021,
+  textEmailSubject: 0x00000031,
+  textShortMessage: 0x00000041,
+  textLongMessage: 0x00000051,
+  textPersonName: 0x00000061,
+  textPostalAddress: 0x00000071,
+  textPassword: 0x00000081,
+  textVisiblePassword: 0x00000091,
+  number: 0x00000002,
+  numberSigned: 0x00001002,
+  numberDecimal: 0x00002002,
+  numberPassword: 0x00000012,
+  phone: 0x00000003,
+  datetime: 0x00000004,
+  date: 0x00000014,
+  time: 0x00000024
+}
+ImeOptionFlag = {
+  normal: 0x00000000,
+  actionUnspecified: 0x00000000,
+  actionNone: 0x00000001,
+  actionGo: 0x00000002,
+  actionSearch: 0x00000003,
+  actionSend: 0x00000004,
+  actionNext: 0x00000005,
+  actionDone: 0x00000006,
+  actionPrevious: 0x00000007,
+  flagNoFullscreen: 0x02000000,
+  flagNavigatePrevious: 0x04000000,
+  flagNavigateNext: 0x08000000,
+  flagNoExtractUi: 0x10000000,
+  flagNoAccessoryAction: 0x20000000,
+  flagNoEnterAction: 0x40000000,
+  flagForceAscii: 0x80000000
+}
+AutoLinkFlag = {
+  none: 0x00,
+  web: 0x01,
+  email: 0x02,
+  phone: 0x04,
+  map: 0x08,
+  all: 0x0f
+}
+ScaleTypeMap = {
+  matrix: ImageView.ScaleType.MATRIX,
+  fitXY: ImageView.ScaleType.FIT_XY,
+  fitStart: ImageView.ScaleType.FIT_START,
+  fitCenter: ImageView.ScaleType.FIT_CENTER,
+  fitEnd: ImageView.ScaleType.FIT_END,
+  center: ImageView.ScaleType.CENTER,
+  centerCrop: ImageView.ScaleType.CENTER_CROP,
+  centerInside: ImageView.ScaleType.CENTER_INSIDE
+}
+
+
+dm = null
+
+function is_string(value)
+  t = type(value)
+  return t == 'String' or t == 'string'
+end
+
+function is_number(value)
+  t = type(value)
+  return t == 'Number' or t == 'number'
+end
+
+function is_closure(value)
+  t = type(value)
+  return t == 'Closure' or t == 'function'
+end
+
+function is_numeric_string(value)
+  if not is_string(value) then
+    return false
+  end
+  if value.length == 0 then
+    return false
+  end
+  i = 0
+  if value[0] == '-' then
+    i = 1
+  end
+  if i >= value.length then
+    return false
+  end
+  while i < value.length do
+    ch = value[i]
+    if ch < '0' or ch > '9' then
+      return false
+    end
+    i = i + 1
+  end
+  return true
+end
+
+function parse_size(value)
+  if is_number(value) then
+    return value
+  end
+  if not is_string(value) then
+    return value
+  end
+  if value == 'match_parent' or value == 'fill_parent' then
+    return -1
+  end
+  if value == 'wrap_content' or value == 'wrap' then
+    return -2
+  end
+  if value.endswith('dp') then
+    num_str = value.split('dp')[0]
+    if not is_numeric_string(num_str) then
+      return 0
+    end
+    num = Integer.parseInt(num_str)
+    return TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, num, dm)
+  end
+  if value.endswith('sp') then
+    num_str = value.split('sp')[0]
+    if not is_numeric_string(num_str) then
+      return 0
+    end
+    num = Integer.parseInt(num_str)
+    return TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, num, dm)
+  end
+  if value.endswith('px') then
+    num_str = value.split('px')[0]
+    if not is_numeric_string(num_str) then
+      return 0
+    end
+    return Integer.parseInt(num_str)
+  end
+  if not is_numeric_string(value) then
+    return 0
+  end
+  return Integer.parseInt(value)
+end
+
+function parse_color(value)
+  if is_number(value) then
+    return value
+  end
+  if is_string(value) and value.startswith('#') then
+    return Color.parseColor(value)
+  end
+  return value
+end
+
+function split_flags(value)
+  parts = []
+  if not is_string(value) then
+    return parts
+  end
+  if value.indexOf('|') == -1 then
+    parts.append(value)
+    return parts
+  end
+  i = 0
+  curr = ''
+  while i < value.length do
+    ch = value[i]
+    if ch == '|' then
+      if curr.length > 0 then parts.append(curr) end
+      curr = ''
+    else
+      curr = curr + ch
+    end
+    i = i + 1
+  end
+  if curr.length > 0 then parts.append(curr) end
+  return parts
+end
+
+function parse_flags(value, map)
+  if is_number(value) then
+    return value
+  end
+  parts = split_flags(value)
+  if parts.length == 0 then
+    return null
+  end
+  out = 0
+  i = 0
+  while i < parts.length do
+    key = parts[i]
+    flag = map.get(key)
+    if flag == null then
+      return null
+    end
+    out = out | flag
+    i = i + 1
+  end
+  return out
+end
+
+function get_identifier(name)
+  return context.getResources().getIdentifier(name, null, null)
+end
+
+function parse_gravity(value)
+  if not is_string(value) then
+    return value
+  end
+  if value == 'center' then return 17 end
+  if value == 'center_horizontal' then return 1 end
+  if value == 'center_vertical' then return 16 end
+  if value == 'left' then return 3 end
+  if value == 'right' then return 5 end
+  if value == 'top' then return 48 end
+  if value == 'bottom' then return 80 end
+  if value == 'start' then return 8388611 end
+  if value == 'end' then return 8388613 end
+  return null
+end
+
+function set_text_style(view, style)
+  if style == 'bold' then
+    view.setTypeface(Typeface.DEFAULT_BOLD)
+    return
+  end
+  if style == 'italic' then
+    view.setTypeface(Typeface.defaultFromStyle(Typeface.ITALIC))
+    return
+  end
+  if style == 'bold_italic' then
+    view.setTypeface(Typeface.defaultFromStyle(Typeface.BOLD_ITALIC))
+    return
+  end
+end
+
+function new_layout_params(parent, width, height)
+  if parent != null and java.instanceof(parent, LinearLayout) then
+    return LinearLayoutParams(width, height)
+  end
+  if parent != null and java.instanceof(parent, RelativeLayout) then
+    return RelativeLayoutParams(width, height)
+  end
+  return ViewGroup.LayoutParams(width, height)
+end
+
+function collect_children(node, start_index)
+  if start_index == null then
+    return null
+  end
+  children = []
+  i = start_index
+  while true do
+    child = node.get(i)
+    if child == null then
+      break
+    end
+    children.append(child)
+    i = i + 1
+  end
+  if children.length == 0 then
+    return null
+  end
+  return children
+end
+
+function apply_layout(view, params, node)
+  layout_weight = node.get('layout_weight')
+  if layout_weight != null and java.instanceof(params, LinearLayoutParams) then
+    java.setField(params, 'weight', layout_weight)
+  end
+
+  layout_gravity = node.get('layout_gravity')
+  if layout_gravity != null and java.instanceof(params, LinearLayoutParams) then
+    g = parse_gravity(layout_gravity)
+    if g != null then
+      java.setField(params, 'gravity', g)
+    end
+  end
+
+  layout_margin = node.get('layout_margin')
+  layout_margin_start = node.get('layout_marginStart')
+  layout_margin_end = node.get('layout_marginEnd')
+  layout_margin_bottom = node.get('layout_marginBottom')
+  layout_margin_top = node.get('layout_marginTop')
+  layout_margin_left = node.get('layout_marginLeft')
+  layout_margin_right = node.get('layout_marginRight')
+  has_margin = layout_margin != null or layout_margin_bottom != null or layout_margin_top != null or layout_margin_left != null or layout_margin_right != null
+  if has_margin then
+    left = parse_size(layout_margin_left or layout_margin or 0)
+    top = parse_size(layout_margin_top or layout_margin or 0)
+    right = parse_size(layout_margin_right or layout_margin or 0)
+    bottom = parse_size(layout_margin_bottom or layout_margin or 0)
+    params.setMargins(left, top, right, bottom)
+  end
+  if layout_margin_start != null then
+    params.setMarginStart(parse_size(layout_margin_start))
+  end
+  if layout_margin_end != null then
+    params.setMarginEnd(parse_size(layout_margin_end))
+  end
+
+  if java.instanceof(params, RelativeLayoutParams) then
+    i = 0
+    keys = node.keys()
+    while i < keys.length do
+      key = keys[i]
+      rule = RelativeLayoutRule.get(key)
+      if rule != null then
+        value = node.get(key)
+        if value == true then
+          params.addRule(rule)
+        else
+          target_id = idmap.get(value)
+          if target_id != null then
+            params.addRule(rule, target_id)
+          end
+        end
+      end
+      i = i + 1
+    end
+  end
+
+  view.setLayoutParams(params)
+end
+
+function apply_attrs(view, node)
+  orientation = node.get('orientation')
+  if orientation != null and java.instanceof(view, LinearLayout) then
+    if orientation == 'vertical' then
+      view.setOrientation(1)
+    end
+    if orientation == 'horizontal' then
+      view.setOrientation(0)
+    end
+  end
+
+  padding = node.get('padding')
+  padding_left = node.get('paddingLeft')
+  padding_top = node.get('paddingTop')
+  padding_right = node.get('paddingRight')
+  padding_bottom = node.get('paddingBottom')
+  padding_start = node.get('paddingStart')
+  padding_end = node.get('paddingEnd')
+
+  has_padding = padding != null or padding_left != null or padding_top != null or padding_right != null or padding_bottom != null
+  has_padding_relative = padding_start != null or padding_end != null
+
+  if has_padding then
+    left = parse_size(padding_left or padding or 0)
+    top = parse_size(padding_top or padding or 0)
+    right = parse_size(padding_right or padding or 0)
+    bottom = parse_size(padding_bottom or padding or 0)
+    view.setPadding(left, top, right, bottom)
+  end
+  if has_padding_relative then
+    left = parse_size(padding_start or padding or 0)
+    top = parse_size(padding_top or padding or 0)
+    right = parse_size(padding_end or padding or 0)
+    bottom = parse_size(padding_bottom or padding or 0)
+    view.setPaddingRelative(left, top, right, bottom)
+  end
+
+  text = node.get('text')
+  if text != null then
+    view.setText(text)
+  end
+
+  text_size = node.get('textSize')
+  if text_size != null then
+    size = parse_size(text_size)
+    view.setTextSize(TypedValue.COMPLEX_UNIT_PX, size)
+  end
+
+  text_style = node.get('textStyle')
+  if text_style != null then
+    set_text_style(view, text_style)
+  end
+
+  hint = node.get('hint')
+  if hint != null then
+    view.setHint(hint)
+  end
+
+  if node.get('singleLine') == true then
+    view.setSingleLine(true)
+  end
+
+  checked = node.get('checked')
+  if checked != null then
+    view.setChecked(checked == true)
+  end
+
+  background_color = node.get('backgroundColor')
+  if background_color != null then
+    view.setBackgroundColor(parse_color(background_color))
+  end
+
+  text_color = node.get('textColor')
+  if text_color != null then
+    view.setTextColor(parse_color(text_color))
+  end
+
+  text_appearance = node.get('textAppearance')
+  if text_appearance != null then
+    if is_string(text_appearance) and text_appearance.startswith('?') then
+      res_id = get_identifier(text_appearance.substring(1))
+      if res_id != 0 then
+        view.setTextAppearance(context, res_id)
+      end
+    end
+  end
+
+  auto_link = node.get('autoLink')
+  if auto_link != null then
+    mask = parse_flags(auto_link, AutoLinkFlag)
+    if mask != null then
+      view.setAutoLinkMask(mask)
+    end
+  end
+
+  input_type = node.get('inputType')
+  if input_type != null then
+    mask = parse_flags(input_type, InputTypeFlag)
+    if mask != null then
+      view.setInputType(mask)
+    end
+  end
+
+  ime_options = node.get('imeOptions')
+  if ime_options != null then
+    mask = parse_flags(ime_options, ImeOptionFlag)
+    if mask != null then
+      view.setImeOptions(mask)
+    end
+  end
+
+  password = node.get('password')
+  if password == true then
+    view.setInputType(0x81)
+  end
+
+  background = node.get('background')
+  if background != null then
+    if is_string(background) and background.startswith('#') then
+      view.setBackgroundColor(parse_color(background))
+    end
+    if is_string(background) and background.startswith('?') then
+      res_id = get_identifier(background.substring(1))
+      if res_id != 0 then
+        view.setBackgroundResource(res_id)
+      end
+    end
+    if is_number(background) then
+      view.setBackgroundColor(background)
+    end
+  end
+
+  src = node.get('src')
+  if src != null and java.instanceof(view, ImageView) then
+    if is_string(src) and src.startswith('?') then
+      res_id = get_identifier(src.substring(1))
+      if res_id != 0 then
+        view.setImageResource(res_id)
+      end
+    end
+    if is_number(src) then
+      view.setImageResource(src)
+    end
+  end
+
+  scale_type = node.get('scaleType')
+  if scale_type != null and java.instanceof(view, ImageView) then
+    st = ScaleTypeMap.get(scale_type)
+    if st != null then
+      view.setScaleType(st)
+    end
+  end
+
+  visibility = node.get('visibility')
+  if visibility != null then
+    if visibility == 'visible' then view.setVisibility(0) end
+    if visibility == 'invisible' then view.setVisibility(4) end
+    if visibility == 'gone' then view.setVisibility(8) end
+  end
+
+  text_alignment = node.get('textAlignment')
+  if text_alignment != null then
+    if text_alignment == 'inherit' then view.setTextAlignment(0) end
+    if text_alignment == 'gravity' then view.setTextAlignment(1) end
+    if text_alignment == 'textStart' then view.setTextAlignment(2) end
+    if text_alignment == 'textEnd' then view.setTextAlignment(3) end
+    if text_alignment == 'textCenter' then view.setTextAlignment(4) end
+    if text_alignment == 'viewStart' then view.setTextAlignment(5) end
+    if text_alignment == 'viewEnd' then view.setTextAlignment(6) end
+  end
+
+  ellipsize = node.get('ellipsize')
+  if ellipsize != null then
+    view.setEllipsize(TruncateAt[ellipsize.upper()])
+  end
+
+  on_click = node.get('onClick')
+  if on_click != null then
+    view.setClickable(true)
+    if is_closure(on_click) then
+      view.setOnClickListener(java.create('android.view.View$OnClickListener', {
+        onClick: on_click
+      }))
+    else
+      view.setOnClickListener(on_click)
+    end
+  end
+end
+
+function create_view(node, parent)
+  node_type = node.get('type')
+  child_start = null
+  if node_type == null then
+    node_type = node.get(1)
+    if node_type != null then
+      child_start = 2
+    else
+      node_type = node.get(0)
+      if node_type != null then
+        child_start = 1
+      end
+    end
+  end
+  if node_type == null then
+    assert(false, 'loadlayout: missing view type')
+  end
+  view = node_type(context)
+  width = parse_size(node.get('layout_width') or -2)
+  height = parse_size(node.get('layout_height') or -2)
+  params = new_layout_params(parent, width, height)
+  apply_layout(view, params, node)
+  apply_attrs(view, node)
+
+  node_id = node.get('id')
+  if node_id != null then
+    next_id = next_id + 1
+    view.setId(next_id)
+    ids.setattr(node_id, view)
+    idmap.setattr(node_id, next_id)
+    target_module.define(node_id, view)
+  end
+
+  children = node.get('children')
+  if children == null then
+    children = collect_children(node, child_start)
+  end
+  if children != null then
+    i = 0
+    while i < children.length do
+      child = children[i]
+      child_view = create_view(child, view)
+      view.addView(child_view)
+      i = i + 1
+    end
+  end
+
+  return view
+end
+
+function loadlayout(root_module, node)
+  if node == null then
+    node = root_module
+    root_module = _module
+  end
+  ids = {}
+  idmap = {}
+  next_id = 0x7f000000
+  target_module = root_module
+  globals = root_module.globals()
+  if globals != null then
+    context = globals.get('activity')
+  end
+  if context == null then
+    assert(false, 'loadlayout: activity is null')
+  end
+  dm = context.getResources().getDisplayMetrics()
+  root_module.define('ids', ids)
+  root_module.define('idmap', idmap)
+  return create_view(node, null)
+end
+
+
