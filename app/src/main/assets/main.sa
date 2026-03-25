@@ -1,51 +1,161 @@
-from module import path as module_path
 import java
-
-# add import path saynaadir to load hello.sa
-module_path.append(java.saynaadir)
-
 import hello
 
 activity = getActivity()
 
-LinearLayout = java.bindClass("android.widget.LinearLayout")
-TextView = java.bindClass("android.widget.TextView")
-Button = java.bindClass("android.widget.Button")
-EditText = java.bindClass("android.widget.EditText")
-Toast = java.bindClass("android.widget.Toast")
-Bundle = java.bindClass("android.os.Bundle")
-View = java.bindClass("android.view.View")
-TextWatcher = java.bindClass("android.text.TextWatcher")
+LinearLayout = java.bindClass('android.widget.LinearLayout')
+TextView = java.bindClass('android.widget.TextView')
+Button = java.bindClass('android.widget.Button')
+EditText = java.bindClass('android.widget.EditText')
+Toast = java.bindClass('android.widget.Toast')
+Bundle = java.bindClass('android.os.Bundle')
+View = java.bindClass('android.view.View')
+TextWatcher = java.bindClass('android.text.TextWatcher')
+Runnable = java.bindClass('java.lang.Runnable')
 
-activity.setTitle("Saynaa Demo")
+assert(LinearLayout != null, 'Failed to bind LinearLayout')
+assert(TextView != null, 'Failed to bind TextView')
+assert(Button != null, 'Failed to bind Button')
+assert(EditText != null, 'Failed to bind EditText')
+assert(Toast != null, 'Failed to bind Toast')
+assert(Bundle != null, 'Failed to bind Bundle')
+assert(View != null, 'Failed to bind View')
+assert(TextWatcher != null, 'Failed to bind TextWatcher')
+assert(Runnable != null, 'Failed to bind Runnable')
+
+function assert_pcall(result, label)
+	ok = result[0]
+	if ok == null then
+		ok = result[1]
+	end
+	if ok != true then
+		err = result[1]
+		if err == null then
+			err = result[2]
+		end
+		assert(false, label + ': ' + str(err))
+	end
+end
+
+function print(msg)
+	Toast.makeText(activity, msg, Toast.LENGTH_SHORT).show()
+end
+
+print("init: ${initial}")
+
+activity.setTitle('Saynaa Demo')
+
+
+testList = java.create('java.util.ArrayList')
+testList.add('a')
+testList.add('b')
+assert(java.length(testList) == 2, 'java.length failed')
+
+result = pcall(function()
+	return java.call(testList, 'size')
+end)
+assert_pcall(result, 'java.call failed')
+assert(result[1] == 2, 'java.call size mismatch')
+
+result = pcall(function()
+	return java.callStatic('java.lang.Integer', 'parseInt', '123')
+end)
+assert_pcall(result, 'java.callStatic failed')
+assert(result[1] == 123, 'java.callStatic parseInt mismatch')
+
+result = pcall(function()
+	pt = java.new('android.graphics.Point', 1, 2)
+	java.setField(pt, 'x', 7)
+	return java.getField(pt, 'x')
+end)
+assert_pcall(result, 'java.getField/setField failed')
+assert(result[1] == 7, 'java.getField x mismatch')
+
+result = pcall(function()
+	state = { ok: false }
+	runner = Runnable(function()
+		state.setattr('ok', true)
+	end)
+	java.call(runner, 'run')
+	return state.get('ok')
+end)
+assert_pcall(result, 'Runnable(function) failed')
+assert(result[1] == true, 'Runnable(function) run mismatch')
+
+result = pcall(function()
+	proxy = java.createProxy('java.lang.Runnable', "script_proxy_ok = true")
+	assert(proxy != null, 'java.createProxy script returned null')
+	java.call(proxy, 'run')
+	return true
+end)
+assert_pcall(result, 'java.createProxy script failed')
+assert(result[1] == true, 'java.createProxy script mismatch')
+
+result = pcall(function()
+	state = { ok: false }
+	proxy = java.create('java.lang.Runnable', {
+		run: function()
+			state.setattr('ok', true)
+		end
+	})
+	java.call(proxy, 'run')
+	return state.get('ok')
+end)
+assert_pcall(result, 'java.create(interface) failed')
+assert(result[1] == true, 'java.create interface run mismatch')
+
+if java_pushed_number != null then
+	assert(java_pushed_number != null, 'java_pushed_number missing')
+end
+if java_pushed_list_obj != null then
+	java_pushed_list_obj.add('c')
+	assert(java.length(java_pushed_list_obj) >= 1, 'java_pushed_list_obj invalid')
+end
+if java_pushed_list_saynaa != null then
+	result = pcall(function()
+		java_pushed_list_saynaa.append('x')
+	end)
+	assert_pcall(result, 'java_pushed_list_saynaa append failed')
+	assert(java_pushed_list_saynaa.find('x') != -1, 'java_pushed_list_saynaa append missing')
+end
+if java_pushed_map_saynaa != null then
+	result = pcall(function()
+		java_pushed_map_saynaa.setattr('k', 'v')
+	end)
+	assert_pcall(result, 'java_pushed_map_saynaa put failed')
+  assert(java_pushed_map_saynaa.get('k') == 'v', 'java_pushed_map_saynaa put mismatch')
+end
+
+
 
 root = LinearLayout(activity)
-root.setOrientation(1)
+assert(root != null, 'LinearLayout construction failed')
+root.setOrientation(LinearLayout.VERTICAL)
 root.setPadding(40, 40, 40, 40)
 
 title = TextView(activity)
-title.setText("Saynaa UI")
+title.setText('Saynaa UI')
 title.setTextSize(24)
 
 subtitle = TextView(activity)
-subtitle.setText("Simple, clean callback demo")
+subtitle.setText('Simple, clean callback demo')
 subtitle.setTextSize(14)
 
 status = TextView(activity)
-status.setText("Status: waiting...")
+status.setText('Status: waiting...')
 status.setTextSize(16)
 
 input = EditText(activity)
-input.setHint("Type to trigger TextWatcher")
+input.setHint('Type to trigger TextWatcher')
 
 btn = Button(activity)
-btn.setText("Tap / Long Press")
+btn.setText('Tap / Long Press')
 
 btn2 = Button(activity)
-btn2.setText("Open main2")
+btn2.setText('Open main2')
 
 btn3 = Button(activity)
-btn3.setText("Run proxy syntax test")
+btn3.setText('Run proxy syntax test')
 
 root.addView(title)
 root.addView(subtitle)
@@ -57,73 +167,70 @@ root.addView(btn3)
 
 activity.setContentView(root)
 
-function print(msg)
-	Toast.makeText(activity, msg, Toast.LENGTH_SHORT).show()
-end
-
-t = Toast.makeText(activity, "Clicked", Toast.LENGTH_SHORT)
-print("toast: $t")
-
 click_cb = {
 	onClick: function(v)
-		v.setText("Tapped ✅")
-		status.setText("Status: button clicked")
-		print("Welcome 👋 ${hello.hello()}")
+		v.setText('Tapped ✅')
+		status.setText('Status: button clicked')
 	end
 }
-btn.setOnClickListener(View.OnClickListener(click_cb))
+btn.setOnClickListener(java.create('android.view.View$OnClickListener', click_cb))
 
 open2_cb = {
 	onClick: function(v)
 		b = Bundle()
-		b.putString("title", "Hello from main.sa")
-		b.putString("message", "Data passed with Bundle")
-		b.putInt("count", 42)
-		b.putBoolean("ok", true)
+		b.putString('title', 'Hello from main.sa')
+		b.putString('message', 'Data passed with Bundle')
+		b.putInt('count', 42)
+		b.putBoolean('ok', true)
 
-		activity.newActivity("main2", b)
+		activity.newActivity('main2', b)
 	end
 }
-btn2.setOnClickListener(View.OnClickListener(open2_cb))
+btn2.setOnClickListener(java.create('android.view.View$OnClickListener', open2_cb))
 
-open_proxy_test_cb = {
+proxy_click = java.create('android.view.View$OnClickListener', {
 	onClick: function(v)
-		activity.newActivity("proxy_test")
+		activity.newActivity('proxy_test')
 	end
-}
-btn3.setOnClickListener(View.OnClickListener(open_proxy_test_cb))
+})
+btn3.setOnClickListener(proxy_click)
 
 function tijaabo()
-	print("hello this is test")
 end
 
 function onCreate(arg1)
-	print("hello onCreate: $arg1")
+end
+
+function onCreateOptionsMenu(menu)
+	menu.add('option 1')
+	menu.add('option 2')
+	menu.add('option 3')
+end
+
+function onOptionsItemSelected(item)
 end
 
 long_click_cb = {
 	onLongClick: function(v)
-		v.setText("Long Pressed ✅")
-		status.setText("Status: long click detected")
-		t = Toast.makeText(activity, "Long click", Toast.LENGTH_SHORT)
+		v.setText('Long Pressed ✅')
+		status.setText('Status: long click detected')
+		t = Toast.makeText(activity, 'Long click', Toast.LENGTH_SHORT)
 		t.show()
 		return true
 	end
 }
-btn.setOnLongClickListener(View.OnLongClickListener(long_click_cb))
+btn.setOnLongClickListener(java.create('android.view.View$OnLongClickListener', long_click_cb))
 
 textWatcher_cb = {
 	beforeTextChanged: function(s, start, count, after)
-		print("beforeTextChanged")
 	end,
 	onTextChanged: function(s, start, before, count)
-		status.setText("Typing: " + s.toString())
+		status.setText('Typing: ' + s.toString())
 	end,
 	afterTextChanged: function(s)
-		print("afterTextChanged")
 	end
 }
 
 input.addTextChangedListener(TextWatcher(textWatcher_cb))
 
-Toast.makeText(activity, "Welcome 👋 ${hello.hello()}", Toast.LENGTH_SHORT).show()
+Toast.makeText(activity, 'Welcome 👋', Toast.LENGTH_SHORT).show()

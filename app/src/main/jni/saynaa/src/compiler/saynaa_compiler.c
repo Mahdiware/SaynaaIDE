@@ -217,6 +217,7 @@ typedef enum {
 typedef enum {
   FUNC_MAIN, // The body function of the script.
   FUNC_TOPLEVEL,
+  FUNC_NAMED, // Named function declared in a statement.
   FUNC_LITERAL,
   FUNC_METHOD,
   FUNC_CONSTRUCTOR,
@@ -252,23 +253,6 @@ typedef struct sLoop {
   int depth;
 
 } Loop;
-
-// ForwardName is used for globals that are accessed before being defined inside
-// a local scope.
-// TODO: Enable access to function and class globals within the global scope,
-//       since they are initialized at compile time.
-typedef struct sForwardName {
-  // Index of the short instruction that has the value of the global's name
-  // (in the names buffer of the module).
-  int instruction;
-
-  // The function where the name is used, and the instruction belongs to.
-  Fn* func;
-
-  // Name token that was lexed for this name.
-  Token tkname;
-
-} ForwardName;
 
 // This struct is used to keep track of the upvalues for the current function
 // to generate opcodes to capture them.
@@ -370,11 +354,6 @@ typedef struct sParser {
   const char* si_name_end;
   char si_name_quote;
 
-  // An array of implicitly forward declared names, which will be resolved
-  // once the module is completely compiled.
-  ForwardName forwards[MAX_FORWARD_NAMES];
-  int forwards_count;
-
   // A syntax sugar to skip call parentheses. Like Lua support for number of
   // literals. We're doing it for literal functions for now. It'll be set to
   // true before exprCall to indicate that the call parentheses should be skipped.
@@ -456,6 +435,9 @@ struct Compiler {
   // Since the compiler manually call some builtin functions we need to cache
   // the index of the functions in order to prevent search for them each time.
   int bifn_list_join;
+
+  // Globals defined at compile time (indexes into module->constants).
+  UintBuffer global_names;
 };
 
 typedef struct {
@@ -502,8 +484,6 @@ static void parserInit(Parser* parser, VM* vm, Compiler* compiler,
   parser->si_name_end = NULL;
   parser->si_name_quote = '\0';
 
-  parser->forwards_count = 0;
-
   parser->repl_mode = !!(compiler->options && compiler->options->repl_mode);
   parser->optional_call_paran = false;
   parser->parsing_class = false;
@@ -530,6 +510,8 @@ static void compilerInit(Compiler* compiler, VM* vm, const char* source,
   compiler->can_define = true;
   compiler->new_local = false;
   compiler->is_last_call = false;
+
+  UintBufferInit(&compiler->global_names);
 
   const char* source_path = "@??";
   if (module->path != NULL) {
@@ -638,19 +620,6 @@ static void semanticError(Compiler* compiler, Token tk, const char* fmt, ...) {
   va_end(args);
 }
 
-// Error caused when trying to resolve forward names (maybe more in the
-// future), Which will be called once after compiling the module and thus we
-// need to pass the line number the error originated from.
-static void resolveError(Compiler* compiler, Token tk, const char* fmt, ...) {
-  Parser* parser = &compiler->parser;
-  bool runtime = compiler->options && compiler->options->runtime;
-
-  va_list args;
-  va_start(args, fmt);
-  reportError(parser, runtime, tk, fmt, args);
-  va_end(args);
-}
-
 // Check if the given [index] is greater than or equal to the maximum constants
 // that a module can contain and report an error.
 static void checkMaxConstantsReached(Compiler* compiler, int index) {
@@ -735,6 +704,13 @@ static void eatString(Compiler* compiler, bool single_quote) {
                       MAX_STR_INTERP_DEPTH);
       }
       break;
+    }
+
+    if (c == '\r') {
+      if (peekChar(parser) == '\n')
+        eatChar(parser);
+      ByteBufferWrite(&buff, parser->vm, '\n');
+      continue;
     }
 
     if (c == '\\') {
@@ -1599,11 +1575,15 @@ static NameSearchResult compilerSearchName(Compiler* compiler, const char* name,
   }
 
   // Search through globals.
-  index = moduleGetGlobalIndex(compiler->module, name, length);
-  if (index != -1) {
-    result.type = NAME_GLOBAL_VAR;
-    result.index = index;
-    return result;
+  for (uint32_t i = 0; i < compiler->global_names.count; i++) {
+    uint32_t name_index = compiler->global_names.data[i];
+    String* g_name = moduleGetStringAt(compiler->module, (int) name_index);
+    ASSERT(g_name != NULL, OOPS);
+    if (g_name->length == length && strncmp(g_name->data, name, length) == 0) {
+      result.type = NAME_GLOBAL_VAR;
+      result.index = (int) name_index;
+      return result;
+    }
   }
 
   // Search through builtin functions.
@@ -1639,12 +1619,12 @@ static void emitFunctionEnd(Compiler* compiler);
 
 static void patchJump(Compiler* compiler, int addr_index);
 static void patchListSize(Compiler* compiler, int size_index, int size);
-static void patchForward(Compiler* compiler, Fn* fn, int index, int name);
 
 static int compilerAddConstant(Compiler* compiler, Var value);
+static int compilerAddGlobalName(Compiler* compiler, const char* name,
+                                 uint32_t length);
 static int compilerAddVariable(Compiler* compiler, const char* name,
                                uint32_t length, int line);
-static void compilerAddForward(Compiler* compiler, int instruction, Fn* fn, Token* tkname);
 static void compilerChangeStack(Compiler* compiler, int num);
 
 // Forward declaration of grammar functions.
@@ -1768,11 +1748,10 @@ static GrammarRule* getRule(_TokenType type) {
   return &(rules[(int) type]);
 }
 
-// FIXME: Remove this function and migrate to `emitStoreName()`
-//        once the import system is refactored.
-// Uses `OP_STORE_GLOBAL` to store the stack top value into the global at the specified index.
+// Uses `OP_STORE_GLOBAL_NAME` to store the stack top value into the global at
+// the specified name constant index.
 static void emitStoreGlobal(Compiler* compiler, int index) {
-  emitOpcode(compiler, OP_STORE_GLOBAL);
+  emitOpcode(compiler, OP_STORE_GLOBAL_NAME);
   emitShort(compiler, index);
 }
 
@@ -1804,7 +1783,7 @@ static void emitPushValue(Compiler* compiler, NameDefnType type, int index) {
       return;
 
     case NAME_GLOBAL_VAR:
-      emitOpcode(compiler, OP_PUSH_GLOBAL);
+      emitOpcode(compiler, OP_PUSH_GLOBAL_NAME);
       emitShort(compiler, index);
       return;
 
@@ -2020,8 +1999,16 @@ static void exprName(Compiler* compiler) {
 
       if (result.type == NAME_NOT_DEFINED || result.type == NAME_BUILTIN_FN
           || result.type == NAME_BUILTIN_TY) {
-        name_type = (compiler->scope_depth == DEPTH_GLOBAL) ? NAME_GLOBAL_VAR : NAME_LOCAL_VAR;
-        index = compilerAddVariable(compiler, start, length, line);
+        // In module scope, only top-level assignments create globals.
+        // Nested blocks create locals to keep block scope.
+        if (compiler->func->type == FUNC_MAIN
+            && compiler->scope_depth == DEPTH_GLOBAL) {
+          name_type = NAME_GLOBAL_VAR;
+          index = compilerAddGlobalName(compiler, start, length);
+        } else {
+          name_type = NAME_LOCAL_VAR;
+          index = compilerAddVariable(compiler, start, length, line);
+        }
 
         // We cannot set `compiler->new_local = true;` here since there
         // is an expression after the assignment pending. We'll update
@@ -2041,10 +2028,9 @@ static void exprName(Compiler* compiler) {
     } else { // name += / -= / *= ... = (expr);
 
       if (result.type == NAME_NOT_DEFINED) {
-        // TODO:
-        // Add to forward names. Create result.type as NAME_FORWARD
-        // and use emitPushName, emitStoreName for here and bellow.
-        semanticError(compiler, tkname, "Name '%.*s' is not defined.", length, start);
+        name_type = NAME_GLOBAL_VAR;
+        index = 0;
+        moduleAddString(compiler->module, compiler->parser.vm, start, length, &index);
       }
 
       // Push the named value.
@@ -2081,22 +2067,10 @@ static void exprName(Compiler* compiler) {
     // expression executed the value could be initialized only if the
     // expression is at a local depth.
     if (result.type == NAME_NOT_DEFINED) {
-      if (compiler->scope_depth == DEPTH_GLOBAL) {
-        if (compiler->parser.has_wildcard_import) {
-          int index = (int) moduleSetGlobal(compiler->parser.vm, compiler->module,
-                                            start, length, VAR_NULL);
-
-          emitOpcode(compiler, OP_PUSH_GLOBAL);
-          emitShort(compiler, index);
-
-        } else {
-          semanticError(compiler, tkname, "Name '%.*s' is not defined.", length, start);
-        }
-      } else {
-        emitOpcode(compiler, OP_PUSH_GLOBAL);
-        int index = emitShort(compiler, 0xffff);
-        compilerAddForward(compiler, index, _FN, &tkname);
-      }
+      int index = 0;
+      moduleAddString(compiler->module, compiler->parser.vm, start, length, &index);
+      emitOpcode(compiler, OP_PUSH_GLOBAL_NAME);
+      emitShort(compiler, index);
     } else {
       emitPushValue(compiler, result.type, result.index);
     }
@@ -2571,8 +2545,22 @@ static void parsePrecedence(Compiler* compiler, Precedence precedence) {
 /* COMPILING                                                                 */
 /*****************************************************************************/
 
-// Add a variable and return it's index to the context. Assumes that the
-// variable name is unique and not defined before in the current scope.
+// Add a global name constant and return its index.
+// Globals are resolved at runtime by name.
+static int compilerAddGlobalName(Compiler* compiler, const char* name,
+                                 uint32_t length) {
+  int index = 0;
+  moduleAddString(compiler->module, compiler->parser.vm, name, length, &index);
+  for (uint32_t i = 0; i < compiler->global_names.count; i++) {
+    if (compiler->global_names.data[i] == (uint32_t) index)
+      return index;
+  }
+  UintBufferWrite(&compiler->global_names, compiler->parser.vm, (uint32_t) index);
+  return index;
+}
+
+// Add a local variable and return its index. Assumes the variable name is
+// unique and not defined before in the current scope.
 static int compilerAddVariable(Compiler* compiler, const char* name,
                                uint32_t length, int line) {
   // TODO: should I validate the name for pre-defined, etc?
@@ -2580,16 +2568,9 @@ static int compilerAddVariable(Compiler* compiler, const char* name,
   // Check if maximum variable count is reached.
   bool max_vars_reached = false;
   const char* var_type = ""; // For max variables reached error message.
-  if (compiler->scope_depth == DEPTH_GLOBAL) {
-    if (compiler->module->globals.count >= MAX_VARIABLES) {
-      max_vars_reached = true;
-      var_type = "globals";
-    }
-  } else {
-    if (compiler->func->local_count >= MAX_VARIABLES) {
-      max_vars_reached = true;
-      var_type = "locals";
-    }
+  if (compiler->func->local_count >= MAX_VARIABLES) {
+    max_vars_reached = true;
+    var_type = "locals";
   }
   if (max_vars_reached) {
     semanticError(compiler, compiler->parser.previous,
@@ -2597,44 +2578,23 @@ static int compilerAddVariable(Compiler* compiler, const char* name,
     return -1;
   }
 
-  // Add the variable and return it's index.
-
-  if (compiler->scope_depth == DEPTH_GLOBAL) {
-    return (int) moduleSetGlobal(compiler->parser.vm, compiler->module, name, length, VAR_NULL);
-  } else {
-    if (compiler->func->local_count == compiler->func->local_capacity) {
-      int old_capacity = compiler->func->local_capacity;
-      compiler->func->local_capacity = (old_capacity < 8) ? 8 : old_capacity * 2;
-      compiler->func->locals = (Local*) vmRealloc(
-          compiler->parser.vm, compiler->func->locals, old_capacity * sizeof(Local),
-          compiler->func->local_capacity * sizeof(Local));
-    }
-    Local* local = &compiler->func->locals[compiler->func->local_count];
-    local->name = name;
-    local->length = length;
-    local->depth = compiler->scope_depth;
-    local->is_upvalue = false;
-    local->line = line;
-    return compiler->func->local_count++;
+  if (compiler->func->local_count == compiler->func->local_capacity) {
+    int old_capacity = compiler->func->local_capacity;
+    compiler->func->local_capacity = (old_capacity < 8) ? 8 : old_capacity * 2;
+    compiler->func->locals = (Local*) vmRealloc(
+        compiler->parser.vm, compiler->func->locals, old_capacity * sizeof(Local),
+        compiler->func->local_capacity * sizeof(Local));
   }
+  Local* local = &compiler->func->locals[compiler->func->local_count];
+  local->name = name;
+  local->length = length;
+  local->depth = compiler->scope_depth;
+  local->is_upvalue = false;
+  local->line = line;
+  return compiler->func->local_count++;
 
   UNREACHABLE();
   return -1;
-}
-
-static void compilerAddForward(Compiler* compiler, int instruction, Fn* fn, Token* tkname) {
-  if (compiler->parser.forwards_count == MAX_FORWARD_NAMES) {
-    semanticError(compiler, *tkname,
-                  "A module should contain at most %d "
-                  "implicit forward function declarations.",
-                  MAX_FORWARD_NAMES);
-    return;
-  }
-
-  ForwardName* forward = &compiler->parser.forwards[compiler->parser.forwards_count++];
-  forward->instruction = instruction;
-  forward->func = fn;
-  forward->tkname = *tkname;
 }
 
 // Add a literal constant to module literals and return it's index.
@@ -2826,11 +2786,6 @@ static void patchListSize(Compiler* compiler, int size_index, int size) {
   _FN->opcodes.data[size_index + 1] = size & 0xff;
 }
 
-static void patchForward(Compiler* compiler, Fn* fn, int index, int name) {
-  fn->opcodes.data[index] = (name >> 8) & 0xff;
-  fn->opcodes.data[index + 1] = name & 0xff;
-}
-
 /*****************************************************************************/
 /* COMPILING (PARSE TOPLEVEL)                                                */
 /*****************************************************************************/
@@ -2844,6 +2799,7 @@ typedef enum {
 
 static void compileStatement(Compiler* compiler);
 static void compileBlockBody(Compiler* compiler, BlockType type);
+static void compileNamedFunctionStatement(Compiler* compiler);
 
 // Compile a class and return it's index in the module's types buffer.
 static int compileClass(Compiler* compiler) {
@@ -2865,12 +2821,26 @@ static int compileClass(Compiler* compiler) {
 
   checkMaxConstantsReached(compiler, cls_index);
 
-  if (match(compiler, TK_IS)) {
-    consume(compiler, TK_NAME, "Expected a class name to inherit.");
+  bool has_parent = false;
+  if (match(compiler, TK_LPARAN)) {
+    skipNewLines(compiler);
+    consume(compiler, TK_NAME, "Expected a parent class name.");
     if (!compiler->parser.has_syntax_error) {
       exprName(compiler); // Push the super class on the stack.
+      has_parent = true;
     }
-  } else {
+    skipNewLines(compiler);
+    consume(compiler, TK_RPARAN, "Expected ')' after parent class name.");
+
+  } else if (match(compiler, TK_IS)) {
+    consume(compiler, TK_NAME, "Expected a parent class name.");
+    if (!compiler->parser.has_syntax_error) {
+      exprName(compiler); // Push the super class on the stack.
+      has_parent = true;
+    }
+  }
+
+  if (!has_parent) {
     // Implicitly inherit from 'Object' class.
     emitPushValue(compiler, NAME_BUILTIN_TY, (int) vOBJECT);
   }
@@ -2912,7 +2882,7 @@ static int compileClass(Compiler* compiler) {
     skipNewLines(compiler);
   }
 
-  int global_index = compilerAddVariable(compiler, name, name_len, name_line);
+  int global_index = compilerAddGlobalName(compiler, name, name_len);
   emitStoreValue(compiler, NAME_GLOBAL_VAR, global_index);
   emitOpcode(compiler, OP_POP); // Pop the class.
 
@@ -3073,7 +3043,7 @@ static void compileFunction(Compiler* compiler, FuncType fn_type) {
   if (fn_type == FUNC_TOPLEVEL) {
     ASSERT(compiler->scope_depth == DEPTH_GLOBAL, OOPS);
     int name_line = compiler->parser.previous.line;
-    global_index = compilerAddVariable(compiler, name, name_length, name_line);
+    global_index = compilerAddGlobalName(compiler, name, name_length);
   }
 
   if (fn_type == FUNC_METHOD && strncmp(name, LITS__init, name_length) == 0) {
@@ -3350,8 +3320,8 @@ void compileRegularImport(Compiler* compiler) {
           name_tk = compiler->parser.previous;
       }
 
-      int global_index = compilerAddVariable(compiler, name_tk.start,
-                                             name_tk.length, name_tk.line);
+      int global_index = compilerAddGlobalName(compiler, name_tk.start,
+                       name_tk.length);
       emitStoreGlobal(compiler, global_index);
       emitOpcode(compiler, OP_POP);
     }
@@ -3414,8 +3384,8 @@ static void compileFromImport(Compiler* compiler) {
       tkname = compiler->parser.previous;
     }
 
-    int global_index = compilerAddVariable(compiler, tkname.start,
-                                           tkname.length, tkname.line);
+    int global_index = compilerAddGlobalName(compiler, tkname.start,
+                         tkname.length);
 
     emitStoreGlobal(compiler, global_index);
     emitOpcode(compiler, OP_POP);
@@ -3582,7 +3552,11 @@ static void compileStatement(Compiler* compiler) {
   // print it's value when running in REPL mode.
   bool is_expression = false;
 
-  if (match(compiler, TK_BREAK)) {
+  if (peek(compiler) == TK_FUNCTION && compiler->parser.next.type == TK_NAME) {
+    lexToken(compiler); // Consume TK_FUNCTION.
+    compileNamedFunctionStatement(compiler);
+
+  } else if (match(compiler, TK_BREAK)) {
     if (compiler->loop == NULL) {
       error(compiler, "Cannot use 'break' outside a loop.");
       return;
@@ -3681,6 +3655,55 @@ static void compileStatement(Compiler* compiler) {
     emitOpcode(compiler, OP_POP);
 }
 
+static void compileNamedFunctionStatement(Compiler* compiler) {
+  if (peek(compiler) != TK_NAME) {
+    error(compiler, "Expected a function name.");
+    return;
+  }
+
+  Token name_token = compiler->parser.current;
+
+  compileFunction(compiler, FUNC_NAMED);
+  if (compiler->parser.has_syntax_error)
+    return;
+
+  NameSearchResult result = compilerSearchName(compiler, name_token.start,
+                                               (uint32_t) name_token.length);
+
+  NameDefnType name_type = result.type;
+  int index = result.index;
+  bool new_local = false;
+
+  if (result.type == NAME_NOT_DEFINED || result.type == NAME_BUILTIN_FN
+      || result.type == NAME_BUILTIN_TY) {
+    // In module scope, only top-level definitions are globals.
+    if (compiler->func->type == FUNC_MAIN && compiler->scope_depth == DEPTH_GLOBAL) {
+      name_type = NAME_GLOBAL_VAR;
+      index = compilerAddGlobalName(compiler, name_token.start,
+                                    (uint32_t) name_token.length);
+    } else {
+      name_type = NAME_LOCAL_VAR;
+      index = compilerAddVariable(compiler, name_token.start,
+                                  (uint32_t) name_token.length,
+                                  name_token.line);
+      new_local = true;
+
+      if (!compiler->can_define) {
+        semanticError(compiler, name_token, "Variable definition isn't allowed here.");
+      }
+    }
+  }
+
+  if (new_local) {
+    ASSERT(compiler->parser.has_errors
+           || (compiler->func->stack_size - 1) == index, OOPS);
+    return;
+  }
+
+  emitStoreValue(compiler, name_type, index);
+  emitOpcode(compiler, OP_POP);
+}
+
 // Compile statements that are only valid at the top level of the module. Such
 // as import statement, function define, and if we're running REPL mode top
 // level expression's evaluated value will be printed.
@@ -3768,25 +3791,6 @@ Result compile(VM* vm, Module* module, const char* source, const CompileOptions*
 
   emitFunctionEnd(compiler);
 
-  // Resolve forward names (function names that are used before defined).
-  if (!compiler->parser.has_syntax_error) {
-    for (int i = 0; i < compiler->parser.forwards_count; i++) {
-      ForwardName* forward = &compiler->parser.forwards[i];
-      const char* name = forward->tkname.start;
-      int length = forward->tkname.length;
-      int index = moduleGetGlobalIndex(compiler->module, name, (uint32_t) length);
-      if (index != -1) {
-        patchForward(compiler, forward->func, forward->instruction, index);
-      } else {
-        // need_more_lines is only true for unexpected EOF errors. For
-        // syntax errors it'll be false by now but. Here it's a semantic
-        // errors, so we're overriding it to false.
-        compiler->parser.need_more_lines = false;
-        resolveError(compiler, forward->tkname, "Name '%.*s' is not defined.", length, name);
-      }
-    }
-  }
-
   vm->compiler = compiler->next_compiler;
 
   // If compilation failed, discard all the invalid functions and globals.
@@ -3806,10 +3810,13 @@ Result compile(VM* vm, Module* module, const char* source, const CompileOptions*
   // Return the compilation result.
   if (compiler->parser.has_errors) {
     if (compiler->parser.repl_mode && compiler->parser.need_more_lines) {
+      UintBufferClear(&compiler->global_names, vm);
       return RESULT_UNEXPECTED_EOF;
     }
+    UintBufferClear(&compiler->global_names, vm);
     return RESULT_COMPILE_ERROR;
   }
+  UintBufferClear(&compiler->global_names, vm);
   return RESULT_SUCCESS;
 }
 

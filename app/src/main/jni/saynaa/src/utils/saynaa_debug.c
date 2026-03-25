@@ -459,7 +459,7 @@ void dumpFunctionCode(VM* vm, Function* func) {
       case OP_PUSH_GLOBAL:
       case OP_STORE_GLOBAL:
         {
-          int index = READ_BYTE();
+          int index = READ_SHORT();
           ASSERT_INDEX(index, (int) func->owner->global_names.count);
           int name_index = func->owner->global_names.data[index];
           ASSERT_INDEX(name_index, (int) func->owner->constants.count);
@@ -469,6 +469,22 @@ void dumpFunctionCode(VM* vm, Function* func) {
 
           // Prints: %5d '%s'\n
           PRINT_INT(index);
+          PRINT(" '");
+          PRINT(((String*) AS_OBJ(name))->data);
+          PRINT("'\n");
+          break;
+        }
+
+      case OP_PUSH_GLOBAL_NAME:
+      case OP_STORE_GLOBAL_NAME:
+        {
+          int name_index = READ_SHORT();
+          ASSERT_INDEX(name_index, (int) func->owner->constants.count);
+          Var name = func->owner->constants.data[name_index];
+          ASSERT(IS_OBJ_TYPE(name, OBJ_STRING), OOPS);
+
+          // Prints: %5d '%s'\n
+          PRINT_INT(name_index);
           PRINT(" '");
           PRINT(((String*) AS_OBJ(name))->data);
           PRINT("'\n");

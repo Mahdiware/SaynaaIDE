@@ -79,17 +79,23 @@ static inline size_t checkImportExists(char* path, const char* ext, char* buff) 
 // The buffer will be used as a working memory.
 static char* tryImportPaths(VM* vm, char* path, char* buff) {
   size_t path_size = 0;
-  static const char* EXT[] = {
-      // Path can already end with '.sa' or anything when running from
-      // RunFile() so it's mandatory for the bellow empty string.
-      SAYNAA_FILE_EXT,
-      "",
+  size_t raw_size = strlen(path);
+    static const char* EXT[] = {
+    // Prefer bytecode if present.
+    SAYNAA_BYTECODE_EXT,
 
-#ifdef _WIN32
-      "\\_init" SAYNAA_FILE_EXT,
-#else
-      "/_init" SAYNAA_FILE_EXT,
-#endif
+    // Path can already end with '.sa' or anything when running from
+    // RunFile() so it's mandatory for the bellow empty string.
+    SAYNAA_FILE_EXT,
+    "",
+
+  #ifdef _WIN32
+    "\\_init" SAYNAA_BYTECODE_EXT,
+    "\\_init" SAYNAA_FILE_EXT,
+  #else
+    "/_init" SAYNAA_BYTECODE_EXT,
+    "/_init" SAYNAA_FILE_EXT,
+  #endif
 
 #ifndef NO_DL
 #if defined(_WIN32)
@@ -107,6 +113,12 @@ static char* tryImportPaths(VM* vm, char* path, char* buff) {
 #endif
       NULL, // Sentinal to mark the array end.
   };
+
+  if (pathIsFile(path)) {
+    char* ret = Realloc(vm, NULL, raw_size + 1);
+    memcpy(ret, path, raw_size + 1);
+    return ret;
+  }
 
   for (const char** ext = EXT; *ext != NULL; ext++) {
     if ((path_size = checkImportExists(path, *ext, buff)) != 0) {

@@ -5,6 +5,7 @@
 
 #include "saynaa_vm.h"
 
+#include "../shared/saynaa_bytecode.h"
 #include "../utils/saynaa_debug.h"
 #include "../utils/saynaa_utils.h"
 
@@ -18,9 +19,14 @@ typedef struct {
   Module* target_module;
 } WildcardImportRuntimeData;
 
+/*****************************************************************************/
+/* IMPORT HELPERS                                                            */
+/*****************************************************************************/
+
 // Build a dotted module name from wildcard base path and filename.
 // Example: base="foo.bar.*", name="file1.sa" -> "foo.bar.file1.sa"
-static void buildWildcardModuleName(const String* base, const char* name, char* out, size_t out_size) {
+static void buildWildcardModuleName(const String* base, const char* name,
+                                    char* out, size_t out_size) {
   ASSERT(base != NULL && name != NULL && out != NULL, OOPS);
   ASSERT(out_size > 0, OOPS);
 
@@ -50,7 +56,8 @@ static void wildcardImportToFsPath(const String* import_path, char* out, size_t 
   ASSERT(out_size > 0, OOPS);
 
   int fs_len = (int) import_path->length;
-  if (fs_len >= 2 && import_path->data[fs_len - 2] == '.' && import_path->data[fs_len - 1] == '*') {
+  if (fs_len >= 2 && import_path->data[fs_len - 2] == '.'
+      && import_path->data[fs_len - 1] == '*') {
     fs_len -= 2;
   }
 
@@ -93,6 +100,44 @@ static void wildcardRuntimeCallback(const char* name, void* user_data) {
   vmPopTempRef(vm);
 }
 
+static String* importNameToPath(VM* vm, String* name, bool* needs_pop) {
+  if (needs_pop)
+    *needs_pop = false;
+
+  if (name == NULL)
+    return NULL;
+
+  uint32_t len = name->length;
+  bool has_dot = false;
+  bool is_wildcard = false;
+
+  if (len >= 2 && name->data[len - 2] == '.' && name->data[len - 1] == '*') {
+    len -= 2;
+    is_wildcard = true;
+  }
+
+  for (uint32_t i = 0; i < len; i++) {
+    if (name->data[i] == '.') {
+      has_dot = true;
+      break;
+    }
+  }
+
+  if (!has_dot && !is_wildcard)
+    return name;
+
+  String* path = newStringLength(vm, name->data, len);
+  for (uint32_t i = 0; i < path->length; i++) {
+    if (path->data[i] == '.')
+      path->data[i] = '/';
+  }
+  path->hash = utilHashString(path->data);
+  vmPushTempRef(vm, &path->_super);
+  if (needs_pop)
+    *needs_pop = true;
+  return path;
+}
+
 Handle* vmNewHandle(VM* vm, Var value) {
   Handle* handle = (Handle*) ALLOCATE(vm, Handle);
   handle->value = value;
@@ -119,7 +164,7 @@ void* vmRealloc(VM* vm, void* memory, size_t old_size, size_t new_size) {
 
   // If we're garbage collecting no new allocation is allowed.
   ASSERT(!vm->collecting_garbage || new_size == 0,
-      "No new allocation is allowed while garbage collection is running.");
+         "No new allocation is allowed while garbage collection is running.");
 
   if (new_size > 0 && vm->bytes_allocated > vm->next_gc) {
     ASSERT(vm->collecting_garbage == false, OOPS);
@@ -133,7 +178,8 @@ void* vmRealloc(VM* vm, void* memory, size_t old_size, size_t new_size) {
 
 void vmPushTempRef(VM* vm, Object* obj) {
   ASSERT(obj != NULL, "Cannot reference to NULL.");
-  ASSERT(vm->temp_reference_count < MAX_TEMP_REFERENCE, "Too many temp references");
+  ASSERT(vm->temp_reference_count < MAX_TEMP_REFERENCE,
+         "Too many temp references");
   vm->temp_reference[vm->temp_reference_count++] = obj;
 }
 
@@ -143,7 +189,9 @@ void vmPopTempRef(VM* vm) {
 }
 
 void vmRegisterModule(VM* vm, Module* module, String* key) {
-  ASSERT((((module->name != NULL) && IS_STR_EQ(module->name, key)) || IS_STR_EQ(module->path, key)), OOPS);
+  ASSERT((((module->name != NULL) && IS_STR_EQ(module->name, key))
+          || IS_STR_EQ(module->path, key)),
+         OOPS);
 
   // FIXME:
   // Not sure what to do, if a module the the same key already exists. Should
@@ -258,7 +306,8 @@ void vmCollectGarbage(VM* vm) {
   } while (false)
 
 bool vmPrepareFiber(VM* vm, Fiber* fiber, int argc, Var* argv) {
-  ASSERT(fiber->closure->fn->arity >= -1, OOPS " (Forget to initialize arity.)");
+  ASSERT(fiber->closure->fn->arity >= -1,
+         OOPS " (Forget to initialize arity.)");
 
   // Like lua: Extra arguments are thrown away; extra parameters get null.
   int nulls = 0;
@@ -272,15 +321,15 @@ bool vmPrepareFiber(VM* vm, Fiber* fiber, int argc, Var* argv) {
 
   if (fiber->state != FIBER_NEW) {
     switch (fiber->state) {
-    case FIBER_NEW:
-      UNREACHABLE();
-    case FIBER_RUNNING:
-      _ERR_FAIL(newString(vm, "The fiber has already been running."));
-    case FIBER_YIELDED:
-      _ERR_FAIL(newString(vm, "Cannot run a fiber which is yielded, use "
-                              "fiber_resume() instead."));
-    case FIBER_DONE:
-      _ERR_FAIL(newString(vm, "The fiber has done running."));
+      case FIBER_NEW:
+        UNREACHABLE();
+      case FIBER_RUNNING:
+        _ERR_FAIL(newString(vm, "The fiber has already been running."));
+      case FIBER_YIELDED:
+        _ERR_FAIL(newString(vm, "Cannot run a fiber which is yielded, use "
+                                "fiber_resume() instead."));
+      case FIBER_DONE:
+        _ERR_FAIL(newString(vm, "The fiber has done running."));
     }
     UNREACHABLE();
   }
@@ -324,15 +373,15 @@ bool vmPrepareFiber(VM* vm, Fiber* fiber, int argc, Var* argv) {
 bool vmSwitchFiber(VM* vm, Fiber* fiber, Var* value) {
   if (fiber->state != FIBER_YIELDED) {
     switch (fiber->state) {
-    case FIBER_NEW:
-      _ERR_FAIL(newString(vm, "The fiber hasn't started. call fiber_run() "
-                              "to start."));
-    case FIBER_RUNNING:
-      _ERR_FAIL(newString(vm, "The fiber has already been running."));
-    case FIBER_YIELDED:
-      UNREACHABLE();
-    case FIBER_DONE:
-      _ERR_FAIL(newString(vm, "The fiber has done running."));
+      case FIBER_NEW:
+        _ERR_FAIL(newString(vm, "The fiber hasn't started. call fiber_run() "
+                                "to start."));
+      case FIBER_RUNNING:
+        _ERR_FAIL(newString(vm, "The fiber has already been running."));
+      case FIBER_YIELDED:
+        UNREACHABLE();
+      case FIBER_DONE:
+        _ERR_FAIL(newString(vm, "The fiber has done running."));
     }
     UNREACHABLE();
   }
@@ -481,9 +530,9 @@ static Module* _importDL(VM* vm, String* resolved, String* name) {
 
   if (!IS_OBJ_TYPE(lhandle->value, OBJ_MODULE)) {
     VM_SET_ERROR(vm, stringFormat(vm,
-                         "Returned handle wasn't a "
-                         "module at \"@\"",
-                         resolved));
+                                  "Returned handle wasn't a "
+                                  "module at \"@\"",
+                                  resolved));
     return NULL;
   }
 
@@ -521,9 +570,45 @@ static Module* _importScript(VM* vm, String* resolved, String* name) {
 
   vmPushTempRef(vm, &module->_super); // module.
   {
-    initializeModule(vm, module, false);
-    Result result = compile(vm, module, source, NULL);
+    bool is_bytecode = false;
+    bool header_seen = false;
+    SaynaaBytecodeHeader header;
+    SaynaaBytecodeStatus status = saynaa_bytecode_decode_header(
+        (const uint8_t*) source, SAYNAA_BYTECODE_HEADER_SIZE, &header);
+    if (status == SAYNAA_BC_OK) {
+      status = saynaa_bytecode_validate_header(&header, 0);
+      if (status == SAYNAA_BC_INVALID_MAGIC) {
+        header_seen = false;
+      } else if (status == SAYNAA_BC_OK) {
+        header_seen = true;
+        const uint8_t* payload = (const uint8_t*) source
+                                 + SAYNAA_BYTECODE_HEADER_SIZE;
+        status = saynaa_bytecode_validate_checksum(&header, payload,
+                                                   header.bytecode_size);
+        if (status == SAYNAA_BC_OK) {
+          status = saynaa_bytecode_deserialize_module(vm, module, payload,
+                                                      header.bytecode_size);
+          if (status == SAYNAA_BC_OK) {
+            is_bytecode = true;
+          }
+        }
+      } else {
+        header_seen = true;
+      }
+    }
+
+    Result result = RESULT_SUCCESS;
+    if (header_seen && !is_bytecode) {
+      result = RESULT_COMPILE_ERROR;
+    } else if (!is_bytecode) {
+      initializeModule(vm, module, false);
+      result = compile(vm, module, source, NULL);
+    } else {
+      initializeModule(vm, module, false);
+    }
+
     Realloc(vm, source, 0);
+
     if (result == RESULT_SUCCESS) {
       vmRegisterModule(vm, module, resolved);
     } else {
@@ -554,8 +639,9 @@ static Module* _importResolved(VM* vm, String* resolved, String* name) {
   if (vm->config.load_script_fn == NULL) {
 #endif
 
-    VM_SET_ERROR(vm, newString(vm, "Cannot import. The hosting application "
-                                   "haven't registered the module loading API"));
+    VM_SET_ERROR(vm,
+                 newString(vm, "Cannot import. The hosting application "
+                               "haven't registered the module loading API"));
     return NULL;
   }
 
@@ -649,43 +735,13 @@ void vmStandardSearcher(VM* vm) {
   }
   String* name = AS_STRING(vm->fiber->ret[1]);
 
-  // Convert dots to slashes for file path search. A copy is made to not
-  // verified the string passed (which could be shared or constant).
-
-  uint32_t len = name->length;
-  bool is_wildcard = false;
-
-  // Check for trailing '.*' and strip it from the file path we'll search for.
-  if (len >= 2 && name->data[len - 2] == '.' && name->data[len - 1] == '*') {
-    len -= 2;
-    is_wildcard = true;
-  }
-
-  bool has_dot = false;
-  for (uint32_t i = 0; i < len; i++) {
-    if (name->data[i] == '.') {
-      has_dot = true;
-      break;
-    }
-  }
-
-  String* path = name;
-  if (has_dot || is_wildcard) {
-    path = newStringLength(vm, name->data, len);
-    for (uint32_t i = 0; i < path->length; i++) {
-      if (path->data[i] == '.') {
-        path->data[i] = '/';
-      }
-    }
-    path->hash = utilHashString(path->data);
-    vmPushTempRef(vm, &path->_super);
-  }
-
+  // Convert dots to slashes for file path search. A copy is made to avoid
+  // mutating the original import name.
+  bool needs_pop = false;
+  String* path = importNameToPath(vm, name, &needs_pop);
   Var result = _importPathSearch(vm, path);
-
-  if (has_dot || is_wildcard) {
+  if (needs_pop)
     vmPopTempRef(vm);
-  }
 
   vm->fiber->ret[0] = result;
 }
@@ -771,7 +827,8 @@ void vmEnsureStackSize(VM* vm, Fiber* fiber, int size) {
   int new_size = utilPowerOf2Ceil(size);
 
   Var* old_rbp = fiber->stack; //< Old stack base pointer.
-  fiber->stack = (Var*) vmRealloc(vm, fiber->stack, sizeof(Var) * fiber->stack_size, sizeof(Var) * new_size);
+  fiber->stack = (Var*) vmRealloc(vm, fiber->stack, sizeof(Var) * fiber->stack_size,
+                                  sizeof(Var) * new_size);
   fiber->stack_size = new_size;
 
   // If the old stack base pointer is the same as the current, that means the
@@ -823,7 +880,8 @@ static inline void pushCallFrame(VM* vm, const Closure* closure) {
       new_capacity = 1;
 
     vm->fiber->frames = (CallFrame*) vmRealloc(vm, vm->fiber->frames,
-        sizeof(CallFrame) * vm->fiber->frame_capacity, sizeof(CallFrame) * new_capacity);
+                                               sizeof(CallFrame) * vm->fiber->frame_capacity,
+                                               sizeof(CallFrame) * new_capacity);
     vm->fiber->frame_capacity = new_capacity;
   }
 
@@ -1186,7 +1244,8 @@ L_vm_main_loop:
         OPCODE(STORE_LOCAL_3) :
         OPCODE(STORE_LOCAL_4) :
         OPCODE(STORE_LOCAL_5) :
-        OPCODE(STORE_LOCAL_6) : OPCODE(STORE_LOCAL_7) : OPCODE(STORE_LOCAL_8) : {
+        OPCODE(STORE_LOCAL_6) :
+        OPCODE(STORE_LOCAL_7) : OPCODE(STORE_LOCAL_8) : {
       int index = (int) (instruction - OP_STORE_LOCAL_0);
       rbp[index + 1] = PEEK(-1); // +1: rbp[0] is return value.
       DISPATCH();
@@ -1204,10 +1263,55 @@ L_vm_main_loop:
       DISPATCH();
     }
 
+    OPCODE(PUSH_GLOBAL_NAME) : {
+      uint16_t name_index = READ_SHORT();
+      String* name = moduleGetStringAt(module, (int) name_index);
+      if (name == NULL) {
+        RUNTIME_ERROR(stringFormat(vm, "Invalid global name in bytecode."));
+      }
+
+      int g_index = moduleGetGlobalIndex(module, name->data, name->length);
+      if (g_index == -1) {
+        int missing_index = moduleGetGlobalIndex(module, LITS__missing,
+                                                 (uint32_t) strlen(LITS__missing));
+        if (missing_index != -1) {
+          Var missing = module->globals.data[missing_index];
+          if (IS_OBJ_TYPE(missing, OBJ_CLOSURE)) {
+            Var args[1] = { VAR_OBJ(name) };
+            Var result = VAR_NULL;
+            Result call_result = vmCallFunction(vm, (Closure*) AS_OBJ(missing),
+                                                1, args, &result);
+            if (call_result != RESULT_SUCCESS) {
+              CHECK_ERROR();
+            }
+            if (!IS_NULL(result) && !IS_UNDEF(result)) {
+              PUSH(result);
+              DISPATCH();
+            }
+          }
+        }
+
+        RUNTIME_ERROR(stringFormat(vm, "Name '@' is not defined.", name));
+      }
+
+      PUSH(module->globals.data[g_index]);
+      DISPATCH();
+    }
+
     OPCODE(STORE_GLOBAL) : {
       uint16_t index = READ_SHORT();
       ASSERT_INDEX(index, module->globals.count);
       module->globals.data[index] = PEEK(-1);
+      DISPATCH();
+    }
+
+    OPCODE(STORE_GLOBAL_NAME) : {
+      uint16_t name_index = READ_SHORT();
+      String* name = moduleGetStringAt(module, (int) name_index);
+      if (name == NULL) {
+        RUNTIME_ERROR(stringFormat(vm, "Invalid global name in bytecode."));
+      }
+      moduleSetGlobal(vm, module, name->data, name->length, PEEK(-1));
       DISPATCH();
     }
 
@@ -1279,7 +1383,8 @@ L_vm_main_loop:
       // All Builtin type class except for Object are "final" ie. cannot
       // be inherited from.
       if (base->class_of != vINSTANCE && base->class_of != vOBJECT) {
-        RUNTIME_ERROR(stringFormat(vm, "$ type cannot be inherited.", getVarTypeName(base->class_of)));
+        RUNTIME_ERROR(stringFormat(vm, "$ type cannot be inherited.",
+                                   getVarTypeName(base->class_of)));
       }
 
       uint16_t index = READ_SHORT();
@@ -1348,7 +1453,8 @@ L_vm_main_loop:
       // Update frame before external call to ensure IP is saved (for GC safety).
       UPDATE_FRAME();
 
-      bool success = utilWalkDirectory(search_path, SAYNAA_FILE_EXT, wildcardRuntimeCallback, &data);
+      bool success = utilWalkDirectory(search_path, SAYNAA_FILE_EXT,
+                                       wildcardRuntimeCallback, &data);
       if (!success) {
         // Not a directory? Try single module import.
         // Pass the ORIGINAL import path (e.g. "path.to.module"), NOT proper path.
@@ -1401,7 +1507,10 @@ L_vm_main_loop:
           uint32_t name_idx = imported->global_names.data[j];
           ASSERT(name_idx < imported->constants.count, OOPS);
 
-          String* name = AS_STRING(imported->constants.data[name_idx]);
+          String* name = moduleGetStringAt(imported, (int) name_idx);
+          if (name == NULL) {
+            continue;
+          }
 
           // Skip internal/private names (starting with @ or _)
           if (name->length > 0 && (name->data[0] == '@' || name->data[0] == '_')) {
@@ -1425,7 +1534,9 @@ L_vm_main_loop:
     OPCODE(IMPORT) : {
       uint16_t index = READ_SHORT();
       String* name = moduleGetStringAt(module, (int) index);
-      ASSERT(name != NULL, OOPS);
+      if (name == NULL) {
+        RUNTIME_ERROR(stringFormat(vm, "Invalid import name in bytecode."));
+      }
 
       // Regular import bytecode is followed by STORE_GLOBAL for the imported symbol.
       // For handled imports (true), we bind from that target global slot.
@@ -1444,14 +1555,30 @@ L_vm_main_loop:
       // In this mode, true is only a sentinel and import value is read from
       // the target global slot (supports null values set by define()).
       if (IS_BOOL(_imported) && AS_BOOL(_imported) == true) {
-        if (!has_target_global) {
+        if (!has_target_global && (Opcode) (*ip) != OP_STORE_GLOBAL_NAME) {
           RUNTIME_ERROR(stringFormat(vm,
-              "Invalid import bytecode state for '@': "
-              "missing STORE_GLOBAL target.",
-              name));
+                                     "Invalid import bytecode state for '@': "
+                                     "missing STORE_GLOBAL target.",
+                                     name));
         }
 
-        _imported = module->globals.data[target_global_index];
+        if ((Opcode) (*ip) == OP_STORE_GLOBAL) {
+          _imported = module->globals.data[target_global_index];
+
+        } else if ((Opcode) (*ip) == OP_STORE_GLOBAL_NAME) {
+          uint16_t name_index = (uint16_t) ((ip[1] << 8) | ip[2]);
+          String* gname = moduleGetStringAt(module, (int) name_index);
+          if (gname == NULL) {
+            RUNTIME_ERROR(stringFormat(vm, "Invalid import target name in bytecode."));
+          }
+
+          int g_index = moduleGetGlobalIndex(module, gname->data, gname->length);
+          if (g_index == -1) {
+            _imported = VAR_NULL;
+          } else {
+            _imported = module->globals.data[g_index];
+          }
+        }
       }
 
       // NOTE: _imported could be any value (module, class, function or just true).
@@ -1545,30 +1672,71 @@ L_vm_main_loop:
       } else if (IS_OBJ_TYPE(callable, OBJ_CLASS)) {
         Class* cls = (Class*) AS_OBJ(callable);
 
-        // Allocate / create a new this before calling constructor on it.
-        fiber->thiz = preConstructThis(vm, cls);
-        CHECK_ERROR();
-
-        // Note:
-        // For instance the constructor will update this and return
-        // the instance (which might not be necessary since we're
-        // setting it here).
-        *fiber->ret = fiber->thiz;
-
-        closure = (const Closure*) getMagicMethod(cls, METHOD_INIT);
-
-        // No constructor is defined on the class. Just return thiz.
-        if (closure == NULL) {
-          if (argc != 0) {
-            String* msg = stringFormat(vm,
-                "Expected exactly 0 argument(s) "
-                "for constructor $.",
-                cls->name->data);
-            RUNTIME_ERROR(msg);
+        Closure* new_method = getMagicMethod(cls, METHOD_NEW);
+        if (new_method != NULL) {
+          Var new_instance = VAR_NULL;
+          Result new_result = vmCallMethod(vm, VAR_OBJ(cls), new_method, argc,
+                                           fiber->ret + 1, &new_instance);
+          if (new_result != RESULT_SUCCESS) {
+            CHECK_ERROR();
           }
 
-          fiber->thiz = VAR_UNDEFINED;
-          DISPATCH();
+          if (IS_NULL(new_instance) || IS_UNDEF(new_instance)) {
+            // Fall back to default allocation and call _init.
+            fiber->thiz = preConstructThis(vm, cls);
+            CHECK_ERROR();
+            *fiber->ret = fiber->thiz;
+            closure = (const Closure*) getMagicMethod(cls, METHOD_INIT);
+            if (closure == NULL) {
+              if (argc != 0) {
+                String* msg = stringFormat(vm,
+                                           "Expected exactly 0 argument(s) "
+                                           "for constructor $.",
+                                           cls->name->data);
+                RUNTIME_ERROR(msg);
+              }
+              fiber->thiz = VAR_UNDEFINED;
+              DISPATCH();
+            }
+
+          } else {
+            *fiber->ret = new_instance;
+            fiber->thiz = new_instance;
+
+            closure = (const Closure*) getMagicMethod(cls, METHOD_INIT);
+            if (closure == NULL || !IS_OBJ_TYPE(new_instance, OBJ_INST)) {
+              fiber->sp = fiber->ret + 1; // Pop args, leave return value.
+              fiber->thiz = VAR_UNDEFINED;
+              DISPATCH();
+            }
+          }
+
+        } else {
+          // Allocate / create a new this before calling constructor on it.
+          fiber->thiz = preConstructThis(vm, cls);
+          CHECK_ERROR();
+
+          // Note:
+          // For instance the constructor will update this and return
+          // the instance (which might not be necessary since we're
+          // setting it here).
+          *fiber->ret = fiber->thiz;
+
+          closure = (const Closure*) getMagicMethod(cls, METHOD_INIT);
+
+          // No constructor is defined on the class. Just return thiz.
+          if (closure == NULL) {
+            if (argc != 0) {
+              String* msg = stringFormat(vm,
+                                         "Expected exactly 0 argument(s) "
+                                         "for constructor $.",
+                                         cls->name->data);
+              RUNTIME_ERROR(msg);
+            }
+
+            fiber->thiz = VAR_UNDEFINED;
+            DISPATCH();
+          }
         }
 
       } else {
@@ -1582,9 +1750,9 @@ L_vm_main_loop:
 
         if (closure == NULL) {
           RUNTIME_ERROR(stringFormat(vm, "$ '$'.",
-              "Expected a callable to "
-              "call, instead got",
-              varTypeName(callable)));
+                                     "Expected a callable to "
+                                     "call, instead got",
+                                     varTypeName(callable)));
 
         } else {
           fiber->thiz = callable;
@@ -1607,7 +1775,8 @@ L_vm_main_loop:
 
       if (closure->fn->is_native) {
         if (closure->fn->native == NULL) {
-          RUNTIME_ERROR(stringFormat(vm, "Native function pointer of $ was NULL.", closure->fn->name));
+          RUNTIME_ERROR(stringFormat(vm, "Native function pointer of $ was NULL.",
+                                     closure->fn->name));
         }
 
         // Update the current frame's ip.
@@ -1633,8 +1802,9 @@ L_vm_main_loop:
           // A switched fiber must have at least one VM frame to resume.
           // Native-only fibers (frame_count == 0) cannot be resumed here.
           if (fiber == NULL || fiber->frame_count == 0) {
-            RUNTIME_ERROR(newString(vm, "Cannot continue: switched fiber has no VM call frame. "
-                                        "Start it with fiber_run() before resuming."));
+            RUNTIME_ERROR(newString(
+                vm, "Cannot continue: switched fiber has no VM call frame. "
+                    "Start it with fiber_run() before resuming."));
           }
 
           LOAD_FRAME();
@@ -1648,7 +1818,9 @@ L_vm_main_loop:
           LOAD_FRAME(); //< Re-load the frame to vm's execution variables.
 
         } else {
-          ASSERT((instruction == OP_CALL) || (instruction == OP_METHOD_CALL) || (instruction == OP_SUPER_CALL), OOPS);
+          ASSERT((instruction == OP_CALL) || (instruction == OP_METHOD_CALL)
+                     || (instruction == OP_SUPER_CALL),
+                 OOPS);
 
           UPDATE_FRAME(); //< Update the current frame's ip.
           pushCallFrame(vm, closure);
@@ -2199,8 +2371,8 @@ L_vm_main_loop:
     OPCODE(END) : UNREACHABLE();
     break;
 
-  default:
-    UNREACHABLE();
+    default:
+      UNREACHABLE();
   }
 
   UNREACHABLE();

@@ -567,10 +567,16 @@ struct Fiber {
 
 typedef enum {
   METHOD_INIT,
+  METHOD_NEW,
+  METHOD_DEL,
   METHOD_STR,
   METHOD_REPR,
+  METHOD_GETATTRIBUTE,
+  METHOD_GETATTR,
   METHOD_GETTER,
+  METHOD_SETATTR,
   METHOD_SETTER,
+  METHOD_DELATTR,
   METHOD_CALL,
   MAX_MAGIC_METHODS,
 } MagicMethod;
@@ -693,11 +699,18 @@ Fiber* newFiber(VM* vm, Closure* closure);
 Function* newFunction(VM* vm, const char* name, int length, Module* owner,
                       bool is_native, const char* docstring, int* fn_index);
 
+// Allocate a new non-native function without registering it in the module.
+Function* newFunctionRaw(VM* vm, Module* owner, String* name, String* docstring,
+                         int arity, bool is_method, int upvalue_count);
+
 // If the module is not NULL, the name and the class object will be added to
 // the module's constant pool. The class will be added to the modules global
 // as well.
 Class* newClass(VM* vm, const char* name, int length, Class* super,
                 Module* module, const char* docstring, int* cls_index);
+
+// Allocate a new script class without registering it in the module.
+Class* newClassRaw(VM* vm, Module* owner, String* name, String* docstring);
 
 // Function to create a new Pointer object for Android API interaction.
 Pointer* newPointer(VM* vm, void* native_ptr, Destructor destructor);
@@ -842,6 +855,9 @@ uint32_t moduleSetGlobal(VM* vm, Module* module, const char* name, uint32_t leng
 // Search for the [name] in the module's globals and return it's index.
 // If not found it'll return -1.
 int moduleGetGlobalIndex(Module* module, const char* name, uint32_t length);
+
+// Delete a global by name. Returns true if deleted, false if not found.
+bool moduleDeleteGlobal(VM* vm, Module* module, const char* name, uint32_t length);
 
 // This will allocate a new implicit main function for the module and assign to
 // the module's body attribute. And the attribute initialized will be set to

@@ -90,6 +90,15 @@ OPCODE(PUSH_GLOBAL, 2, 1)
 // params: 2 byte index.
 OPCODE(STORE_GLOBAL, 2, 0)
 
+// Push a global value by name (string constant index).
+// params: 2 byte name index.
+OPCODE(PUSH_GLOBAL_NAME, 2, 1)
+
+// Store the stack top value to a global by name and don't pop since it's the
+// result of the assignment.
+// params: 2 byte name index.
+OPCODE(STORE_GLOBAL_NAME, 2, 0)
+
 // Push a built in function.
 // params: 1 bytes index.
 OPCODE(PUSH_BUILTIN_FN, 1, 1)

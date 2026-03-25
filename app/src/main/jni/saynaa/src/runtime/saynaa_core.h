@@ -16,10 +16,16 @@ extern "C" {
 // defined as macros so that it'll be easier in the future to refactor or
 // restructre. The names of the macros are begin with LIST_ and the string.
 #define LITS__init "_init"
+#define LITS__new "_new"
+#define LITS__del "_del"
 #define LITS__str "_str"
 #define LITS__repr "_repr"
+#define LITS__getattr "_getattr"
+#define LITS__getattribute "_getattribute"
 #define LITS__getter "_getter"
+#define LITS__setattr "_setattr"
 #define LITS__setter "_setter"
+#define LITS__delattr "_delattr"
 #define LITS__call "_call"
 #define LITS__next "_next"
 #define LITS__value "_value"

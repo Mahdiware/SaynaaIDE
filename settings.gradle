@@ -1,2 +1,33 @@
+pluginManagement {
+	repositories {
+		maven { url 'https://maven.aliyun.com/repository/public/' }
+		maven { url 'https://maven.aliyun.com/repository/google/' }
+		maven { url 'https://maven.aliyun.com/repository/gradle-plugin/' }
+		maven { url 'https://jitpack.io' }
+		google()
+		mavenCentral()
+		gradlePluginPortal()
+	}
+}
+
+dependencyResolutionManagement {
+	repositories {
+		maven { url 'https://maven.aliyun.com/repository/public/' }
+		maven { url 'https://maven.aliyun.com/repository/google/' }
+		maven { url 'https://maven.aliyun.com/repository/gradle-plugin/' }
+		maven { url 'https://jitpack.io' }
+		google()
+		mavenCentral()
+	}
+	versionCatalogs {
+		libs {
+			from(files('sora-editor/gradle/libs.versions.toml'))
+		}
+	}
+}
+
 include ':app'
+include ':sora-editor'
+
+project(':sora-editor').projectDir = new File(rootDir, 'sora-editor/editor')
 rootProject.name = "Saynaa IDE"

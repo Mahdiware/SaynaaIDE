@@ -131,12 +131,14 @@ public class SaynaaApplication extends Application implements SaynaaContext {
       saynaaExtDir = sdDir + "/AndroSaynaa";
     } else {
       File[] fs = new File("/storage").listFiles();
-      for (File f : fs) {
-        String[] ls = f.list();
-        if (ls == null)
-          continue;
-        if (ls.length > 5)
-          saynaaExtDir = f.getAbsolutePath() + "/AndroSaynaa";
+      if (fs != null) {
+        for (File f : fs) {
+          String[] ls = f.list();
+          if (ls == null)
+            continue;
+          if (ls.length > 5)
+            saynaaExtDir = f.getAbsolutePath() + "/AndroSaynaa";
+        }
       }
       if (saynaaExtDir == null)
         saynaaExtDir = getDir("AndroSaynaa", Context.MODE_PRIVATE).getAbsolutePath();

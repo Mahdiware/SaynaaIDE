@@ -8,11 +8,13 @@
 #include "../cli/saynaa.h"
 #include "../runtime/saynaa_core.h"
 #include "../runtime/saynaa_vm.h"
+#include "../shared/saynaa_bytecode.h"
 #include "../shared/saynaa_readline.h"
 #include "../shared/saynaa_value.h"
 #include "../utils/saynaa_utils.h"
 
 #include <math.h>
+#include <time.h>
 
 // Path Resolving Functionality Documentation:
 //
@@ -50,12 +52,14 @@ void osUnloadDL(VM* vm, void* handle);
 #endif // NO_DL
 #endif // NO_OPTIONAL
 
-#define CHECK_ARG_NULL(name) ASSERT((name) != NULL, "Argument " #name " was NULL.");
+#define CHECK_ARG_NULL(name) \
+  ASSERT((name) != NULL, "Argument " #name " was NULL.");
 
 #define CHECK_HANDLE_TYPE(handle, type) \
   do { \
     CHECK_ARG_NULL(handle); \
-    ASSERT(IS_OBJ_TYPE(handle->value, type), "Given handle is not of type " #type "."); \
+    ASSERT(IS_OBJ_TYPE(handle->value, type), \
+           "Given handle is not of type " #type "."); \
   } while (false)
 
 #define VALIDATE_SLOT_INDEX(index) \
@@ -67,7 +71,8 @@ void osUnloadDL(VM* vm, void* handle);
 
 #define CHECK_FIBER_EXISTS(vm) \
   do { \
-    ASSERT(vm->fiber != NULL, "No fiber exists. Did you forget to call reserveSlots()?"); \
+    ASSERT(vm->fiber != NULL, \
+           "No fiber exists. Did you forget to call reserveSlots()?"); \
   } while (false)
 
 // Macro to access the nth argument (0-based) of the current function.
@@ -90,7 +95,8 @@ static void* defaultRealloc(void* memory, size_t new_size, void* _);
 static void stderrWrite(VM* vm, const char* text);
 static void stdoutWrite(VM* vm, const char* text);
 static char* stdinRead(VM* vm);
-static char* loadScript(VM* vm, const char* path);
+static char* loadScriptAutoDetect(VM* vm, const char* path);
+static Result runFileAutoDetect(VM* vm, const char* path, bool* is_bytecode);
 
 void* Realloc(VM* vm, void* ptr, size_t size) {
   ASSERT(vm->config.realloc_fn != NULL, "VM's allocator was NULL.");
@@ -116,7 +122,7 @@ Configuration NewConfiguration() {
 #endif
 
 #endif
-  config.load_script_fn = loadScript;
+  config.load_script_fn = loadScriptAutoDetect;
 
   return config;
 }
@@ -133,7 +139,8 @@ VM* NewVM(Configuration* config) {
   vm->config = *config;
   vm->working_set_count = 0;
   vm->working_set_capacity = MIN_CAPACITY;
-  vm->working_set = (Object**) vm->config.realloc_fn(NULL, sizeof(Object*) * vm->working_set_capacity, NULL);
+  vm->working_set = (Object**) vm->config.realloc_fn(
+      NULL, sizeof(Object*) * vm->working_set_capacity, NULL);
   vm->next_gc = INITIAL_GC_SIZE;
   vm->collecting_garbage = false;
   vm->min_heap_size = MIN_HEAP_SIZE;
@@ -173,7 +180,8 @@ void FreeVM(VM* vm) {
     obj = next;
   }
 
-  vm->working_set = (Object**) vm->config.realloc_fn(vm->working_set, 0, vm->config.user_data);
+  vm->working_set = (Object**) vm->config.realloc_fn(vm->working_set, 0,
+                                                     vm->config.user_data);
 
   // Validate that all handles have been released by the host application.
   // If handles remain, it indicates a resource leak in the host's usage of the VM.
@@ -192,15 +200,16 @@ void SetUserData(VM* vm, void* user_data) {
 
 void RegisterBuiltinFn(VM* vm, const char* name, nativeFn fn, int arity, const char* docstring) {
   ASSERT(vm->builtins_count < BUILTIN_FN_CAPACITY,
-      "Maximum builtin function limit reached, To increase the limit set "
-      "BUILTIN_FN_CAPACITY and recompile.");
+         "Maximum builtin function limit reached, To increase the limit set "
+         "BUILTIN_FN_CAPACITY and recompile.");
 
   // TODO: Optimize builtin function lookup during compilation.
   // If the functions are sorted, we can use binary search instead of linear scan.
   // Note that runtime lookup is already O(1) via index, so this only affects compile time.
   for (int i = 0; i < vm->builtins_count; i++) {
     Closure* bfn = vm->builtins_funcs[i];
-    ASSERT(strcmp(bfn->fn->name, name) != 0, "Overriding existing function not supported yet.");
+    ASSERT(strcmp(bfn->fn->name, name) != 0,
+           "Overriding existing function not supported yet.");
   }
 
   Function* fptr = newFunction(vm, name, (int) strlen(name), NULL, true, docstring, NULL);
@@ -245,15 +254,16 @@ void registerModule(VM* vm, Handle* module) {
   vmRegisterModule(vm, module_, module_->name);
 }
 
-void ModuleAddFunction(VM* vm, Handle* module, const char* name, nativeFn fptr, int arity, const char* docstring) {
+void ModuleAddFunction(VM* vm, Handle* module, const char* name, nativeFn fptr,
+                       int arity, const char* docstring) {
   CHECK_HANDLE_TYPE(module, OBJ_MODULE);
   CHECK_ARG_NULL(fptr);
 
   moduleAddFunctionInternal(vm, (Module*) AS_OBJ(module->value), name, fptr, arity, docstring);
 }
 
-Handle* NewClass(VM* vm, const char* name, Handle* base_class, Handle* module, NewInstanceFn new_fn,
-    DeleteInstanceFn delete_fn, const char* docstring) {
+Handle* NewClass(VM* vm, const char* name, Handle* base_class, Handle* module,
+                 NewInstanceFn new_fn, DeleteInstanceFn delete_fn, const char* docstring) {
   CHECK_ARG_NULL(module);
   CHECK_ARG_NULL(name);
   CHECK_HANDLE_TYPE(module, OBJ_MODULE);
@@ -264,7 +274,8 @@ Handle* NewClass(VM* vm, const char* name, Handle* base_class, Handle* module, N
     super = (Class*) AS_OBJ(base_class->value);
   }
 
-  Class* class_ = newClass(vm, name, (int) strlen(name), super, (Module*) AS_OBJ(module->value), docstring, NULL);
+  Class* class_ = newClass(vm, name, (int) strlen(name), super,
+                           (Module*) AS_OBJ(module->value), docstring, NULL);
   class_->new_fn = new_fn;
   class_->delete_fn = delete_fn;
 
@@ -274,8 +285,8 @@ Handle* NewClass(VM* vm, const char* name, Handle* base_class, Handle* module, N
   return handle;
 }
 
-Class* NewNativeClass(VM* vm, const char* name, NewInstanceFn new_fn, DeleteInstanceFn delete_fn,
-    const char* docstring) {
+Class* NewNativeClass(VM* vm, const char* name, NewInstanceFn new_fn,
+                      DeleteInstanceFn delete_fn, const char* docstring) {
   CHECK_ARG_NULL(name);
   Class* super = vm->builtin_classes[vOBJECT];
 
@@ -285,13 +296,15 @@ Class* NewNativeClass(VM* vm, const char* name, NewInstanceFn new_fn, DeleteInst
   return class_;
 }
 
-void NativeClassAddMethod(VM* vm, Class* cls, const char* name, nativeFn fptr, int arity, const char* docstring) {
+void NativeClassAddMethod(VM* vm, Class* cls, const char* name, nativeFn fptr,
+                          int arity, const char* docstring) {
   CHECK_ARG_NULL(cls);
   CHECK_ARG_NULL(fptr);
 
   Class* class_ = cls;
 
-  Function* fn = newFunction(vm, name, (int) strlen(name), class_->owner, true, docstring, NULL);
+  Function* fn = newFunction(vm, name, (int) strlen(name), class_->owner, true,
+                             docstring, NULL);
   vmPushTempRef(vm, &fn->_super);
 
   fn->arity = arity;
@@ -306,7 +319,8 @@ void NativeClassAddMethod(VM* vm, Class* cls, const char* name, nativeFn fptr, i
   vmPopTempRef(vm);
 }
 
-void ClassAddMethod(VM* vm, Handle* cls, const char* name, nativeFn fptr, int arity, const char* docstring) {
+void ClassAddMethod(VM* vm, Handle* cls, const char* name, nativeFn fptr,
+                    int arity, const char* docstring) {
   CHECK_ARG_NULL(cls);
   CHECK_ARG_NULL(fptr);
   CHECK_HANDLE_TYPE(cls, OBJ_CLASS);
@@ -317,7 +331,8 @@ void ClassAddMethod(VM* vm, Handle* cls, const char* name, nativeFn fptr, int ar
 
   Class* class_ = (Class*) AS_OBJ(cls->value);
 
-  Function* fn = newFunction(vm, name, (int) strlen(name), class_->owner, true, docstring, NULL);
+  Function* fn = newFunction(vm, name, (int) strlen(name), class_->owner, true,
+                             docstring, NULL);
   vmPushTempRef(vm, &fn->_super); // fn.
 
   fn->arity = arity;
@@ -452,11 +467,20 @@ Result RunStringPcall(VM* vm, const char* source) {
 }
 
 Result RunFile(VM* vm, const char* path) {
+  return runFileAutoDetect(vm, path, NULL);
+}
+
+Result RunFileAutoDetect(VM* vm, const char* path, bool* is_bytecode) {
+  return runFileAutoDetect(vm, path, is_bytecode);
+}
+
+static Result runFileAutoDetect(VM* vm, const char* path, bool* is_bytecode) {
   // Note: Even if the file is already in the VM's script cache (e.g., via
   // import), we explicitly recompile it here to ensure the cache reflects the
   // latest content on disk.
 
-  ASSERT(vm->config.load_script_fn != NULL, "No script loading functions defined.");
+  ASSERT(vm->config.load_script_fn != NULL,
+         "No script loading functions defined.");
 
   Result result = RESULT_SUCCESS;
   Module* module = NULL;
@@ -470,7 +494,8 @@ Result RunFile(VM* vm, const char* path) {
   if (resolved_ == NULL) {
     if (vm->config.stderr_write != NULL) {
       if (vm->config.use_ansi_escape) {
-        vm->config.stderr_write(vm, "\x1b[31mError\x1b[0m finding script at \"");
+        vm->config.stderr_write(vm,
+                                "\x1b[31mError\x1b[0m finding script at \"");
       } else {
         vm->config.stderr_write(vm, "Error finding script at \"");
       }
@@ -490,15 +515,15 @@ Result RunFile(VM* vm, const char* path) {
     module->path = script_path;
     vmPopTempRef(vm); // script_path.
 
-    initializeModule(vm, module, true);
-
     const char* _path = module->path->data;
-    char* source = vm->config.load_script_fn(vm, _path);
+    bool local_is_bytecode = false;
+    char* source = LoadScriptAutoDetect(vm, _path, &local_is_bytecode);
     if (source == NULL) {
       result = RESULT_COMPILE_ERROR;
       if (vm->config.stderr_write != NULL) {
         if (vm->config.use_ansi_escape) {
-          vm->config.stderr_write(vm, "\x1b[31mError\x1b[0m loading script at \"");
+          vm->config.stderr_write(vm,
+                                  "\x1b[31mError\x1b[0m loading script at \"");
         } else {
           vm->config.stderr_write(vm, "Error loading script at \"");
         }
@@ -506,9 +531,33 @@ Result RunFile(VM* vm, const char* path) {
         vm->config.stderr_write(vm, "\"\n");
       }
     } else {
-      result = compile(vm, module, source, NULL);
+      if (local_is_bytecode) {
+        SaynaaBytecodeHeader header;
+        SaynaaBytecodeStatus status = saynaa_bytecode_decode_header(
+            (const uint8_t*) source, SAYNAA_BYTECODE_HEADER_SIZE, &header);
+        if (status == SAYNAA_BC_OK) {
+          const uint8_t* payload = (const uint8_t*) source
+                                   + SAYNAA_BYTECODE_HEADER_SIZE;
+          status = saynaa_bytecode_deserialize_module(vm, module, payload,
+                                                      header.bytecode_size);
+        }
+
+        if (status != SAYNAA_BC_OK) {
+          result = RESULT_COMPILE_ERROR;
+        } else {
+          initializeModule(vm, module, true);
+          result = RESULT_SUCCESS;
+        }
+      } else {
+        initializeModule(vm, module, true);
+        result = compile(vm, module, source, NULL);
+      }
+
       Realloc(vm, source, 0);
     }
+
+    if (is_bytecode)
+      *is_bytecode = local_is_bytecode;
 
     if (result == RESULT_SUCCESS) {
       vmRegisterModule(vm, module, module->path);
@@ -535,10 +584,59 @@ Result RunFile(VM* vm, const char* path) {
   return result;
 }
 
+Result CompileStringToBytecode(VM* vm, const char* source, SaynaaBytecode* out) {
+  if (vm == NULL || source == NULL || out == NULL)
+    return RESULT_COMPILE_ERROR;
+
+  saynaa_bytecode_init(out);
+
+  Module* module = newModule(vm);
+  vmPushTempRef(vm, &module->_super); // module.
+
+  module->path = newString(vm, "@(Bytecode)");
+  Result result = compile(vm, module, source, NULL);
+
+  if (result == RESULT_SUCCESS) {
+    ByteBuffer payload;
+    ByteBufferInit(&payload);
+    SaynaaBytecodeStatus status = saynaa_bytecode_serialize_module(vm, module,
+                                                                    &payload);
+    if (status == SAYNAA_BC_OK) {
+      status = saynaa_bytecode_set_payload(vm, out, payload.data, payload.count,
+                                           0, (uint64_t) time(NULL));
+    }
+    ByteBufferClear(&payload, vm);
+    result = (status == SAYNAA_BC_OK) ? RESULT_SUCCESS : RESULT_COMPILE_ERROR;
+  }
+
+  vmPopTempRef(vm); // module.
+  return result;
+}
+
+Result CompileFileToBytecode(VM* vm, const char* path, SaynaaBytecode* out) {
+  if (vm == NULL || path == NULL || out == NULL)
+    return RESULT_COMPILE_ERROR;
+
+  bool is_bytecode = false;
+  char* source = LoadScriptAutoDetect(vm, path, &is_bytecode);
+  if (source == NULL)
+    return RESULT_COMPILE_ERROR;
+
+  if (is_bytecode) {
+    Realloc(vm, source, 0);
+    return RESULT_COMPILE_ERROR;
+  }
+
+  Result result = CompileStringToBytecode(vm, source, out);
+  Realloc(vm, source, 0);
+  return result;
+}
+
 // TODO: Consider moving to a shared location.
 // Retrieves the implicit main function from a module for REPL execution.
 Closure* moduleGetMainFunction(VM* vm, Module* module) {
-  int main_index = moduleGetGlobalIndex(module, IMPLICIT_MAIN_NAME, (uint32_t) strlen(IMPLICIT_MAIN_NAME));
+  int main_index = moduleGetGlobalIndex(module, IMPLICIT_MAIN_NAME,
+                                        (uint32_t) strlen(IMPLICIT_MAIN_NAME));
   if (main_index == -1)
     return NULL;
   ASSERT_INDEX(main_index, (int) module->globals.count);
@@ -655,39 +753,11 @@ Result RunREPL(VM* vm) {
 /*****************************************************************************/
 
 void SetRuntimeError(VM* vm, const char* message) {
-  if (vm == NULL)
-    return;
-
-  if (vm->fiber == NULL) {
-    if (vm->config.stderr_write != NULL) {
-      vm->config.stderr_write(vm, "Runtime error (no fiber): ");
-      vm->config.stderr_write(vm, message == NULL ? "<null>" : message);
-      vm->config.stderr_write(vm, "\n");
-    }
-    return;
-  }
-
+  CHECK_FIBER_EXISTS(vm);
   VM_SET_ERROR(vm, newString(vm, message));
 }
 
 void SetRuntimeErrorFmt(VM* vm, const char* fmt, ...) {
-  if (vm == NULL)
-    return;
-
-  if (vm->fiber == NULL) {
-    if (vm->config.stderr_write != NULL) {
-      char buff[1024];
-      va_list args;
-      va_start(args, fmt);
-      vsnprintf(buff, sizeof(buff), fmt, args);
-      va_end(args);
-      vm->config.stderr_write(vm, "Runtime error (no fiber): ");
-      vm->config.stderr_write(vm, buff);
-      vm->config.stderr_write(vm, "\n");
-    }
-    return;
-  }
-
   va_list args;
   va_start(args, fmt);
   VM_SET_ERROR(vm, newStringVaArgs(vm, fmt, args));
@@ -945,7 +1015,8 @@ void setSlotPointer(VM* vm, int index, void* native_ptr, Destructor destructor) 
   SET_SLOT(index, VAR_OBJ(newPointer(vm, native_ptr, destructor)));
 }
 
-void setSlotClosure(VM* vm, int index, const char* name, nativeFn fptr, int arity, const char* docstring) {
+void setSlotClosure(VM* vm, int index, const char* name, nativeFn fptr,
+                    int arity, const char* docstring) {
   CHECK_FIBER_EXISTS(vm);
   VALIDATE_SLOT_INDEX(index);
   SET_SLOT(index, VAR_OBJ(newNativeClosure(vm, name, fptr, arity, docstring)));
@@ -1082,7 +1153,8 @@ void NewPointer(VM* vm, int index, void* native_ptr, Destructor destructor) {
   SET_SLOT(index, VAR_OBJ(newPointer(vm, native_ptr, destructor)));
 }
 
-void NewClosure(VM* vm, int index, const char* name, nativeFn fptr, int arity, const char* docstring) {
+void NewClosure(VM* vm, int index, const char* name, nativeFn fptr, int arity,
+                const char* docstring) {
   CHECK_FIBER_EXISTS(vm);
   VALIDATE_SLOT_INDEX(index);
   SET_SLOT(index, VAR_OBJ(newNativeClosure(vm, name, fptr, arity, docstring)));
@@ -1105,6 +1177,18 @@ bool ListInsert(VM* vm, int list, int32_t index, int value) {
 
   listInsert(vm, l, (uint32_t) index, SLOT(value));
   return true;
+}
+
+bool MapSet(VM* vm, int map, int key, int value) {
+  CHECK_FIBER_EXISTS(vm);
+  VALIDATE_SLOT_INDEX(map);
+  VALIDATE_SLOT_INDEX(key);
+  VALIDATE_SLOT_INDEX(value);
+
+  ASSERT(IS_OBJ_TYPE(SLOT(map), OBJ_MAP), "Slot value wasn't a Map.");
+  Map* m = (Map*) AS_OBJ(SLOT(map));
+  mapSet(vm, m, SLOT(key), SLOT(value));
+  return !VM_HAS_ERROR(vm);
 }
 
 bool ListPop(VM* vm, int list, int32_t index, int popped) {
@@ -1206,7 +1290,8 @@ bool CallMethod(VM* vm, int instance, const char* method, int argc, int argv, in
 
   if (IS_OBJ_TYPE(callable, OBJ_CLOSURE)) {
     Var retval;
-    vmCallMethod(vm, SLOT(instance), (Closure*) AS_OBJ(callable), argc, vm->fiber->ret + argv, &retval);
+    vmCallMethod(vm, SLOT(instance), (Closure*) AS_OBJ(callable), argc,
+                 vm->fiber->ret + argv, &retval);
     if (ret >= 0)
       SET_SLOT(ret, retval);
     return !VM_HAS_ERROR(vm);
@@ -1289,8 +1374,14 @@ static char* stdinRead(VM* vm) {
   return str;
 }
 
-static char* loadScript(VM* vm, const char* path) {
-  FILE* file = fopen(path, "r");
+static char* loadScriptAutoDetect(VM* vm, const char* path) {
+  return LoadScriptAutoDetect(vm, path, NULL);
+}
+
+static uint8_t* readFileRawBytes(VM* vm, const char* path, size_t* out_size) {
+  if (out_size)
+    *out_size = 0;
+  FILE* file = fopen(path, "rb");
   if (file == NULL)
     return NULL;
 
@@ -1301,15 +1392,52 @@ static char* loadScript(VM* vm, const char* path) {
   size_t file_size = ftell(file);
   fseek(file, 0, SEEK_SET);
 
-  // Allocate string + 1 for the NULL terminator.
-  char* buff = (char*) Realloc(vm, NULL, file_size + 1);
+  // Allocate buffer (+1 for optional null terminator).
+  uint8_t* buff = (uint8_t*) Realloc(vm, NULL, file_size + 1);
   ASSERT(buff != NULL, "Realloc failed.");
 
   clearerr(file);
-  size_t read = fread(buff, sizeof(char), file_size, file);
+  size_t read = fread(buff, sizeof(uint8_t), file_size, file);
   ASSERT(read <= file_size, "fread() failed.");
-  buff[read] = '\0';
   fclose(file);
-
+  if (out_size)
+    *out_size = read;
   return buff;
+}
+
+char* LoadScriptAutoDetect(VM* vm, const char* path, bool* is_bytecode) {
+  if (is_bytecode)
+    *is_bytecode = false;
+
+  size_t read = 0;
+  uint8_t* buff = readFileRawBytes(vm, path, &read);
+  if (buff == NULL)
+    return NULL;
+
+  if (read >= SAYNAA_BYTECODE_HEADER_SIZE) {
+    SaynaaBytecodeHeader header;
+    SaynaaBytecodeStatus status = saynaa_bytecode_decode_header(buff, read, &header);
+    if (status == SAYNAA_BC_OK) {
+      status = saynaa_bytecode_validate_header(&header, read);
+      if (status == SAYNAA_BC_INVALID_MAGIC) {
+        // Not bytecode, fall through to source.
+      } else if (status != SAYNAA_BC_OK) {
+        Realloc(vm, buff, 0);
+        return NULL;
+      } else {
+        const uint8_t* payload = buff + SAYNAA_BYTECODE_HEADER_SIZE;
+        status = saynaa_bytecode_validate_checksum(&header, payload, header.bytecode_size);
+        if (status != SAYNAA_BC_OK) {
+          Realloc(vm, buff, 0);
+          return NULL;
+        }
+        if (is_bytecode)
+          *is_bytecode = true;
+        return (char*) buff;
+      }
+    }
+  }
+
+  buff[read] = '\0';
+  return (char*) buff;
 }

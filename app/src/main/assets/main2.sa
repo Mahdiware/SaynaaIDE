@@ -41,7 +41,8 @@ function onCreate(arg1)
 		end
 
 		subtitle.setText(msg)
-		info.setText("count=$count, ok=$ok")
+		info.setText("count=${count}, ok=${ok}")
+		info.setTextIsSelectable(true)
 		Toast.makeText(activity, "received data from main.sa", Toast.LENGTH_SHORT).show()
 	else
 		Toast.makeText(activity, "main2 onCreate (no data)", Toast.LENGTH_SHORT).show()

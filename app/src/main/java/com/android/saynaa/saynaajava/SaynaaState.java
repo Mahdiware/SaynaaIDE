@@ -15,8 +15,10 @@ public class SaynaaState {
     if (isClosed()) {
       throw new SaynaaException("SaynaaState is closed.");
     }
-    saynaa.setSource(source);
-    saynaa.run();
+    int result = saynaa.runString(source);
+    if (result != 0) {
+      throw new SaynaaException("SaynaaState execution failed with code: " + result);
+    }
   }
 
   public synchronized void close() {

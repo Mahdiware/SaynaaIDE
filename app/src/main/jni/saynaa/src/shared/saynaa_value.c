@@ -424,6 +424,32 @@ Function* newFunction(VM* vm, const char* name, int length, Module* owner,
   return func;
 }
 
+Function* newFunctionRaw(VM* vm, Module* owner, String* name, String* docstring,
+                         int arity, bool is_method, int upvalue_count) {
+  Function* func = ALLOCATE(vm, Function);
+  memset(func, 0, sizeof(Function));
+  varInitObject(&func->_super, vm, OBJ_FUNC);
+
+  vmPushTempRef(vm, &func->_super); // func
+
+  func->owner = owner;
+  func->is_native = false;
+  func->arity = arity;
+  func->is_method = is_method;
+  func->upvalue_count = upvalue_count;
+  func->name = (name != NULL) ? name->data : NULL;
+  func->docstring = (docstring != NULL) ? docstring->data : NULL;
+
+  Fn* fn = ALLOCATE(vm, Fn);
+  ByteBufferInit(&fn->opcodes);
+  UintBufferInit(&fn->oplines);
+  fn->stack_size = 0;
+  func->fn = fn;
+
+  vmPopTempRef(vm); // func
+  return func;
+}
+
 Closure* newClosure(VM* vm, Function* fn) {
   Closure* closure = ALLOCATE_DYNAMIC(vm, Closure, fn->upvalue_count, Upvalue*);
   varInitObject(&closure->_super, vm, OBJ_CLOSURE);
@@ -557,6 +583,32 @@ Class* newClass(VM* vm, const char* name, int length, Class* super,
   } else {
     cls->name = newStringLength(vm, name, (uint32_t) length);
   }
+
+  vmPopTempRef(vm); // class.
+  return cls;
+}
+
+Class* newClassRaw(VM* vm, Module* owner, String* name, String* docstring) {
+  Class* cls = ALLOCATE(vm, Class);
+
+  memset(cls, 0, sizeof(Class));
+  varInitObject(&cls->_super, vm, OBJ_CLASS);
+
+  vmPushTempRef(vm, &cls->_super); // class.
+
+  ClosureBufferInit(&cls->methods);
+  cls->static_attribs = newMap(vm);
+
+  cls->class_of = vINSTANCE;
+  cls->super_class = vm->builtin_classes[vOBJECT];
+  cls->docstring = (docstring != NULL) ? docstring->data : NULL;
+
+  for (int i = 0; i < MAX_MAGIC_METHODS; i++) {
+    cls->magic_methods[i] = (Closure*) -1;
+  }
+
+  cls->owner = owner;
+  cls->name = name;
 
   vmPopTempRef(vm); // class.
   return cls;
@@ -1493,12 +1545,38 @@ int moduleGetGlobalIndex(Module* module, const char* name, uint32_t length) {
   for (uint32_t i = 0; i < module->global_names.count; i++) {
     uint32_t name_index = module->global_names.data[i];
     String* g_name = moduleGetStringAt(module, name_index);
-    ASSERT(g_name != NULL, OOPS);
+    if (g_name == NULL) {
+      continue;
+    }
     if (g_name->length == length && strncmp(g_name->data, name, length) == 0) {
       return (int) i;
     }
   }
   return -1;
+}
+
+bool moduleDeleteGlobal(VM* vm, Module* module, const char* name, uint32_t length) {
+  ASSERT(module != NULL && name != NULL, OOPS);
+
+  int g_index = moduleGetGlobalIndex(module, name, length);
+  if (g_index == -1) {
+    return false;
+  }
+
+  uint32_t idx = (uint32_t) g_index;
+  if (idx + 1 < module->globals.count) {
+    memmove(&module->globals.data[idx], &module->globals.data[idx + 1],
+            (module->globals.count - idx - 1) * sizeof(Var));
+    memmove(&module->global_names.data[idx], &module->global_names.data[idx + 1],
+            (module->global_names.count - idx - 1) * sizeof(uint32_t));
+  }
+
+  if (module->globals.count > 0)
+    module->globals.count--;
+  if (module->global_names.count > 0)
+    module->global_names.count--;
+
+  return true;
 }
 
 void moduleAddMain(VM* vm, Module* module) {

@@ -33,6 +33,7 @@ import com.android.saynaa.utils.FileUtil;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.Map;
 
 /**
@@ -124,9 +125,23 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
         return;
       }
 
-      saynaa = new Saynaa(this);
-      saynaa.setScriptPath(saynaaPath);
-      saynaa.run();
+      initSaynaa();
+      File initFile = new File(saynaaDir == null ? localDir : saynaaDir, "init.sa");
+      if (initFile.exists()) {
+        int initResult = saynaa.runFile(initFile.getAbsolutePath());
+        if (initResult != 0) {
+          showScriptError(errorReason(initResult),
+              "Startup failed @ " + initFile.getAbsolutePath() + "\n" + drainNativeErrors());
+          setContentView(layout);
+          return;
+        }
+      }
+      int result = saynaa.runFile(saynaaPath);
+      if (result != 0) {
+        showScriptError(errorReason(result), "Startup failed @ " + saynaaPath + "\n" + drainNativeErrors());
+        setContentView(layout);
+        return;
+      }
 
       String startupErr = drainNativeErrors();
       if (!startupErr.isEmpty()) {
@@ -250,6 +265,21 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
     return SaynaaApplication.getInstance().setSharedData(key, value);
   }
 
+  private void initSaynaa() {
+    saynaa = new Saynaa(this);
+    ArrayList<Object> javaList = new ArrayList<>();
+    javaList.add("alpha");
+    javaList.add(123);
+    HashMap<String, Object> javaMap = new HashMap<>();
+    javaMap.put("flag", true);
+    javaMap.put("count", 7);
+    saynaa.setGlobalValue("java_pushed_number", 42, false);
+    saynaa.setGlobalValue("java_pushed_list_obj", javaList, false);
+    saynaa.setGlobalValue("java_pushed_list_saynaa", javaList, true);
+    saynaa.setGlobalValue("java_pushed_map_saynaa", javaMap, true);
+    saynaa.setGlobal("activity", this);
+  }
+
   @Override
   protected void onActivityResult(int requestCode, int resultCode, Intent data) {
     // TODO: Implement this method
@@ -276,50 +306,70 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
 
   @Override
   public boolean onKeyShortcut(int keyCode, KeyEvent event) {
-    runFunc("onKeyShortcut", keyCode, event);
+    Object ret = runFunc("onKeyShortcut", keyCode, event);
+    if (ret instanceof Boolean && (Boolean) ret)
+      return true;
     return super.onKeyShortcut(keyCode, event);
   }
 
   @Override
   public boolean onKeyDown(int keyCode, KeyEvent event) {
-    runFunc("onKeyDown", keyCode, event);
+    Object ret = runFunc("onKeyDown", keyCode, event);
+    if (ret instanceof Boolean && (Boolean) ret)
+      return true;
     return super.onKeyDown(keyCode, event);
   }
 
   @Override
   public boolean onKeyUp(int keyCode, KeyEvent event) {
-    runFunc("onKeyUp", keyCode, event);
+    Object ret = runFunc("onKeyUp", keyCode, event);
+    if (ret instanceof Boolean && (Boolean) ret)
+      return true;
     return super.onKeyUp(keyCode, event);
   }
 
   @Override
   public boolean onKeyLongPress(int keyCode, KeyEvent event) {
-    runFunc("onKeyLongPress", keyCode, event);
+    Object ret = runFunc("onKeyLongPress", keyCode, event);
+    if (ret instanceof Boolean && (Boolean) ret)
+      return true;
     return super.onKeyLongPress(keyCode, event);
   }
 
   @Override
   public boolean onTouchEvent(MotionEvent event) {
-    runFunc("onTouchEvent", event);
+    Object ret = runFunc("onTouchEvent", event);
+    if (ret instanceof Boolean && (Boolean) ret)
+      return true;
     return super.onTouchEvent(event);
   }
 
   @Override
   public boolean onCreateOptionsMenu(Menu menu) {
     optionsMenu = menu;
-    runFunc("onCreateOptionsMenu", menu);
+    Object ret = runFunc("onCreateOptionsMenu", menu);
+    if (ret instanceof Boolean)
+      return (Boolean) ret;
     return super.onCreateOptionsMenu(menu);
   }
 
   @Override
   public boolean onOptionsItemSelected(MenuItem item) {
-    runFunc("onOptionsItemSelected", item);
+    if (!item.hasSubMenu()) {
+      Object ret = runFunc("onOptionsItemSelected", item);
+      if (ret instanceof Boolean && (Boolean) ret)
+        return true;
+    }
     return super.onOptionsItemSelected(item);
   }
 
   @Override
   public boolean onMenuItemSelected(int featureId, MenuItem item) {
-    runFunc("onMenuItemSelected", featureId, item);
+    if (!item.hasSubMenu()) {
+      Object ret = runFunc("onMenuItemSelected", featureId, item);
+      if (ret instanceof Boolean && (Boolean) ret)
+        return true;
+    }
     return super.onMenuItemSelected(featureId, item);
   }
 
@@ -331,7 +381,9 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
 
   @Override
   public boolean onContextItemSelected(MenuItem item) {
-    runFunc("onContextItemSelected", item);
+    Object ret = runFunc("onContextItemSelected", item);
+    if (ret instanceof Boolean && (Boolean) ret)
+      return true;
     return super.onContextItemSelected(item);
   }
 
@@ -401,6 +453,18 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
       push(2, func);
     else
       push(3, func, args);
+  }
+
+  public void set(String key, Object value) {
+    if (saynaa == null || key == null || key.trim().isEmpty())
+      return;
+    saynaa.setGlobal(key, value);
+  }
+
+  public Object get(String key) {
+    if (saynaa == null || key == null || key.trim().isEmpty())
+      return null;
+    return saynaa.getGlobal(key);
   }
 
   public void push(int what, String s) {
@@ -511,11 +575,13 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
     }
 
     try {
-      int result = saynaa.pcall(funcName, args);
-      if (result != 0 && mDebug) {
-        Log.w(TAG, "runFunc non-zero result for hook=" + funcName + ": " + result);
-        showScriptError(errorReason(result), "Hook failed: " + funcName + "\n" + drainNativeErrors());
+      PCallResult result = saynaa.pcall(funcName, args);
+      if (!result.success && mDebug) {
+        Log.w(TAG, "runFunc non-zero result for hook=" + funcName + ": " + result.message);
+        showScriptError(result.message, "Hook failed: " + funcName + "\n" + drainNativeErrors());
+        return null;
       }
+      return result.value;
     } catch (Throwable t) {
       if (mDebug) {
         Log.w(TAG, "runFunc failed for hook=" + funcName, t);
@@ -576,20 +642,6 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
     default:
       return "Unknown error " + error;
     }
-  }
-
-  private boolean hasScriptHook(String funcName) {
-    if (source == null || source.isEmpty()) {
-      return false;
-    }
-
-    // Supported forms:
-    // 1) function onCreate(...)
-    // 2) onCreate = function(...)
-    final String directDecl = "function " + funcName + "(";
-    final String assignedDecl = funcName + " = function(";
-
-    return source.contains(directDecl) || source.contains(assignedDecl);
   }
 
   public void newActivity(String path, Object[] arg, boolean newDocument) {
