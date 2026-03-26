@@ -1,247 +1,165 @@
-import java
-import hello
-
-LinearLayout = java.bindClass('android.widget.LinearLayout')
-TextView = java.bindClass('android.widget.TextView')
-Button = java.bindClass('android.widget.Button')
-EditText = java.bindClass('android.widget.EditText')
-Toast = java.bindClass('android.widget.Toast')
-Bundle = java.bindClass('android.os.Bundle')
-View = java.bindClass('android.view.View')
-TextWatcher = java.bindClass('android.text.TextWatcher')
-Runnable = java.bindClass('java.lang.Runnable')
-
-assert(LinearLayout != null, 'Failed to bind LinearLayout')
-assert(TextView != null, 'Failed to bind TextView')
-assert(Button != null, 'Failed to bind Button')
-assert(EditText != null, 'Failed to bind EditText')
-assert(Toast != null, 'Failed to bind Toast')
-assert(Bundle != null, 'Failed to bind Bundle')
-assert(View != null, 'Failed to bind View')
-assert(TextWatcher != null, 'Failed to bind TextWatcher')
-assert(Runnable != null, 'Failed to bind Runnable')
-
-function assert_pcall(result, label)
-	ok = result[0]
-	if ok == null then
-		ok = result[1]
-	end
-	if ok != true then
-		err = result[1]
-		if err == null then
-			err = result[2]
-		end
-		assert(false, label + ': ' + str(err))
-	end
-end
+import "android.widget.*"
+import "android.view.*"
+import "android.text.*"
+import "android.os.*"
+import "com.android.saynaa.*"
 
 function print(msg)
 	Toast.makeText(activity, msg, Toast.LENGTH_SHORT).show()
 end
 
-print("init: ${initial}")
+DemoLayout = {
+  type: LinearLayout,
+  orientation: 'vertical',
+  padding: '16dp',
+  backgroundColor: '#EEF0F4',
+  layout_width: 'match_parent',
+  layout_height: 'match_parent',
 
-activity.setTitle('Saynaa Demo')
+  children: [
+    # HEADER CARD
+    {
+      type: LinearLayout,
+      orientation: 'vertical',
+      padding: '18dp',
+      backgroundColor: '#FFFFFF',
+      layout_width: 'match_parent',
+      layout_height: 'wrap_content',
+      layout_marginBottom: '16dp',
+      elevation: '4dp',
 
+      children: [
+        {
+          type: TextView,
+          id: 'Title',
+          text: 'Saynaa Demo UI',
+          textSize: '24sp',
+          textStyle: 'bold',
+          textColor: '#111111',
+          layout_marginBottom: '6dp'
+        },
 
-testList = java.create('java.util.ArrayList')
-testList.add('a')
-testList.add('b')
-assert(java.length(testList) == 2, 'java.length failed')
+        {
+          type: TextView,
+          id: 'Description',
+          text: 'Modern IDE-style layout demo for Saynaa DSL',
+          textSize: '14sp',
+          textColor: '#666666'
+        }
 
-result = pcall(function()
-	return java.call(testList, 'size')
-end)
-assert_pcall(result, 'java.call failed')
-assert(result[1] == 2, 'java.call size mismatch')
+      ]
+    },
 
-result = pcall(function()
-	return java.callStatic('java.lang.Integer', 'parseInt', '123')
-end)
-assert_pcall(result, 'java.callStatic failed')
-assert(result[1] == 123, 'java.callStatic parseInt mismatch')
+    # INPUT CARD
+    {
+      type: LinearLayout,
+      orientation: 'vertical',
+      padding: '16dp',
+      backgroundColor: '#FFFFFF',
+      layout_width: 'match_parent',
+      layout_height: 'wrap_content',
+      layout_marginBottom: '16dp',
+      elevation: '3dp',
 
-result = pcall(function()
-	pt = java.new('android.graphics.Point', 1, 2)
-	java.setField(pt, 'x', 7)
-	return java.getField(pt, 'x')
-end)
-assert_pcall(result, 'java.getField/setField failed')
-assert(result[1] == 7, 'java.getField x mismatch')
+      children: [
+        {
+          type: EditText,
+          id: 'NameInput',
+          hint: 'Enter your name',
+          layout_width: 'match_parent',
+          layout_height: 'wrap_content',
+          backgroundColor: '#F3F3F3',
+          padding: '12dp',
+          layout_marginBottom: '12dp'
+        },
 
-result = pcall(function()
-	state = { ok: false }
-	runner = Runnable(function()
-		state.setattr('ok', true)
-	end)
-	java.call(runner, 'run')
-	return state.get('ok')
-end)
-assert_pcall(result, 'Runnable(function) failed')
-assert(result[1] == true, 'Runnable(function) run mismatch')
+        {
+          type: Switch,
+          id: 'EnableSwitch',
+          text: 'Enable notifications',
+          layout_marginBottom: '12dp'
+        },
 
-result = pcall(function()
-	proxy = java.createProxy('java.lang.Runnable', "script_proxy_ok = true")
-	assert(proxy != null, 'java.createProxy script returned null')
-	java.call(proxy, 'run')
-	return true
-end)
-assert_pcall(result, 'java.createProxy script failed')
-assert(result[1] == true, 'java.createProxy script mismatch')
+        {
+          type: CodeEditor,
+          id: 'Editor',
+          layout_width: 'match_parent',
+          layout_height: '200dp',
+          layout_marginBottom: '12dp'
+        }
 
-result = pcall(function()
-	state = { ok: false }
-	proxy = java.create('java.lang.Runnable', {
-		run: function()
-			state.setattr('ok', true)
-		end
-	})
-	java.call(proxy, 'run')
-	return state.get('ok')
-end)
-assert_pcall(result, 'java.create(interface) failed')
-assert(result[1] == true, 'java.create interface run mismatch')
+      ]
+    },
 
-if java_pushed_number != null then
-	assert(java_pushed_number != null, 'java_pushed_number missing')
-end
-if java_pushed_list_obj != null then
-	java_pushed_list_obj.add('c')
-	assert(java.length(java_pushed_list_obj) >= 1, 'java_pushed_list_obj invalid')
-end
-if java_pushed_list_saynaa != null then
-	result = pcall(function()
-		java_pushed_list_saynaa.append('x')
-	end)
-	assert_pcall(result, 'java_pushed_list_saynaa append failed')
-	assert(java_pushed_list_saynaa.find('x') != -1, 'java_pushed_list_saynaa append missing')
-end
-if java_pushed_map_saynaa != null then
-	result = pcall(function()
-		java_pushed_map_saynaa.setattr('k', 'v')
-	end)
-	assert_pcall(result, 'java_pushed_map_saynaa put failed')
-  assert(java_pushed_map_saynaa.get('k') == 'v', 'java_pushed_map_saynaa put mismatch')
-end
+    # BUTTON ROW
+    {
+      type: LinearLayout,
+      orientation: 'horizontal',
+      layout_width: 'match_parent',
+      layout_height: 'wrap_content',
+      layout_weight: 2,
 
+      children: [
+        {
+          type: Button,
+          id: 'SubmitButton',
+          text: 'Run',
+          layout_width: '0dp',
+          layout_weight: 1,
+          layout_marginEnd: '8dp',
+          backgroundColor: '#6200EE',
+          textColor: '#FFFFFF',
+          padding: '12dp',
 
+          onClick: function(v)
+            name = NameInput.getText()
+            enabled = EnableSwitch.isChecked()
 
-root = LinearLayout(activity)
-assert(root != null, 'LinearLayout construction failed')
-root.setOrientation(LinearLayout.VERTICAL)
-root.setPadding(40, 40, 40, 40)
+            Title.setText('Hello ' + name)
 
-title = TextView(activity)
-title.setText('Saynaa UI')
-title.setTextSize(24)
+            Description.setText(
+              enabled and 'Notifications enabled' or 'Notifications disabled'
+            )
+          end
+        },
 
-subtitle = TextView(activity)
-subtitle.setText('Simple, clean callback demo')
-subtitle.setTextSize(14)
+        {
+          type: Button,
+          id: 'nextpage',
+          text: 'Next Page',
+          layout_width: '0dp',
+          layout_weight: 1,
+          layout_marginStart: '8dp',
+          backgroundColor: '#03DAC5',
+          textColor: '#000000',
+          padding: '12dp'
+        }
 
-status = TextView(activity)
-status.setText('Status: waiting...')
-status.setTextSize(16)
+      ]
+    }
 
-input = EditText(activity)
-input.setHint('Type to trigger TextWatcher')
+  ]
+}
 
-btn = Button(activity)
-btn.setText('Tap / Long Press')
+assert(activity != null, 'activity is null')
 
-btn2 = Button(activity)
-btn2.setText('Open main2')
-
-btn3 = Button(activity)
-btn3.setText('Run proxy syntax test')
-
-btn4 = Button(activity)
-btn4.setText('Run loadlayout test')
-
-
-root.addView(title)
-root.addView(subtitle)
-root.addView(status)
-root.addView(input)
-root.addView(btn)
-root.addView(btn2)
-root.addView(btn3)
-root.addView(btn4)
-
+root = loadlayout.loadlayout(_module, DemoLayout)
+assert(root != null, 'loadlayout returned null')
 activity.setContentView(root)
 
-click_cb = {
-	onClick: function(v)
-		v.setText('Tapped ✅')
-		status.setText('Status: button clicked')
-	end
-}
-btn.setOnClickListener(java.create('android.view.View$OnClickListener', click_cb))
+assert(Title != null, 'Title view missing')
+assert(Description != null, 'Description view missing')
+assert(NameInput != null, 'NameInput view missing')
+assert(EnableSwitch != null, 'EnableSwitch view missing')
+assert(SubmitButton != null, 'SubmitButton view missing')
+assert(nextpage != null, 'nextpage view missing')
+assert(Editor != null, 'Editor view missing')
 
-open2_cb = {
-	onClick: function(v)
-		b = Bundle()
-		b.putString('title', 'Hello from main.sa')
-		b.putString('message', 'Data passed with Bundle')
-		b.putInt('count', 42)
-		b.putBoolean('ok', true)
+Editor.setText('print("Hello from CodeEditor")\n')
 
-		activity.newActivity('main2', b)
-		activity.finish()
-	end
-}
-btn2.setOnClickListener(java.create('android.view.View$OnClickListener', open2_cb))
-
-proxy_click = java.create('android.view.View$OnClickListener', {
-	onClick: function(v)
-		activity.newActivity('proxy_test')
-	end
-})
-btn3.setOnClickListener(proxy_click)
-
-loadlayout_click = java.create('android.view.View$OnClickListener', {
-	onClick: function(v)
-		activity.newActivity('main3')
-	end
-})
-btn4.setOnClickListener(loadlayout_click)
-
-function tijaabo()
-end
-
-function onCreate(arg1)
-end
-
-function onCreateOptionsMenu(menu)
-	menu.add('option 1')
-	menu.add('option 2')
-	menu.add('option 3')
-end
-
-function onOptionsItemSelected(item)
-end
-
-long_click_cb = {
-	onLongClick: function(v)
-		v.setText('Long Pressed ✅')
-		status.setText('Status: long click detected')
-		t = Toast.makeText(activity, 'Long click', Toast.LENGTH_SHORT)
-		t.show()
-		return true
-	end
-}
-btn.setOnLongClickListener(java.create('android.view.View$OnLongClickListener', long_click_cb))
-
-textWatcher_cb = {
-	beforeTextChanged: function(s, start, count, after)
-	end,
-	onTextChanged: function(s, start, before, count)
-		status.setText('Typing: ' + s.toString())
-	end,
-	afterTextChanged: function(s)
-	end
-}
-
-input.addTextChangedListener(TextWatcher(textWatcher_cb))
-
-Toast.makeText(activity, 'Welcome 👋', Toast.LENGTH_SHORT).show()
+nextpage.setOnClickListener(View.OnClickListener({
+  onClick: function(v)
+    print('next page button clicked')
+	activity.newActivity('main1')
+  end
+}))

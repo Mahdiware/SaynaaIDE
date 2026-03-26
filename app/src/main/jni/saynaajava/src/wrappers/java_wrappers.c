@@ -1,5 +1,9 @@
 #include "saynaa_internal.h"
 
+static bool is_uppercase_ascii(char c) {
+  return c >= 'A' && c <= 'Z';
+}
+
 void* new_java_class_instance(VM* vm) {
   (void) vm;
   return calloc(1, sizeof(JavaClassNative));
@@ -122,7 +126,8 @@ void java_class_getter(VM* vm) {
   }
 
   // Try resolving nested class references like View.OnClickListener -> android.view.View$OnClickListener
-  if (bridge != NULL && bridge->javaBridgeClass != NULL && bridge->mFindClass != NULL) {
+  if (name != NULL && name[0] != '\0' && is_uppercase_ascii(name[0])
+      && bridge != NULL && bridge->javaBridgeClass != NULL && bridge->mFindClass != NULL) {
     jobject classObj = (*env)->NewLocalRef(env, thiz->class_ref->global);
     jstring ownerNameObj = get_java_object_name(env, vm, bridge, classObj,
         "JavaClass._getter getName() failed", "JavaClass._getter failed to resolve class name.");

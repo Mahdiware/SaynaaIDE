@@ -871,9 +871,27 @@ void registerModuleTerm(VM* vm) {
 }
 
 void cleanupModuleTerm(VM* vm) {
-  if (_cls_term_event)
+  if (vm == NULL)
+    return;
+
+  // Only release handles that are still owned by the VM handle list.
+  // This prevents double-free when the host already cleared handles.
+  bool has_event = false;
+  bool has_config = false;
+  for (Handle* h = vm->handles; h != NULL; h = h->next) {
+    if (h == _cls_term_event)
+      has_event = true;
+    if (h == _cls_term_config)
+      has_config = true;
+    if (has_event && has_config)
+      break;
+  }
+
+  if (has_event) {
     releaseHandle(vm, _cls_term_event);
-  if (_cls_term_config)
+  }
+  if (has_config) {
     releaseHandle(vm, _cls_term_config);
+  }
   _termCtxFree(vm);
 }

@@ -67,6 +67,7 @@ typedef struct BridgeState {
   int nextCallbackId;
   CallbackEntry* callbacks;
   bool filesSearchPathAdded;
+  bool closing;
 } BridgeState;
 
 struct CallbackEntry {

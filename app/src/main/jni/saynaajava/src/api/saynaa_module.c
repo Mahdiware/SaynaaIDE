@@ -112,22 +112,24 @@ Result saynaa_run_file_in_main_module(VM* vm, const char* path) {
   Realloc(vm, resolved_, 0);
 
   bool is_bytecode = false;
-  char* source = LoadScriptAutoDetect(vm, module->path->data, &is_bytecode);
-  if (source == NULL)
-    return RESULT_COMPILE_ERROR;
+  Result resultOut = RESULT_SUCCESS;
+  char* source = LoadScriptAutoDetect(vm, module->path->data, &is_bytecode, &resultOut);
+  if (source == NULL) {
+    return (resultOut != RESULT_SUCCESS) ? resultOut : RESULT_COMPILE_ERROR;
+  }
 
   if (is_bytecode) {
     SaynaaBytecodeHeader header;
-    SaynaaBytecodeStatus status = saynaa_bytecode_decode_header(
+    Result status = saynaa_bytecode_decode_header(
         (const uint8_t*) source, SAYNAA_BYTECODE_HEADER_SIZE, &header);
-    if (status == SAYNAA_BC_OK) {
+    if (status == RESULT_SUCCESS) {
       const uint8_t* payload = (const uint8_t*) source + SAYNAA_BYTECODE_HEADER_SIZE;
       reset_module_for_bytecode(vm, module);
       status = saynaa_bytecode_deserialize_module(vm, module, payload, header.bytecode_size);
     }
     Realloc(vm, source, 0);
 
-    if (status != SAYNAA_BC_OK)
+    if (status != RESULT_SUCCESS)
       return RESULT_COMPILE_ERROR;
 
     inject_builtin_global(vm, module, "eventView");

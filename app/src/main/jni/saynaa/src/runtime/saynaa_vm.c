@@ -573,22 +573,25 @@ static Module* _importScript(VM* vm, String* resolved, String* name) {
     bool is_bytecode = false;
     bool header_seen = false;
     SaynaaBytecodeHeader header;
-    SaynaaBytecodeStatus status = saynaa_bytecode_decode_header(
+    Result status = saynaa_bytecode_decode_header(
         (const uint8_t*) source, SAYNAA_BYTECODE_HEADER_SIZE, &header);
-    if (status == SAYNAA_BC_OK) {
+    if (status == RESULT_SUCCESS) {
       status = saynaa_bytecode_validate_header(&header, 0);
-      if (status == SAYNAA_BC_INVALID_MAGIC) {
+      if (status == RESULT_BYTECODE_INVALID_MAGIC) {
         header_seen = false;
-      } else if (status == SAYNAA_BC_OK) {
+      } else if (status == RESULT_SUCCESS) {
         header_seen = true;
         const uint8_t* payload = (const uint8_t*) source
                                  + SAYNAA_BYTECODE_HEADER_SIZE;
         status = saynaa_bytecode_validate_checksum(&header, payload,
                                                    header.bytecode_size);
-        if (status == SAYNAA_BC_OK) {
-          status = saynaa_bytecode_deserialize_module(vm, module, payload,
-                                                      header.bytecode_size);
-          if (status == SAYNAA_BC_OK) {
+        if (status == RESULT_SUCCESS) {
+          status = saynaa_bytecode_validate_payload(payload, header.bytecode_size);
+          if (status == RESULT_SUCCESS) {
+            status = saynaa_bytecode_deserialize_module(vm, module, payload,
+                                                        header.bytecode_size);
+          }
+          if (status == RESULT_SUCCESS) {
             is_bytecode = true;
           }
         }
@@ -1221,6 +1224,21 @@ L_vm_main_loop:
       DISPATCH();
     }
 
+    OPCODE(MAP_APPEND) : {
+      Var value = PEEK(-1); // Don't pop yet, we need the reference for gc.
+      Var on = PEEK(-2);
+
+      ASSERT(IS_OBJ_TYPE(on, OBJ_MAP), OOPS);
+
+      Map* map = (Map*) AS_OBJ(on);
+      Var key = VAR_NUM((double) map->next_index);
+      mapSet(vm, map, key, value);
+
+      DROP(); // value
+
+      DISPATCH();
+    }
+
     OPCODE(PUSH_LOCAL_0) :
         OPCODE(PUSH_LOCAL_1) :
         OPCODE(PUSH_LOCAL_2) :
@@ -1267,7 +1285,7 @@ L_vm_main_loop:
       uint16_t name_index = READ_SHORT();
       String* name = moduleGetStringAt(module, (int) name_index);
       if (name == NULL) {
-        RUNTIME_ERROR(stringFormat(vm, "Invalid global name in bytecode."));
+        RUNTIME_ERROR(stringFormat(vm, "Invalid global name in module data."));
       }
 
       int g_index = moduleGetGlobalIndex(module, name->data, name->length);
@@ -1309,7 +1327,7 @@ L_vm_main_loop:
       uint16_t name_index = READ_SHORT();
       String* name = moduleGetStringAt(module, (int) name_index);
       if (name == NULL) {
-        RUNTIME_ERROR(stringFormat(vm, "Invalid global name in bytecode."));
+        RUNTIME_ERROR(stringFormat(vm, "Invalid global name in module data."));
       }
       moduleSetGlobal(vm, module, name->data, name->length, PEEK(-1));
       DISPATCH();
@@ -1535,7 +1553,7 @@ L_vm_main_loop:
       uint16_t index = READ_SHORT();
       String* name = moduleGetStringAt(module, (int) index);
       if (name == NULL) {
-        RUNTIME_ERROR(stringFormat(vm, "Invalid import name in bytecode."));
+        RUNTIME_ERROR(stringFormat(vm, "Invalid import name in module data."));
       }
 
       // Regular import bytecode is followed by STORE_GLOBAL for the imported symbol.
@@ -1557,7 +1575,7 @@ L_vm_main_loop:
       if (IS_BOOL(_imported) && AS_BOOL(_imported) == true) {
         if (!has_target_global && (Opcode) (*ip) != OP_STORE_GLOBAL_NAME) {
           RUNTIME_ERROR(stringFormat(vm,
-                                     "Invalid import bytecode state for '@': "
+                                     "Invalid import instruction state for '@': "
                                      "missing STORE_GLOBAL target.",
                                      name));
         }
@@ -1569,7 +1587,7 @@ L_vm_main_loop:
           uint16_t name_index = (uint16_t) ((ip[1] << 8) | ip[2]);
           String* gname = moduleGetStringAt(module, (int) name_index);
           if (gname == NULL) {
-            RUNTIME_ERROR(stringFormat(vm, "Invalid import target name in bytecode."));
+            RUNTIME_ERROR(stringFormat(vm, "Invalid import target name in module data."));
           }
 
           int g_index = moduleGetGlobalIndex(module, gname->data, gname->length);

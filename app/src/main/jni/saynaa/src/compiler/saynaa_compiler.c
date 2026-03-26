@@ -2290,12 +2290,22 @@ static void exprMap(Compiler* compiler) {
       moduleAddString(compiler->module, compiler->parser.vm, key.start, key.length, &index);
       emitOpcode(compiler, OP_PUSH_CONSTANT);
       emitShort(compiler, index);
+      consume(compiler, TK_COLLON, "Expected ':' after map's key.");
+      compileExpression(compiler);
+
     } else {
       compileExpression(compiler);
+      if (match(compiler, TK_COLLON)) {
+        compileExpression(compiler);
+        emitOpcode(compiler, OP_MAP_INSERT);
+        skipNewLines(compiler);
+        continue;
+      } else {
+        emitOpcode(compiler, OP_MAP_APPEND);
+        skipNewLines(compiler);
+        continue;
+      }
     }
-
-    consume(compiler, TK_COLLON, "Expected ':' after map's key.");
-    compileExpression(compiler);
 
     emitOpcode(compiler, OP_MAP_INSERT);
 

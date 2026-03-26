@@ -27,15 +27,15 @@ static char* copyCString(VM* vm, const char* text) {
 static bool loadBytecodeFromBuffer(VM* vm, CompileInfo* info,
                                    const uint8_t* source) {
   SaynaaBytecodeHeader header;
-  SaynaaBytecodeStatus status = saynaa_bytecode_decode_header(
+  Result status = saynaa_bytecode_decode_header(
       source, SAYNAA_BYTECODE_HEADER_SIZE, &header);
-  if (status != SAYNAA_BC_OK) {
+  if (status != RESULT_SUCCESS) {
     SetRuntimeError(vm, "Invalid bytecode header.");
     return false;
   }
 
   status = saynaa_bytecode_validate_header(&header, 0);
-  if (status != SAYNAA_BC_OK) {
+  if (status != RESULT_SUCCESS) {
     SetRuntimeError(vm, "Invalid bytecode header.");
     return false;
   }
@@ -43,14 +43,20 @@ static bool loadBytecodeFromBuffer(VM* vm, CompileInfo* info,
   const uint8_t* payload = source + SAYNAA_BYTECODE_HEADER_SIZE;
   status = saynaa_bytecode_validate_checksum(&header, payload,
                                              header.bytecode_size);
-  if (status != SAYNAA_BC_OK) {
+  if (status != RESULT_SUCCESS) {
     SetRuntimeError(vm, "Bytecode checksum mismatch.");
+    return false;
+  }
+
+  status = saynaa_bytecode_validate_payload(payload, header.bytecode_size);
+  if (status != RESULT_SUCCESS) {
+    SetRuntimeError(vm, "Invalid bytecode payload.");
     return false;
   }
 
   return saynaa_bytecode_set_payload(vm, &info->bytecode, payload,
                                      header.bytecode_size,
-                                     header.flags, header.timestamp) == SAYNAA_BC_OK;
+                                     header.flags, header.timestamp) == RESULT_SUCCESS;
 }
 
 static bool compileSourceToPayload(VM* vm, CompileInfo* info,
@@ -97,7 +103,7 @@ static CompileInfo* compileGetInfo(VM* vm) {
 
 static bool compileEnsureBytecode(VM* vm, CompileInfo* info, const char* path) {
   bool is_bytecode = false;
-  char* loaded = LoadScriptAutoDetect(vm, path, &is_bytecode);
+  char* loaded = LoadScriptAutoDetect(vm, path, &is_bytecode, NULL);
   if (loaded == NULL) {
     SetRuntimeError(vm, "Failed to load source file.");
     return false;
@@ -179,7 +185,7 @@ saynaa_function(_compileSave, "Compile.save([out:String]) -> String",
       return;
     }
     if (saynaa_bytecode_save(&info->bytecode, info->bytecode_path)
-      != SAYNAA_BC_OK) {
+      != RESULT_SUCCESS) {
       SetRuntimeError(vm, "Failed to write bytecode output.");
       return;
     }
@@ -191,7 +197,7 @@ saynaa_function(_compileSave, "Compile.save([out:String]) -> String",
   if (!ValidateSlotString(vm, 1, &out, NULL))
     return;
 
-  if (saynaa_bytecode_save(&info->bytecode, out) != SAYNAA_BC_OK) {
+  if (saynaa_bytecode_save(&info->bytecode, out) != RESULT_SUCCESS) {
     SetRuntimeError(vm, "Failed to write bytecode output.");
     return;
   }

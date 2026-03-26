@@ -5,7 +5,6 @@ import io.github.rosemoe.sora.lang.EmptyLanguage;
 import io.github.rosemoe.sora.lang.analysis.AnalyzeManager;
 
 public class SaynaaLanguage extends EmptyLanguage {
-
   private final SaynaaAnalyzeManager analyzeManager = new SaynaaAnalyzeManager();
 
   @NonNull

@@ -1620,6 +1620,200 @@ saynaa_function(_stringRFind, "String.rfind(sub:String[, start:Number=0]) -> Num
   RET(VAR_NUM((double) (match - thiz->data)));
 }
 
+saynaa_function(_stringSub, "String.sub(start:Number[, end:Number]) -> String",
+                "Returns the substring from [start] (inclusive) to [end] (exclusive).") {
+  if (!CheckArgcRange(vm, ARGC, 1, 2))
+    return;
+
+  int64_t start = 0;
+  if (!validateInteger(vm, ARG(1), &start, "Argument 1"))
+    return;
+
+  String* thiz = (String*) AS_OBJ(THIS);
+  int64_t end = (int64_t) thiz->length;
+  if (ARGC == 2) {
+    if (!validateInteger(vm, ARG(2), &end, "Argument 2"))
+      return;
+  }
+
+  if (start < 0)
+    start = (int64_t) thiz->length + start;
+  if (end < 0)
+    end = (int64_t) thiz->length + end;
+
+  if (start < 0)
+    start = 0;
+  if (end > (int64_t) thiz->length)
+    end = (int64_t) thiz->length;
+
+  if (start >= end)
+    RET(VAR_OBJ(newStringLength(vm, NULL, 0)));
+
+  uint32_t length = (uint32_t) (end - start);
+  RET(VAR_OBJ(newStringLength(vm, thiz->data + start, length)));
+}
+
+saynaa_function(_stringReverse, "String.reverse() -> String",
+                "Returns a copy of the string with reversed bytes.") {
+  String* thiz = (String*) AS_OBJ(THIS);
+  if (thiz->length == 0)
+    RET(THIS);
+
+  char* buff = (char*) Realloc(vm, NULL, thiz->length);
+  for (uint32_t i = 0; i < thiz->length; i++) {
+    buff[i] = thiz->data[thiz->length - i - 1];
+  }
+  String* out = newStringLength(vm, buff, thiz->length);
+  Realloc(vm, buff, 0);
+  RET(VAR_OBJ(out));
+}
+
+saynaa_function(_stringRep, "String.rep(count:Number) -> String",
+                "Returns a new string repeated [count] times.") {
+  int64_t count = 0;
+  if (!validateInteger(vm, ARG(1), &count, "Argument 1"))
+    return;
+  if (count < 0) {
+    RET_ERR(newString(vm, "count should be >= 0"));
+  }
+
+  String* thiz = (String*) AS_OBJ(THIS);
+  if (count == 0 || thiz->length == 0)
+    RET(VAR_OBJ(newStringLength(vm, NULL, 0)));
+
+  uint64_t total = (uint64_t) thiz->length * (uint64_t) count;
+  if (total > UINT32_MAX) {
+    RET_ERR(newString(vm, "Resulting string is too large."));
+  }
+
+  char* buff = (char*) Realloc(vm, NULL, (size_t) total);
+  char* dst = buff;
+  for (int64_t i = 0; i < count; i++) {
+    memcpy(dst, thiz->data, thiz->length);
+    dst += thiz->length;
+  }
+  String* out = newStringLength(vm, buff, (uint32_t) total);
+  Realloc(vm, buff, 0);
+  RET(VAR_OBJ(out));
+}
+
+saynaa_function(_stringByte, "String.byte(index:Number) -> Number",
+                "Returns the byte value at [index].") {
+  int64_t index = 0;
+  if (!validateInteger(vm, ARG(1), &index, "Argument 1"))
+    return;
+
+  String* thiz = (String*) AS_OBJ(THIS);
+  if (index < 0)
+    index = (int64_t) thiz->length + index;
+  if (index < 0 || index >= (int64_t) thiz->length) {
+    RET_ERR(newString(vm, "String.byte index out of bounds."));
+  }
+
+  RET(VAR_NUM((double) (uint8_t) thiz->data[index]));
+}
+
+saynaa_function(_stringFormat, "String.format(...args) -> String",
+                "Formats the string using printf-style specifiers.") {
+  String* thiz = (String*) AS_OBJ(THIS);
+  List* args = newList(vm, (uint32_t) ARGC);
+  vmPushTempRef(vm, &args->_super); // args.
+  for (int i = 0; i < ARGC; i++) {
+    listAppend(vm, args, ARG(i + 1));
+  }
+  Var ret = varSprintf(vm, thiz, args);
+  vmPopTempRef(vm); // args.
+  RET(ret);
+}
+
+saynaa_function(_stringMatch, "String.match(sub:String[, start:Number=0]) -> String|Null",
+                "Returns the first match of [sub] starting at [start].") {
+  if (!CheckArgcRange(vm, ARGC, 1, 2))
+    return;
+
+  String* sub;
+  if (!validateArgString(vm, 1, &sub))
+    return;
+
+  int64_t start = 0;
+  if (ARGC == 2) {
+    if (!validateInteger(vm, ARG(2), &start, "Argument 2"))
+      return;
+  }
+
+  String* thiz = (String*) AS_OBJ(THIS);
+  if (start < 0)
+    start = 0;
+  if (start >= (int64_t) thiz->length)
+    RET(VAR_NULL);
+
+  const char* match = (const char*) utilMemMem(thiz->data + start, thiz->length - start,
+                                               sub->data, sub->length);
+  if (match == NULL)
+    RET(VAR_NULL);
+
+  RET(VAR_OBJ(newStringLength(vm, match, sub->length)));
+}
+
+saynaa_function(
+    _stringGSub, "String.gsub(old:String, new:String[, count:Number=-1]) -> String",
+    "Replace occurrences of [old] with [new].") {
+  if (!CheckArgcRange(vm, ARGC, 2, 3))
+    return;
+
+  String *old, *new_;
+  if (!validateArgString(vm, 1, &old))
+    return;
+  if (!validateArgString(vm, 2, &new_))
+    return;
+
+  int64_t count = -1;
+  if (ARGC == 3) {
+    if (!validateInteger(vm, ARG(3), &count, "Argument 3"))
+      return;
+    if (count < 0 && count != -1) {
+      RET_ERR(newString(vm, "count should either be >= 0 or -1"));
+    }
+  }
+
+  String* thiz = (String*) AS_OBJ(THIS);
+  RET(VAR_OBJ(stringReplace(vm, thiz, old, new_, (int32_t) count)));
+}
+
+saynaa_function(_stringGMatch, "String.gmatch(sub:String) -> List",
+                "Returns a list of all matches of [sub].") {
+  String* sub;
+  if (!validateArgString(vm, 1, &sub))
+    return;
+  if (sub->length == 0) {
+    RET_ERR(newString(vm, "sub must not be empty."));
+  }
+
+  String* thiz = (String*) AS_OBJ(THIS);
+  List* list = newList(vm, 0);
+  vmPushTempRef(vm, &list->_super); // list.
+
+  const char* cursor = thiz->data;
+  size_t remaining = thiz->length;
+  while (remaining >= sub->length) {
+    const char* match = (const char*) utilMemMem(cursor, remaining,
+                                                 sub->data, sub->length);
+    if (match == NULL)
+      break;
+    String* m = newStringLength(vm, match, sub->length);
+    vmPushTempRef(vm, &m->_super); // m.
+    listAppend(vm, list, VAR_OBJ(m));
+    vmPopTempRef(vm); // m.
+
+    size_t consumed = (size_t) (match - cursor) + sub->length;
+    cursor += consumed;
+    remaining -= consumed;
+  }
+
+  vmPopTempRef(vm); // list.
+  RET(VAR_OBJ(list));
+}
+
 saynaa_function(
     _stringReplace, "String.replace(old:Sttring, new:String[, count:Number=-1]) -> String",
     "Returns a copy of the string where [count] occurrence of the substring "
@@ -2109,6 +2303,14 @@ static void initializePrimitiveClasses(VM* vm) {
   ADD_METHOD(vSTRING, "split", _stringSplit, -1);
   ADD_METHOD(vSTRING, "startswith", _stingStartswith, 1);
   ADD_METHOD(vSTRING, "endswith", _stingEndswith, 1);
+  ADD_METHOD(vSTRING, "sub", _stringSub, -1);
+  ADD_METHOD(vSTRING, "reverse", _stringReverse, 0);
+  ADD_METHOD(vSTRING, "rep", _stringRep, 1);
+  ADD_METHOD(vSTRING, "byte", _stringByte, 1);
+  ADD_METHOD(vSTRING, "format", _stringFormat, -1);
+  ADD_METHOD(vSTRING, "match", _stringMatch, -1);
+  ADD_METHOD(vSTRING, "gsub", _stringGSub, -1);
+  ADD_METHOD(vSTRING, "gmatch", _stringGMatch, 1);
 
   ADD_METHOD(vLIST, "clear", _listClear, 0);
   ADD_METHOD(vLIST, "find", _listFind, 1);
@@ -2795,10 +2997,8 @@ Var varGetAttrib(VM* vm, Var on, String* attrib, bool skipGetter, bool callable)
             {
               List* list = newList(vm, map->count);
               vmPushTempRef(vm, &list->_super); // list.
-              for (uint32_t i = 0; i < map->capacity; i++) {
-                if (!IS_UNDEF(map->entries[i].key)) {
-                  listAppend(vm, list, map->entries[i].key);
-                }
+              for (uint32_t i = 0; i < map->order_keys.count; i++) {
+                listAppend(vm, list, map->order_keys.data[i]);
               }
               vmPopTempRef(vm); // list.
               return VAR_OBJ(list);
@@ -2808,10 +3008,9 @@ Var varGetAttrib(VM* vm, Var on, String* attrib, bool skipGetter, bool callable)
             {
               List* list = newList(vm, map->count);
               vmPushTempRef(vm, &list->_super); // list.
-              for (uint32_t i = 0; i < map->capacity; i++) {
-                if (!IS_UNDEF(map->entries[i].key)) {
-                  listAppend(vm, list, map->entries[i].value);
-                }
+              for (uint32_t i = 0; i < map->order_keys.count; i++) {
+                Var key = map->order_keys.data[i];
+                listAppend(vm, list, mapGet(map, key));
               }
               vmPopTempRef(vm); // list.
               return VAR_OBJ(list);
@@ -3441,17 +3640,12 @@ bool varIterate(VM* vm, Var seq, Var* iterator, Var* value) {
         uint32_t iter = (uint32_t) AS_NUM(*iterator);
 
         Map* map = (Map*) obj;
-        if (map->entries == NULL)
+        if (map->order_keys.count == 0)
           return false;
-        MapEntry* e = map->entries + iter;
-        for (; iter < map->capacity; iter++, e++) {
-          if (!IS_UNDEF(e->key))
-            break;
-        }
-        if (iter >= map->capacity)
+        if (iter >= map->order_keys.count)
           return false;
 
-        *value = map->entries[iter].key;
+        *value = map->order_keys.data[iter];
         *iterator = VAR_NUM((double) iter + 1);
         return true;
       }

@@ -53,6 +53,10 @@ OPCODE(LIST_APPEND, 0, -1)
 // Insert the key value pairs to the map. Used in literal map construction.
 OPCODE(MAP_INSERT, 0, -2)
 
+// Pop the top value from the stack, the next stack top would be the map.
+// Insert the value with an auto-incremented integer key.
+OPCODE(MAP_APPEND, 0, -1)
+
 // Push stack local on top of the stack. Locals at 0 to 8 marked explicitly
 // since it's performance critical.
 // params: PUSH_LOCAL_N -> 1 byte count value.

@@ -206,6 +206,18 @@ typedef enum Result {
 
   RESULT_COMPILE_ERROR, // Compilation failed.
   RESULT_RUNTIME_ERROR, // An error occurred at runtime.
+
+  // Bytecode errors.
+  RESULT_BYTECODE_INVALID_ARGUMENT,
+  RESULT_BYTECODE_INCOMPLETE_HEADER,
+  RESULT_BYTECODE_INVALID_MAGIC,
+  RESULT_BYTECODE_VERSION_MISMATCH,
+  RESULT_BYTECODE_SIZE_MISMATCH,
+  RESULT_BYTECODE_CHECKSUM_MISMATCH,
+  RESULT_BYTECODE_INVALID_FORMAT,
+  RESULT_BYTECODE_UNSUPPORTED_CONST,
+  RESULT_BYTECODE_TRUNCATED,
+  RESULT_BYTECODE_IO_ERROR,
 } Result;
 
 typedef struct Argument {
@@ -343,7 +355,8 @@ PUBLIC Result RunFileAutoDetect(VM* vm, const char* path, bool* is_bytecode);
 
 // Load script content, auto-detecting bytecode headers if present.
 // Returns NULL on error. The buffer is allocated with Realloc().
-PUBLIC char* LoadScriptAutoDetect(VM* vm, const char* path, bool* is_bytecode);
+PUBLIC char* LoadScriptAutoDetect(VM* vm, const char* path, bool* is_bytecode,
+                                  Result* out_status);
 
 // Compile source string into in-memory bytecode.
 PUBLIC Result CompileStringToBytecode(VM* vm, const char* source,
@@ -528,6 +541,7 @@ PUBLIC void NewClosure(VM* vm, int index, const char* name, nativeFn fptr,
 // Note that slot [list] must be a valid list otherwise it'll fail an
 // assertion.
 PUBLIC bool ListInsert(VM* vm, int list, int32_t index, int value);
+
 PUBLIC bool MapSet(VM* vm, int map, int key, int value);
 
 // Pop an element from [list] at [index] and place it at the [popped] slot, if

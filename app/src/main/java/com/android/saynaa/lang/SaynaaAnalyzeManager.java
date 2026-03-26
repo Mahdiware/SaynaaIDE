@@ -1,53 +1,19 @@
 package com.android.saynaa.lang;
 
-import java.util.Arrays;
-import java.util.HashSet;
-import java.util.Set;
-
 import androidx.annotation.NonNull;
 import io.github.rosemoe.sora.lang.analysis.SimpleAnalyzeManager;
 import io.github.rosemoe.sora.lang.styling.MappedSpans;
 import io.github.rosemoe.sora.lang.styling.Styles;
 import io.github.rosemoe.sora.widget.schemes.EditorColorScheme;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Set;
 
 public class SaynaaAnalyzeManager extends SimpleAnalyzeManager<Void> {
-
-  private static final Set<String> KEYWORDS = new HashSet<>(Arrays.asList(
-      "and",
-      "break",
-      "case",
-      "class",
-      "continue",
-      "delete",
-      "default",
-      "do",
-      "else",
-      "elif",
-      "elseif",
-      "end",
-      "false",
-      "for",
-      "function",
-      "if",
-      "import",
-      "in",
-      "is",
-      "local",
-      "module",
-      "null",
-      "nil",
-      "not",
-      "or",
-      "repeat",
-      "return",
-      "super",
-      "switch",
-      "then",
-      "this",
-      "true",
-      "until",
-      "while"
-  ));
+  private static final Set<String> KEYWORDS = new HashSet<>(Arrays.asList("and", "break", "case",
+      "class", "continue", "delete", "default", "do", "else", "elif", "elseif", "end", "false",
+      "for", "function", "if", "import", "in", "is", "local", "module", "null", "nil", "not", "or",
+      "repeat", "return", "super", "switch", "then", "this", "true", "until", "while"));
 
   @Override
   protected Styles analyze(@NonNull StringBuilder text, Delegate<Void> delegate) {
@@ -122,7 +88,8 @@ public class SaynaaAnalyzeManager extends SimpleAnalyzeManager<Void> {
     }
   }
 
-  private int scanString(StringBuilder text, int start, int end, int line, int col, char quote, MappedSpans.Builder builder) {
+  private int scanString(StringBuilder text, int start, int end, int line, int col, char quote,
+      MappedSpans.Builder builder) {
     builder.addIfNeeded(line, col, EditorColorScheme.LITERAL);
     col++;
     boolean escaped = false;
@@ -216,9 +183,7 @@ public class SaynaaAnalyzeManager extends SimpleAnalyzeManager<Void> {
   }
 
   private boolean isHexDigit(char c) {
-    return (c >= '0' && c <= '9')
-        || (c >= 'a' && c <= 'f')
-        || (c >= 'A' && c <= 'F');
+    return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
   }
 
   private boolean isBinaryDigit(char c) {

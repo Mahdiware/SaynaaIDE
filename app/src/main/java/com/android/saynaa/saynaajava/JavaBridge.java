@@ -353,7 +353,9 @@ public class JavaBridge {
       Log.d(TAG, "Found and cached class: " + className);
       return cls;
     } catch (ClassNotFoundException e) {
-      Log.e(TAG, "Class not found: " + className, e);
+      if (Log.isLoggable(TAG, Log.DEBUG)) {
+        Log.d(TAG, "Class not found: " + className);
+      }
       return null;
     }
   }

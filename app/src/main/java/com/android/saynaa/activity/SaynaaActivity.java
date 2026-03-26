@@ -679,6 +679,8 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
       if (newDocument) {
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_DOCUMENT);
         intent.addFlags(Intent.FLAG_ACTIVITY_MULTIPLE_TASK);
+      } else {
+        intent.addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION);
       }
 
       startActivity(intent);

@@ -37,6 +37,40 @@ DEFINE_BUFFER(Var, Var)
 DEFINE_BUFFER(String, String*)
 DEFINE_BUFFER(Closure, Closure*)
 
+const char* saynaa_status_message(Result status) {
+  switch (status) {
+    case RESULT_SUCCESS:
+      return "OK";
+    case RESULT_UNEXPECTED_EOF:
+      return "Unexpected EOF";
+    case RESULT_COMPILE_ERROR:
+      return "Compile error";
+    case RESULT_RUNTIME_ERROR:
+      return "Runtime error";
+    case RESULT_BYTECODE_INVALID_ARGUMENT:
+      return "Invalid argument";
+    case RESULT_BYTECODE_INCOMPLETE_HEADER:
+      return "Incomplete bytecode header";
+    case RESULT_BYTECODE_INVALID_MAGIC:
+      return "Invalid bytecode magic";
+    case RESULT_BYTECODE_VERSION_MISMATCH:
+      return "Incompatible bytecode version";
+    case RESULT_BYTECODE_SIZE_MISMATCH:
+      return "Bytecode size mismatch";
+    case RESULT_BYTECODE_CHECKSUM_MISMATCH:
+      return "Bytecode checksum mismatch";
+    case RESULT_BYTECODE_INVALID_FORMAT:
+      return "Invalid bytecode format";
+    case RESULT_BYTECODE_UNSUPPORTED_CONST:
+      return "Unsupported constant type";
+    case RESULT_BYTECODE_TRUNCATED:
+      return "Truncated bytecode payload";
+    case RESULT_BYTECODE_IO_ERROR:
+      return "Bytecode IO error";
+  }
+  return "Unknown result";
+}
+
 void ByteBufferAddString(ByteBuffer* thiz, VM* vm, const char* str, uint32_t length) {
   ByteBufferReserve(thiz, vm, (size_t) thiz->count + length);
   for (uint32_t i = 0; i < length; i++) {
@@ -357,6 +391,8 @@ Map* newMap(VM* vm) {
   map->capacity = 0;
   map->count = 0;
   map->entries = NULL;
+  VarBufferInit(&map->order_keys);
+  map->next_index = 0;
   return map;
 }
 
@@ -1129,7 +1165,6 @@ static uint32_t _hashObject(Object* obj) {
       {
         return utilHashBits((uint64_t) obj);
       }
-
     default:
       break;
   }
@@ -1222,6 +1257,24 @@ static bool _mapFindEntry(Map* thiz, Var key, MapEntry** result) {
   return false;
 }
 
+static inline bool _mapIsIntegerKey(Var key, int64_t* value) {
+  double number;
+  if (IS_NUM(key)) {
+    number = AS_NUM(key);
+  } else if (IS_BOOL(key)) {
+    number = AS_BOOL(key);
+  } else {
+    return false;
+  }
+
+  if (floor(number) != number)
+    return false;
+  if (number < (double) INT64_MIN || number > (double) INT64_MAX)
+    return false;
+  *value = (int64_t) number;
+  return true;
+}
+
 // Add the key, value pair to the entries array of the map. Returns true if
 // the entry added for the first time and false for replaced value.
 static bool _mapInsertEntry(Map* thiz, Var key, Var value) {
@@ -1281,6 +1334,12 @@ void mapSet(VM* vm, Map* thiz, Var key, Var value) {
 
   if (_mapInsertEntry(thiz, key, value)) {
     thiz->count++; //< A new key added.
+    VarBufferWrite(&thiz->order_keys, vm, key);
+  }
+
+  int64_t index = 0;
+  if (_mapIsIntegerKey(key, &index) && index >= thiz->next_index) {
+    thiz->next_index = index + 1;
   }
 }
 
@@ -1289,6 +1348,8 @@ void mapClear(VM* vm, Map* thiz) {
   thiz->entries = NULL;
   thiz->capacity = 0;
   thiz->count = 0;
+  VarBufferClear(&thiz->order_keys, vm);
+  thiz->next_index = 0;
 }
 
 Var mapRemoveKey(VM* vm, Map* thiz, Var key) {
@@ -1303,6 +1364,17 @@ Var mapRemoveKey(VM* vm, Map* thiz, Var key) {
   entry->value = VAR_TRUE;
 
   thiz->count--;
+
+  for (uint32_t i = 0; i < thiz->order_keys.count; i++) {
+    if (isValuesEqual(thiz->order_keys.data[i], key)) {
+      if (i + 1 < thiz->order_keys.count) {
+        memmove(&thiz->order_keys.data[i], &thiz->order_keys.data[i + 1],
+                (thiz->order_keys.count - i - 1) * sizeof(Var));
+      }
+      thiz->order_keys.count--;
+      break;
+    }
+  }
 
   if (IS_OBJ(value))
     vmPushTempRef(vm, AS_OBJ(value));
@@ -1365,6 +1437,7 @@ void freeObject(VM* vm, Object* thiz) {
       {
         Map* map = (Map*) thiz;
         DEALLOCATE_ARRAY(vm, map->entries, MapEntry, map->capacity);
+        VarBufferClear(&map->order_keys, vm);
         DEALLOCATE(vm, thiz, Map);
         return;
       }
@@ -1991,7 +2064,7 @@ static void _toStringInternal(VM* vm, const Var v, ByteBuffer* buff,
       case OBJ_MAP:
         {
           const Map* map = (const Map*) obj;
-          if (map->entries == NULL) {
+          if (map->order_keys.count == 0) {
             ByteBufferAddString(buff, vm, "{}", 2);
             return;
           }
@@ -2011,30 +2084,17 @@ static void _toStringInternal(VM* vm, const Var v, ByteBuffer* buff,
           seq_map.map = map;
 
           ByteBufferWrite(buff, vm, '{');
-          uint32_t i = 0;     // Index of the current entry to iterate.
-          bool _first = true; // For first element no ',' required.
-          do {
-            // Get the next valid key index.
-            bool _done = false;
-            while (IS_UNDEF(map->entries[i].key)) {
-              if (++i >= map->capacity) {
-                _done = true;
-                break;
-              }
-            }
-            if (_done)
-              break;
-
-            if (!_first)
+          for (uint32_t i = 0; i < map->order_keys.count; i++) {
+            if (i != 0)
               ByteBufferAddString(buff, vm, ", ", 2);
 
-            _toStringInternal(vm, map->entries[i].key, buff, &seq_map, true);
-            ByteBufferWrite(buff, vm, ':');
-            _toStringInternal(vm, map->entries[i].value, buff, &seq_map, true);
+            Var key = map->order_keys.data[i];
+            Var value = mapGet((Map*) map, key);
 
-            i++;
-            _first = false;
-          } while (i < map->capacity);
+            _toStringInternal(vm, key, buff, &seq_map, true);
+            ByteBufferWrite(buff, vm, ':');
+            _toStringInternal(vm, value, buff, &seq_map, true);
+          }
 
           ByteBufferWrite(buff, vm, '}');
           return;

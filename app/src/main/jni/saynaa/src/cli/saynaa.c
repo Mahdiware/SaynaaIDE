@@ -72,7 +72,7 @@ static Result prepareBytecodeInput(VM* vm, const char* file_path,
     return RESULT_SUCCESS;
 
   bool is_bytecode = false;
-  char* loaded = LoadScriptAutoDetect(vm, file_path, &is_bytecode);
+  char* loaded = LoadScriptAutoDetect(vm, file_path, &is_bytecode, NULL);
   if (loaded != NULL)
     Realloc(vm, loaded, 0);
 
@@ -105,10 +105,9 @@ static Result prepareBytecodeInput(VM* vm, const char* file_path,
     return result;
   }
 
-  SaynaaBytecodeStatus status = saynaa_bytecode_save(&bytecode_data,
-                                                     *bytecode_path);
+  Result status = saynaa_bytecode_save(&bytecode_data, *bytecode_path);
   saynaa_bytecode_clear(vm, &bytecode_data);
-  if (status != SAYNAA_BC_OK) {
+  if (status != RESULT_SUCCESS) {
     fprintf(stderr, "Error writing bytecode to \"%s\"\n", *bytecode_path);
     if (*bytecode_path != output_path)
       Realloc(vm, *bytecode_path, 0);

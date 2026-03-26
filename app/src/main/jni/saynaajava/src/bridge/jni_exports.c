@@ -1013,8 +1013,14 @@ JNIEXPORT void JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1close(J
   if (vm == NULL)
     return;
 
+  // Clear the Java-side pointer early to avoid re-entrant close calls during teardown.
+  set_vm_ptr_on_saynaa(env, thiz, (jlong) 0);
+
   BridgeState* bridge = bridge_from_vm(vm);
   if (bridge != NULL) {
+    if (bridge->closing)
+      return;
+    bridge->closing = true;
     clear_callbacks(vm);
     release_bridge_handle(vm, &bridge->mainModule);
     release_bridge_handle(vm, &bridge->javaWrapperModule);
@@ -1048,6 +1054,5 @@ JNIEXPORT void JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1close(J
   }
 
   FreeVM(vm);
-  set_vm_ptr_on_saynaa(env, thiz, (jlong) 0);
 }
 

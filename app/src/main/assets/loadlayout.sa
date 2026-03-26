@@ -21,7 +21,7 @@ TypedValue = java.bindClass('android.util.TypedValue')
 Color = java.bindClass('android.graphics.Color')
 Typeface = java.bindClass('android.graphics.Typeface')
 TruncateAt = java.bindClass('android.text.TextUtils$TruncateAt')
-Integer = java.bindClass('java.lang.Integer')
+
 RelativeLayoutRule = {
   layout_above: 2,
   layout_below: 3,
@@ -115,50 +115,21 @@ ScaleTypeMap = {
 
 dm = null
 
-function is_string(value)
-  t = type(value)
-  return t == 'String' or t == 'string'
-end
 
-function is_number(value)
-  t = type(value)
-  return t == 'Number' or t == 'number'
-end
-
-function is_closure(value)
-  t = type(value)
-  return t == 'Closure' or t == 'function'
-end
-
-function is_numeric_string(value)
-  if not is_string(value) then
-    return false
+function as_numeric(value)
+  result = pcall(function(data) return Number(data) end, value)
+  if result[0] then
+    return result[1]
+  else
+    return 0
   end
-  if value.length == 0 then
-    return false
-  end
-  i = 0
-  if value[0] == '-' then
-    i = 1
-  end
-  if i >= value.length then
-    return false
-  end
-  while i < value.length do
-    ch = value[i]
-    if ch < '0' or ch > '9' then
-      return false
-    end
-    i = i + 1
-  end
-  return true
 end
 
 function parse_size(value)
-  if is_number(value) then
+  if type(value) == 'Number' then
     return value
   end
-  if not is_string(value) then
+  if type(value) != 'String' then
     return value
   end
   if value == 'match_parent' or value == 'fill_parent' then
@@ -169,38 +140,26 @@ function parse_size(value)
   end
   if value.endswith('dp') then
     num_str = value.split('dp')[0]
-    if not is_numeric_string(num_str) then
-      return 0
-    end
-    num = Integer.parseInt(num_str)
+    num = as_numeric(num_str)
     return TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, num, dm)
   end
   if value.endswith('sp') then
     num_str = value.split('sp')[0]
-    if not is_numeric_string(num_str) then
-      return 0
-    end
-    num = Integer.parseInt(num_str)
+    num = as_numeric(num_str)
     return TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, num, dm)
   end
   if value.endswith('px') then
     num_str = value.split('px')[0]
-    if not is_numeric_string(num_str) then
-      return 0
-    end
-    return Integer.parseInt(num_str)
+    return as_numeric(num_str)
   end
-  if not is_numeric_string(value) then
-    return 0
-  end
-  return Integer.parseInt(value)
+  return as_numeric(value)
 end
 
 function parse_color(value)
-  if is_number(value) then
+  if type(value) == 'Number' then
     return value
   end
-  if is_string(value) and value.startswith('#') then
+  if type(value) == 'String' and value.startswith('#') then
     return Color.parseColor(value)
   end
   return value
@@ -208,7 +167,7 @@ end
 
 function split_flags(value)
   parts = []
-  if not is_string(value) then
+  if type(value) != 'String' then
     return parts
   end
   if value.indexOf('|') == -1 then
@@ -232,7 +191,7 @@ function split_flags(value)
 end
 
 function parse_flags(value, map)
-  if is_number(value) then
+  if type(value) == 'Number' then
     return value
   end
   parts = split_flags(value)
@@ -258,7 +217,7 @@ function get_identifier(name)
 end
 
 function parse_gravity(value)
-  if not is_string(value) then
+  if type(value) != 'String' then
     return value
   end
   if value == 'center' then return 17 end
@@ -457,7 +416,7 @@ function apply_attrs(view, node)
 
   text_appearance = node.get('textAppearance')
   if text_appearance != null then
-    if is_string(text_appearance) and text_appearance.startswith('?') then
+    if type(text_appearance) == 'String' and text_appearance.startswith('?') then
       res_id = get_identifier(text_appearance.substring(1))
       if res_id != 0 then
         view.setTextAppearance(context, res_id)
@@ -496,29 +455,29 @@ function apply_attrs(view, node)
 
   background = node.get('background')
   if background != null then
-    if is_string(background) and background.startswith('#') then
+    if type(background) == 'String' and background.startswith('#') then
       view.setBackgroundColor(parse_color(background))
     end
-    if is_string(background) and background.startswith('?') then
+    if type(background) == 'String' and background.startswith('?') then
       res_id = get_identifier(background.substring(1))
       if res_id != 0 then
         view.setBackgroundResource(res_id)
       end
     end
-    if is_number(background) then
+    if type(background) == 'Number' then
       view.setBackgroundColor(background)
     end
   end
 
   src = node.get('src')
   if src != null and java.instanceof(view, ImageView) then
-    if is_string(src) and src.startswith('?') then
+    if type(src) == 'String' and src.startswith('?') then
       res_id = get_identifier(src.substring(1))
       if res_id != 0 then
         view.setImageResource(res_id)
       end
     end
-    if is_number(src) then
+    if type(src) == 'Number' then
       view.setImageResource(src)
     end
   end
@@ -557,7 +516,7 @@ function apply_attrs(view, node)
   on_click = node.get('onClick')
   if on_click != null then
     view.setClickable(true)
-    if is_closure(on_click) then
+    if type(on_click) == "Closure" then
       view.setOnClickListener(java.create('android.view.View$OnClickListener', {
         onClick: on_click
       }))

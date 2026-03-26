@@ -250,6 +250,9 @@ DECLARE_BUFFER(Var, Var)
 DECLARE_BUFFER(String, String*)
 DECLARE_BUFFER(Closure, Closure*)
 
+// Returns a human-readable message for Result codes.
+const char* saynaa_status_message(Result status);
+
 // Add all the characters to the buffer, byte buffer can also be used as a
 // buffer to write string (like a string stream). Note that this will not
 // add a null byte '\0' at the end.
@@ -312,6 +315,8 @@ struct Map {
   uint32_t capacity; //< Allocated entry's count.
   uint32_t count;    //< Number of entries in the map.
   MapEntry* entries; //< Pointer to the contiguous array.
+  VarBuffer order_keys; //< Keys in insertion order.
+  int64_t next_index; //< Next auto key for value-only entries.
 };
 
 struct Range {

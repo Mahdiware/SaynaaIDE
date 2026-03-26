@@ -162,7 +162,12 @@ public class Saynaa {
 
   public synchronized void close() {
     if (this.vm != null && this.vm.getPointer() != 0) {
-      saynaa_close();
+      try {
+        saynaa_close();
+      } finally {
+        this.vm.setPointer(0);
+        this.vm = null;
+      }
     }
   }
 
