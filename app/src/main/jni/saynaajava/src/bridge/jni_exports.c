@@ -183,15 +183,11 @@ Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1pcall(
     module = (Module*) AS_OBJ(bridge->mainModule->value);
   }
   if (module == NULL) {
-    success = JNI_TRUE;
-    message = "OK";
     goto L_cleanup;
   }
 
   int fnIndex = moduleGetGlobalIndex(module, fnNameChars, (uint32_t) strlen(fnNameChars));
   if (fnIndex < 0) {
-    success = JNI_TRUE;
-    message = "OK";
     goto L_cleanup;
   }
 
@@ -213,7 +209,7 @@ Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1pcall(
   }
 
   // ===== EXECUTE =====
-  if (!CallFunction(vm, 0, argc, argc > 0 ? 1 : 0, 0)) {
+  if (!CallFunction(vm, 0, argc, 1, 0)) {
     success = JNI_FALSE;
     message = "CallFunction failed";
     goto L_cleanup;
@@ -228,8 +224,7 @@ Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1pcall(
         ? vm->fiber->error->data
         : "<unknown error>";
 
-    __android_log_print(ANDROID_LOG_ERROR, SAYNAAJAVA_TAG,
-                        "saynaa_pcall failed: %s", errMsg);
+    LOGE("VM ERROR: %s", errMsg);
 
     message = errMsg;
 
@@ -256,13 +251,15 @@ L_return:
   // ===== CREATE RESULT OBJECT (SAFE) =====
   pcallClass = saynaa_get_pcall_result_class();
   pcallCtor = saynaa_get_pcall_result_ctor();
+
   if (pcallClass == NULL || pcallCtor == NULL) {
-    return NULL; // critical failure
+    LOGE("pcall class/ctor NULL");
+    return NULL;
   }
 
   jmsg = (*env)->NewStringUTF(env, message);
   if (jmsg == NULL) {
-    return NULL; // OOM
+    return NULL;
   }
 
   result = (*env)->NewObject(

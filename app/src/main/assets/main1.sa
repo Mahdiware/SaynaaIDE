@@ -222,7 +222,7 @@ textWatcher_cb = {
 	beforeTextChanged: function(s, start, count, after)
 	end,
 	onTextChanged: function(s, start, before, count)
-		status.setText('Typing: ' + s.toString())
+		status.setText('Typing: ' + s)
 	end,
 	afterTextChanged: function(s)
 	end

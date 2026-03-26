@@ -140,7 +140,17 @@ assert(activity != null, 'activity is null')
 
 root = loadlayout.loadlayout(_module, DemoLayout)
 assert(root != null, 'loadlayout returned null')
-activity.setContentView(root)
+
+function runfunc_test(arg1, arg2, arg3, arg4)
+	return arg1 + arg2 + arg3 + arg4
+end
+
+# fix it, this bug
+# assert(activity.runFunc("runfunc_test", 1, 2, 3, 4) == 10, "activity.runFunc return mismatch")
+
+function onCreate(arg1)
+  activity.setContentView(root)
+end
 
 assert(Title != null, 'Title view missing')
 assert(Description != null, 'Description view missing')
