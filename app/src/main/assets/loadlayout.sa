@@ -17,10 +17,14 @@ EditText = java.bindClass('android.widget.EditText')
 Button = java.bindClass('android.widget.Button')
 Switch = java.bindClass('android.widget.Switch')
 ImageView = java.bindClass('android.widget.ImageView')
+ArrayAdapter = java.bindClass('android.widget.ArrayAdapter')
 TypedValue = java.bindClass('android.util.TypedValue')
 Color = java.bindClass('android.graphics.Color')
 Typeface = java.bindClass('android.graphics.Typeface')
 TruncateAt = java.bindClass('android.text.TextUtils$TruncateAt')
+AndroidR = java.bindClass('android.R')
+Context = java.bindClass('android.content.Context')
+DisplayMetrics = java.bindClass('android.util.DisplayMetrics')
 
 RelativeLayoutRule = {
   layout_above: 2,
@@ -114,6 +118,120 @@ ScaleTypeMap = {
 
 
 dm = null
+W = 0
+H = 0
+
+toint = {
+  auto: 0,
+  low: 1,
+  high: 2,
+
+  yes: 1,
+  no: 2,
+
+  none: 0,
+  software: 1,
+  hardware: 2,
+
+  ltr: 0,
+  rtl: 1,
+  inherit: 2,
+  locale: 3,
+
+  insideOverlay: 0x0,
+  insideInset: 0x01000000,
+  outsideOverlay: 0x02000000,
+  outsideInset: 0x03000000,
+
+  visible: 0,
+  invisible: 1,
+  gone: 2,
+
+  wrap_content: -2,
+  fill_parent: -1,
+  match_parent: -1,
+  wrap: -2,
+  fill: -1,
+  match: -1,
+
+  vertical: 1,
+  horizontal: 0,
+
+  center: 17,
+  center_horizontal: 1,
+  center_vertical: 16,
+  left: 3,
+  right: 5,
+  top: 48,
+  bottom: 80,
+  start: 8388611,
+  'end': 8388613,
+
+  gravity: 1,
+  textStart: 2,
+  textEnd: 3,
+  textCenter: 4,
+  viewStart: 5,
+  viewEnd: 6,
+
+  text: 0x00000001,
+  textCapCharacters: 0x00001001,
+  textCapWords: 0x00002001,
+  textCapSentences: 0x00004001,
+  textAutoCorrect: 0x00008001,
+  textAutoComplete: 0x00010001,
+  textMultiLine: 0x00020001,
+  textImeMultiLine: 0x00040001,
+  textNoSuggestions: 0x00080001,
+  textUri: 0x00000011,
+  textEmailAddress: 0x00000021,
+  textEmailSubject: 0x00000031,
+  textShortMessage: 0x00000041,
+  textLongMessage: 0x00000051,
+  textPersonName: 0x00000061,
+  textPostalAddress: 0x00000071,
+  textPassword: 0x00000081,
+  textVisiblePassword: 0x00000091,
+  textWebEditText: 0x000000a1,
+  textFilter: 0x000000b1,
+  textPhonetic: 0x000000c1,
+  textWebEmailAddress: 0x000000d1,
+  textWebPassword: 0x000000e1,
+  number: 0x00000002,
+  numberSigned: 0x00001002,
+  numberDecimal: 0x00002002,
+  numberPassword: 0x00000012,
+  phone: 0x00000003,
+  datetime: 0x00000004,
+  date: 0x00000014,
+  time: 0x00000024,
+
+  normal: 0x00000000,
+  actionUnspecified: 0x00000000,
+  actionNone: 0x00000001,
+  actionGo: 0x00000002,
+  actionSearch: 0x00000003,
+  actionSend: 0x00000004,
+  actionNext: 0x00000005,
+  actionDone: 0x00000006,
+  actionPrevious: 0x00000007,
+  flagNoFullscreen: 0x02000000,
+  flagNavigatePrevious: 0x04000000,
+  flagNavigateNext: 0x08000000,
+  flagNoExtractUi: 0x10000000,
+  flagNoAccessoryAction: 0x20000000,
+  flagNoEnterAction: 0x40000000,
+  flagForceAscii: 0x80000000
+}
+
+types = {
+  px: 0,
+  dp: 1,
+  sp: 2,
+  pt: 3,
+  'in': 4,
+  mm: 5
+}
 
 
 function as_numeric(value)
@@ -123,6 +241,43 @@ function as_numeric(value)
   else
     return 0
   end
+end
+
+function check_type(value)
+  if type(value) != 'String' then
+    return null
+  end
+  result = value.match('^(%-?%d+)(%a%a)$')
+  if result == null then
+    return null
+  end
+  n = Number(result[1])
+  ty = types.get(result[2])
+  if n == null or ty == null then
+    return null
+  end
+  return { n, ty }
+end
+
+function check_percent(value)
+  if type(value) != 'String' then
+    return null
+  end
+  result = value.match('^(%-?[%.%d]+)%%([wh])$')
+  if result == null then
+    return null
+  end
+  n = Number(result[1])
+  if n == null then
+    return null
+  end
+  if result[2] == 'w' then
+    return n * W / 100
+  end
+  if result[2] == 'h' then
+    return n * H / 100
+  end
+  return null
 end
 
 function parse_size(value)
@@ -137,6 +292,14 @@ function parse_size(value)
   end
   if value == 'wrap_content' or value == 'wrap' then
     return -2
+  end
+  percent = check_percent(value)
+  if percent != null then
+    return percent
+  end
+  typed = check_type(value)
+  if typed != null then
+    return TypedValue.applyDimension(typed[1], typed[0], dm)
   end
   if value.endswith('dp') then
     num_str = value.split('dp')[0]
@@ -216,6 +379,17 @@ function get_identifier(name)
   return context.getResources().getIdentifier(name, null, null)
 end
 
+function checkattr(name)
+  if name == null then
+    return null
+  end
+  result = pcall(function(k) return AndroidR.attr[k] end, name)
+  if result[0] then
+    return result[1]
+  end
+  return null
+end
+
 function parse_gravity(value)
   if type(value) != 'String' then
     return value
@@ -245,6 +419,62 @@ function set_text_style(view, style)
     view.setTypeface(Typeface.defaultFromStyle(Typeface.BOLD_ITALIC))
     return
   end
+end
+
+function checkint(value)
+  if type(value) != 'String' then
+    return null
+  end
+  parts = value.split('|')
+  if parts == null or parts.length == 0 then
+    return null
+  end
+  out = 0
+  i = 0
+  while i < parts.length do
+    v = toint.get(parts[i])
+    if v == null then
+      return null
+    end
+    out = out | v
+    i = i + 1
+  end
+  return out
+end
+
+function check_value(value)
+  if type(value) == 'String' then
+    if value == 'true' then
+      return true
+    end
+    if value == 'false' then
+      return false
+    end
+    direct = toint.get(value)
+    if direct != null then
+      return direct
+    end
+    flags = checkint(value)
+    if flags != null then
+      return flags
+    end
+    percent = check_percent(value)
+    if percent != null then
+      return percent
+    end
+  end
+  num = pcall(function(v) return Number(v) end, value)
+  if num[0] then
+    return num[1]
+  end
+  return value
+end
+
+function capitalize_first(key)
+  if key == null or key.length == 0 then
+    return key
+  end
+  return key.sub(0, 1).upper() + key.sub(1)
 end
 
 function new_layout_params(parent, width, height)
@@ -315,7 +545,7 @@ function apply_layout(view, params, node)
 
   if java.instanceof(params, RelativeLayoutParams) then
     i = 0
-    keys = node.keys()
+    keys = node.keys
     while i < keys.length do
       key = keys[i]
       rule = RelativeLayoutRule.get(key)
@@ -417,7 +647,7 @@ function apply_attrs(view, node)
   text_appearance = node.get('textAppearance')
   if text_appearance != null then
     if type(text_appearance) == 'String' and text_appearance.startswith('?') then
-      res_id = get_identifier(text_appearance.substring(1))
+      res_id = get_identifier(text_appearance.sub(1))
       if res_id != 0 then
         view.setTextAppearance(context, res_id)
       end
@@ -459,7 +689,7 @@ function apply_attrs(view, node)
       view.setBackgroundColor(parse_color(background))
     end
     if type(background) == 'String' and background.startswith('?') then
-      res_id = get_identifier(background.substring(1))
+      res_id = get_identifier(background.sub(1))
       if res_id != 0 then
         view.setBackgroundResource(res_id)
       end
@@ -472,7 +702,7 @@ function apply_attrs(view, node)
   src = node.get('src')
   if src != null and java.instanceof(view, ImageView) then
     if type(src) == 'String' and src.startswith('?') then
-      res_id = get_identifier(src.substring(1))
+      res_id = get_identifier(src.sub(1))
       if res_id != 0 then
         view.setImageResource(res_id)
       end
@@ -524,18 +754,58 @@ function apply_attrs(view, node)
       view.setOnClickListener(on_click)
     end
   end
+
+  items = node.get('items')
+  if items != null then
+    list = java.create('java.util.ArrayList', items)
+    adapter = ArrayAdapter(context, AndroidR.layout.simple_list_item_1, list)
+    view.setAdapter(adapter)
+  end
+end
+
+function apply_auto_attrs(view, node)
+  keys = node.keys
+  if keys == null then
+    return
+  end
+  i = 0
+  while i < keys.length do
+    key = keys[i]
+    if type(key) == 'String' then
+      if key != 'type' and key != 'id' and key != 'style' and !key.startswith('layout_') and !key.startswith('padding') and key != 'orientation' and key != 'text' and key != 'textSize' and key != 'textStyle' and key != 'textColor' and key != 'textAppearance' and key != 'hint' and key != 'singleLine' and key != 'checked' and key != 'backgroundColor' and key != 'background' and key != 'src' and key != 'scaleType' and key != 'visibility' and key != 'textAlignment' and key != 'ellipsize' and key != 'autoLink' and key != 'inputType' and key != 'imeOptions' and key != 'password' and key != 'onClick' and key != 'items' then
+        value = node.get(key)
+        setter = 'set' + capitalize_first(key)
+        called = pcall(function(v, s, val)
+          return java.call(v, s, val)
+        end, view, setter, check_value(value))
+        if !called[0] then
+          assert(false, 'loadlayout: setter call failed: ' + setter + ' key=' + key)
+          return
+        end
+      end
+    end
+    i = i + 1
+  end
 end
 
 function create_view(node, parent)
   node_type = node.get('type')
   child_start = null
   if node_type == null then
-    node_type = node.get(1)
+    node_type = node.get(0)
     if node_type != null then
-      child_start = 2
+      child_start = 1
     else
-      node_type = node.get(0)
+      node_type = node.get(1)
       if node_type != null then
+        child_start = 2
+      end
+    end
+  else
+    if node.get(0) != null then
+      child_start = 0
+    else
+      if node.get(1) != null then
         child_start = 1
       end
     end
@@ -543,12 +813,27 @@ function create_view(node, parent)
   if node_type == null then
     assert(false, 'loadlayout: missing view type')
   end
-  view = node_type(context)
+  style_id = null
+  view = null
+  style_value = node.get('style')
+  if style_value != null and type(style_value) == 'String' then
+    if style_value.startswith('?') then
+      style_id = get_identifier(style_value.sub(1))
+    else
+      style_id = checkattr(style_value)
+    end
+  end
+  if style_id != null and style_id != 0 then
+    view = node_type(context, null, style_id)
+  else
+    view = node_type(context)
+  end
   width = parse_size(node.get('layout_width') or -2)
   height = parse_size(node.get('layout_height') or -2)
   params = new_layout_params(parent, width, height)
   apply_layout(view, params, node)
   apply_attrs(view, node)
+  apply_auto_attrs(view, node)
 
   node_id = node.get('id')
   if node_id != null then
@@ -559,10 +844,7 @@ function create_view(node, parent)
     target_module.define(node_id, view)
   end
 
-  children = node.get('children')
-  if children == null then
-    children = collect_children(node, child_start)
-  end
+  children = collect_children(node, child_start)
   if children != null then
     i = 0
     while i < children.length do
@@ -593,6 +875,11 @@ function loadlayout(root_module, node)
     assert(false, 'loadlayout: activity is null')
   end
   dm = context.getResources().getDisplayMetrics()
+  wm = context.getSystemService(Context.WINDOW_SERVICE)
+  out = DisplayMetrics()
+  wm.getDefaultDisplay().getMetrics(out)
+  W = out.widthPixels
+  H = out.heightPixels
   root_module.define('ids', ids)
   root_module.define('idmap', idmap)
   return create_view(node, null)

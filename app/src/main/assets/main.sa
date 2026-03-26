@@ -9,136 +9,124 @@ function print(msg)
 end
 
 DemoLayout = {
-  type: LinearLayout,
+  LinearLayout,
   orientation: 'vertical',
   padding: '16dp',
   backgroundColor: '#EEF0F4',
   layout_width: 'match_parent',
   layout_height: 'match_parent',
 
-  children: [
-    # HEADER CARD
+  # HEADER CARD
+  {
+    LinearLayout,
+    orientation: 'vertical',
+    padding: '18dp',
+    backgroundColor: '#FFFFFF',
+    layout_width: 'match_parent',
+    layout_height: 'wrap_content',
+    layout_marginBottom: '16dp',
+    elevation: '4dp',
+
     {
-      type: LinearLayout,
-      orientation: 'vertical',
-      padding: '18dp',
-      backgroundColor: '#FFFFFF',
-      layout_width: 'match_parent',
-      layout_height: 'wrap_content',
-      layout_marginBottom: '16dp',
-      elevation: '4dp',
-
-      children: [
-        {
-          type: TextView,
-          id: 'Title',
-          text: 'Saynaa Demo UI',
-          textSize: '24sp',
-          textStyle: 'bold',
-          textColor: '#111111',
-          layout_marginBottom: '6dp'
-        },
-
-        {
-          type: TextView,
-          id: 'Description',
-          text: 'Modern IDE-style layout demo for Saynaa DSL',
-          textSize: '14sp',
-          textColor: '#666666'
-        }
-
-      ]
+      TextView,
+      id: 'Title',
+      text: 'Saynaa Demo UI',
+      textSize: '24sp',
+      textStyle: 'bold',
+      textColor: '#111111',
+      layout_marginBottom: '6dp'
     },
 
-    # INPUT CARD
     {
-      type: LinearLayout,
-      orientation: 'vertical',
-      padding: '16dp',
-      backgroundColor: '#FFFFFF',
-      layout_width: 'match_parent',
-      layout_height: 'wrap_content',
-      layout_marginBottom: '16dp',
-      elevation: '3dp',
-
-      children: [
-        {
-          type: EditText,
-          id: 'NameInput',
-          hint: 'Enter your name',
-          layout_width: 'match_parent',
-          layout_height: 'wrap_content',
-          backgroundColor: '#F3F3F3',
-          padding: '12dp',
-          layout_marginBottom: '12dp'
-        },
-
-        {
-          type: Switch,
-          id: 'EnableSwitch',
-          text: 'Enable notifications',
-          layout_marginBottom: '12dp'
-        },
-
-        {
-          type: CodeEditor,
-          id: 'Editor',
-          layout_width: 'match_parent',
-          layout_height: '200dp',
-          layout_marginBottom: '12dp'
-        }
-
-      ]
-    },
-
-    # BUTTON ROW
-    {
-      type: LinearLayout,
-      orientation: 'horizontal',
-      layout_width: 'match_parent',
-      layout_height: 'wrap_content',
-      layout_weight: 2,
-
-      children: [
-        {
-          type: Button,
-          id: 'SubmitButton',
-          text: 'Run',
-          layout_width: '0dp',
-          layout_weight: 1,
-          layout_marginEnd: '8dp',
-          backgroundColor: '#6200EE',
-          textColor: '#FFFFFF',
-          padding: '12dp',
-
-          onClick: function(v)
-            name = NameInput.getText()
-            enabled = EnableSwitch.isChecked()
-
-            Title.setText('Hello ' + name)
-
-            Description.setText(
-              enabled and 'Notifications enabled' or 'Notifications disabled'
-            )
-          end
-        },
-
-        {
-          type: Button,
-          id: 'nextpage',
-          text: 'Next Page',
-          layout_width: '0dp',
-          layout_weight: 1,
-          layout_marginStart: '8dp',
-          backgroundColor: '#03DAC5',
-          textColor: '#000000',
-          padding: '12dp'
-        }
-
-      ]
+      TextView,
+      id: 'Description',
+      text: 'Modern IDE-style layout demo for Saynaa DSL',
+      textSize: '14sp',
+      textColor: '#666666'
     }
+  },
 
-  ]
+  # INPUT CARD
+  {
+    LinearLayout,
+    orientation: 'vertical',
+    padding: '16dp',
+    backgroundColor: '#FFFFFF',
+    layout_width: 'match_parent',
+    layout_height: 'wrap_content',
+    layout_marginBottom: '16dp',
+    elevation: '3dp',
+
+    {
+      EditText,
+      id: 'NameInput',
+      hint: 'Enter your name',
+      layout_width: 'match_parent',
+      layout_height: 'wrap_content',
+      backgroundColor: '#F3F3F3',
+      padding: '12dp',
+      layout_marginBottom: '12dp'
+    },
+
+    {
+      Switch,
+      id: 'EnableSwitch',
+      text: 'Enable notifications',
+      layout_marginBottom: '12dp'
+    },
+
+    {
+      CodeEditor,
+      id: 'Editor',
+      layout_width: 'match_parent',
+      layout_height: '200dp',
+      layout_marginBottom: '12dp'
+    }
+  },
+
+  # BUTTON ROW
+  {
+    LinearLayout,
+    orientation: 'horizontal',
+    layout_width: 'match_parent',
+    layout_height: 'wrap_content',
+    layout_weight: 2,
+
+    {
+      Button,
+      id: 'SubmitButton',
+      text: 'Run',
+      layout_width: '0dp',
+      layout_weight: 1,
+      layout_marginEnd: '8dp',
+      backgroundColor: '#6200EE',
+      textColor: '#FFFFFF',
+      padding: '12dp',
+
+      onClick: function(v)
+        name = NameInput.getText()
+        enabled = EnableSwitch.isChecked()
+
+        Title.setText('Hello ' + name)
+
+        Description.setText(
+          enabled and 'Notifications enabled' or 'Notifications disabled'
+        )
+      end
+    },
+
+    {
+      Button,
+      id: 'nextpage',
+      text: 'Next Page',
+      layout_width: '0dp',
+      layout_weight: 1,
+      layout_marginStart: '8dp',
+      backgroundColor: '#03DAC5',
+      textColor: '#000000',
+      padding: '12dp'
+    }
+  }
 }
 
 assert(activity != null, 'activity is null')

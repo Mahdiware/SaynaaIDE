@@ -153,10 +153,6 @@ btn2.setText('Open main2')
 btn3 = Button(activity)
 btn3.setText('Run proxy syntax test')
 
-btn4 = Button(activity)
-btn4.setText('Run loadlayout test')
-
-
 root.addView(title)
 root.addView(subtitle)
 root.addView(status)
@@ -164,7 +160,6 @@ root.addView(input)
 root.addView(btn)
 root.addView(btn2)
 root.addView(btn3)
-root.addView(btn4)
 
 activity.setContentView(root)
 
@@ -196,13 +191,6 @@ proxy_click = java.create('android.view.View$OnClickListener', {
 	end
 })
 btn3.setOnClickListener(proxy_click)
-
-loadlayout_click = java.create('android.view.View$OnClickListener', {
-	onClick: function(v)
-		activity.newActivity('main3')
-	end
-})
-btn4.setOnClickListener(loadlayout_click)
 
 function tijaabo()
 end
