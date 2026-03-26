@@ -79,6 +79,8 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
   protected String source;
   protected StringBuilder nativeErrorBuffer = new StringBuilder();
 
+  private SaynaaDexLoader dexLoader;
+
   // Optional compatibility placeholders
   protected Object mOnKeyDown;
   protected Object mOnKeyUp;
@@ -126,6 +128,9 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
       }
 
       initSaynaa();
+      dexLoader = new SaynaaDexLoader(this);
+      dexLoader.loadLibs();
+      JavaBridge.setExtraClassLoaders(dexLoader.getClassLoaders());
       File initFile = new File(saynaaDir == null ? localDir : saynaaDir, "init.sa");
       if (initFile.exists()) {
         int initResult = saynaa.runFile(initFile.getAbsolutePath());
@@ -278,6 +283,27 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
     saynaa.setGlobalValue("java_pushed_list_saynaa", javaList, true);
     saynaa.setGlobalValue("java_pushed_map_saynaa", javaMap, true);
     saynaa.setGlobal("activity", this);
+  }
+
+  public ArrayList<ClassLoader> getClassLoaders() {
+    if (dexLoader == null)
+      return new ArrayList<>();
+    return dexLoader.getClassLoaders();
+  }
+
+  public SaynaaDexClassLoader loadDex(String path) throws SaynaaException {
+    if (dexLoader == null) {
+      dexLoader = new SaynaaDexLoader(this);
+    }
+    SaynaaDexClassLoader loader = dexLoader.loadDex(path);
+    JavaBridge.setExtraClassLoaders(dexLoader.getClassLoaders());
+    return loader;
+  }
+
+  public HashMap<String, String> getLibrarys() {
+    if (dexLoader == null)
+      return new HashMap<>();
+    return dexLoader.getLibrarys();
   }
 
   @Override

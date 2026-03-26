@@ -37,3 +37,10 @@ _module._missing = function(name)
         end
     end
 end
+
+function loadDex(path)
+    if activity == null then
+        assert(false, 'loadDex: activity is null')
+    end
+    return activity.loadDex(path)
+end

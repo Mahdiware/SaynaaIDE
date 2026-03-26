@@ -341,6 +341,25 @@ public class JavaBridge {
     }
   }
 
+  private static final List<ClassLoader> extraClassLoaders = new ArrayList<>();
+
+  public static synchronized void setExtraClassLoaders(List<ClassLoader> loaders) {
+    extraClassLoaders.clear();
+    if (loaders != null) {
+      extraClassLoaders.addAll(loaders);
+    }
+  }
+
+  public static synchronized void addExtraClassLoader(ClassLoader loader) {
+    if (loader != null) {
+      extraClassLoaders.add(loader);
+    }
+  }
+
+  private static synchronized List<ClassLoader> snapshotExtraLoaders() {
+    return new ArrayList<>(extraClassLoaders);
+  }
+
   // --- Class loading with caching ---
   public static Class<?> findClass(String className) {
     Class<?> cls = classCache.get(className);
@@ -353,11 +372,28 @@ public class JavaBridge {
       Log.d(TAG, "Found and cached class: " + className);
       return cls;
     } catch (ClassNotFoundException e) {
-      if (Log.isLoggable(TAG, Log.DEBUG)) {
-        Log.d(TAG, "Class not found: " + className);
-      }
-      return null;
+      // Fall through to custom loaders.
     }
+
+    for (ClassLoader loader : snapshotExtraLoaders()) {
+      if (loader == null)
+        continue;
+      try {
+        cls = Class.forName(className, false, loader);
+        if (cls != null) {
+          classCache.put(className, cls);
+          Log.d(TAG, "Found and cached class (loader): " + className);
+          return cls;
+        }
+      } catch (ClassNotFoundException ignored) {
+        // Try next loader.
+      }
+    }
+
+    if (Log.isLoggable(TAG, Log.DEBUG)) {
+      Log.d(TAG, "Class not found: " + className);
+    }
+    return null;
   }
 
   // --- Convert boxed to primitive types for matching ---
@@ -1099,7 +1135,11 @@ public class JavaBridge {
           Log.e(TAG, "createNativeCallbackProxy failed: invalid interface list: " + interfaceName);
           return null;
         }
-        Class<?> iface = Class.forName(n);
+        Class<?> iface = findClass(n);
+        if (iface == null) {
+          Log.e(TAG, "createNativeCallbackProxy failed: class not found: " + n);
+          return null;
+        }
         ifaces[i] = iface;
         if (loader == null)
           loader = iface.getClassLoader();
@@ -1203,7 +1243,9 @@ public class JavaBridge {
         return "*";
       }
 
-      Class<?> iface = Class.forName(names[0].trim());
+      Class<?> iface = findClass(names[0].trim());
+      if (iface == null)
+        return "*";
       Method[] methods = iface.getMethods();
       String found = null;
       for (Method m : methods) {
