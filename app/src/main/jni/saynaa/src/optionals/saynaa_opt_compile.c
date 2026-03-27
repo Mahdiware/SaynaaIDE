@@ -10,8 +10,6 @@
 #include <time.h>
 
 typedef struct {
-  char* source_path;
-  char* bytecode_path;
   SaynaaBytecode bytecode;
 } CompileInfo;
 
@@ -60,22 +58,18 @@ static bool loadBytecodeFromBuffer(VM* vm, CompileInfo* info,
 }
 
 static bool compileSourceToPayload(VM* vm, CompileInfo* info,
-                                   const char* source, const char* path) {
+                                   const char* source) {
   Result result = CompileStringToBytecode(vm, source, &info->bytecode);
   if (result != RESULT_SUCCESS) {
-    SetRuntimeError(vm, "Failed to compile file to bytecode.");
+    SetRuntimeError(vm, "Failed to compile code to bytecode.");
     return false;
   }
-
-  (void) path;
   return true;
 }
 
 void* _compileNew(VM* vm) {
   CompileInfo* info = (CompileInfo*) Realloc(vm, NULL, sizeof(CompileInfo));
   ASSERT(info != NULL, "Realloc failed.");
-  info->source_path = NULL;
-  info->bytecode_path = NULL;
   saynaa_bytecode_init(&info->bytecode);
   return info;
 }
@@ -84,10 +78,6 @@ void _compileDelete(VM* vm, void* ptr) {
   CompileInfo* info = (CompileInfo*) ptr;
   if (info == NULL)
     return;
-  if (info->source_path)
-    Realloc(vm, info->source_path, 0);
-  if (info->bytecode_path)
-    Realloc(vm, info->bytecode_path, 0);
   saynaa_bytecode_clear(vm, &info->bytecode);
   Realloc(vm, info, 0);
 }
@@ -101,67 +91,35 @@ static CompileInfo* compileGetInfo(VM* vm) {
   return info;
 }
 
-static bool compileEnsureBytecode(VM* vm, CompileInfo* info, const char* path) {
-  bool is_bytecode = false;
-  char* loaded = LoadScriptAutoDetect(vm, path, &is_bytecode, NULL);
-  if (loaded == NULL) {
-    SetRuntimeError(vm, "Failed to load source file.");
-    return false;
-  }
-
-  if (is_bytecode) {
-    bool ok = loadBytecodeFromBuffer(vm, info, (const uint8_t*) loaded);
-    Realloc(vm, loaded, 0);
-    if (!ok)
-      return false;
-    if (info->bytecode_path)
-      Realloc(vm, info->bytecode_path, 0);
-    info->bytecode_path = copyCString(vm, path);
-    return (info->bytecode_path != NULL);
-  }
-
-  bool ok = compileSourceToPayload(vm, info, loaded, path);
-  Realloc(vm, loaded, 0);
+static bool compileSourceCode(VM* vm, CompileInfo* info, const char* code) {
+  bool ok = compileSourceToPayload(vm, info, code);
   if (!ok)
     return false;
-
-  if (info->bytecode_path) {
-    Realloc(vm, info->bytecode_path, 0);
-    info->bytecode_path = NULL;
-  }
   return true;
 }
 
-saynaa_function(_compileInit, "Compile._init(path:String) -> Null",
-                "Initialize and compile a source path to bytecode.") {
+saynaa_function(_compileInit, "Compile._init(code:String) -> Null",
+                "Initialize and compile a source code to bytecode.") {
   int argc = GetArgc(vm);
   if (!CheckArgcRange(vm, argc, 1, 1))
     return;
 
-  const char* path = NULL;
-  if (!ValidateSlotString(vm, 1, &path, NULL))
+  const char* code = NULL;
+  if (!ValidateSlotString(vm, 1, &code, NULL))
     return;
 
   CompileInfo* info = compileGetInfo(vm);
   if (info == NULL)
     return;
 
-  if (info->source_path)
-    Realloc(vm, info->source_path, 0);
-  info->source_path = copyCString(vm, path);
-  if (info->source_path == NULL) {
-    SetRuntimeError(vm, "Failed to store compile path.");
-    return;
-  }
-
-  if (!compileEnsureBytecode(vm, info, path))
+  if (!compileSourceCode(vm, info, code))
     return;
 }
 
-saynaa_function(_compileSave, "Compile.save([out:String]) -> String",
-                "Return bytecode path or copy it to [out].") {
+saynaa_function(_compileSave, "Compile.save(out:String) -> Bool",
+                "Return true if bytecode saved successfully into out.") {
   int argc = GetArgc(vm);
-  if (!CheckArgcRange(vm, argc, 0, 1))
+  if (!CheckArgcRange(vm, argc, 1, 1))
     return;
 
   CompileInfo* info = compileGetInfo(vm);
@@ -169,27 +127,6 @@ saynaa_function(_compileSave, "Compile.save([out:String]) -> String",
     return;
   if (info->bytecode.data == NULL || info->bytecode.size == 0) {
     SetRuntimeError(vm, "No bytecode available to save.");
-    return;
-  }
-
-  if (argc == 0) {
-    if (info->bytecode_path == NULL && info->source_path != NULL) {
-      info->bytecode_path = saynaa_bytecode_build_path(vm, info->source_path);
-      if (info->bytecode_path == NULL) {
-        SetRuntimeError(vm, "Failed to build output bytecode path.");
-        return;
-      }
-    }
-    if (info->bytecode_path == NULL) {
-      SetRuntimeError(vm, "Missing output path.");
-      return;
-    }
-    if (saynaa_bytecode_save(&info->bytecode, info->bytecode_path)
-      != RESULT_SUCCESS) {
-      SetRuntimeError(vm, "Failed to write bytecode output.");
-      return;
-    }
-    setSlotString(vm, 0, info->bytecode_path);
     return;
   }
 
@@ -202,10 +139,7 @@ saynaa_function(_compileSave, "Compile.save([out:String]) -> String",
     return;
   }
 
-  if (info->bytecode_path == NULL) {
-    info->bytecode_path = copyCString(vm, out);
-  }
-  setSlotString(vm, 0, out);
+  setSlotBool(vm, 0, true);
 }
 
 saynaa_function(_compileRun, "Compile.run() -> Null",
@@ -223,18 +157,18 @@ saynaa_function(_compileRun, "Compile.run() -> Null",
   }
   Result result = saynaa_bytecode_run(vm, &info->bytecode);
   if (result != RESULT_SUCCESS && !VM_HAS_ERROR(vm))
-    SetRuntimeError(vm, "Failed to run bytecode file.");
+    SetRuntimeError(vm, "Failed to run bytecode.");
 }
 
 saynaa_function(
-    _compileBuiltin, "Compile(path:String) -> Compile",
+    _compileBuiltin, "Compile(code:String) -> Compile",
     "Create a Compile instance for [path].") {
   int argc = GetArgc(vm);
   if (!CheckArgcRange(vm, argc, 1, 1))
     return;
 
-  const char* path = NULL;
-  if (!ValidateSlotString(vm, 1, &path, NULL))
+  const char* code = NULL;
+  if (!ValidateSlotString(vm, 1, &code, NULL))
     return;
 
   reserveSlots(vm, 2);
@@ -244,7 +178,7 @@ saynaa_function(
   if (!GetAttribute(vm, 0, "Compile", 0))
     return; // slot[0] = Compile class
 
-  setSlotString(vm, 1, path); // slot[1] = path
+  setSlotString(vm, 1, code); // slot[1] = code
   if (!NewInstance(vm, 0, 0, 1, 1))
     return; // slot[0] = Compile(path)
 }
@@ -256,10 +190,10 @@ void registerModuleCompile(VM* vm) {
   Handle* module = NewModule(vm, "compile");
   Handle* cls = NewClass(vm, "Compile", NULL, module,
                          _compileNew, _compileDelete,
-                         "Compile source file to bytecode and run it.");
+                         "Compile source code to bytecode and run it.");
 
   ADD_METHOD(cls, "_init", _compileInit, 1);
-  ADD_METHOD(cls, "save", _compileSave, -1);
+  ADD_METHOD(cls, "save", _compileSave, 1);
   ADD_METHOD(cls, "run", _compileRun, 0);
 
   RegisterBuiltinFn(vm, "Compile", _compileBuiltin, 1, DOCSTRING(_compileBuiltin));
