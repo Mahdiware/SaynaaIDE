@@ -18,6 +18,10 @@ jobs:
     env:
       GRADLE_OPTS: -Dorg.gradle.caching=true -Dorg.gradle.parallel=true -Dorg.gradle.configureondemand=true -Dkotlin.incremental=true
       # Note: android-actions/setup-android@v3 will populate ANDROID_SDK_ROOT/ANDROID_HOME
+      ANDROID_API: "33"
+      BUILD_TOOLS_VERSION: "33.0.2"
+      NDK_VERSION: "23.1.7779620"
+      CMAKE_VERSION: "3.22.1"
 
     steps:
       - name: Checkout code
@@ -26,7 +30,7 @@ jobs:
       - name: Setup Android SDK (tools + platform-tools)
         uses: android-actions/setup-android@v3
         with:
-          api-level: 33
+          api-level: ${{ env.ANDROID_API }}
           # This action installs platform-tools and basic SDK; we will install NDK/CMake explicitly below.
 
       - name: Set up Java (required for Gradle)
@@ -49,7 +53,24 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-gradle-
 
+      - name: Cache Android SDK/NDK
+        uses: actions/cache@v4
+        id: cache-android
+        with:
+          path: |
+            ${{ env.ANDROID_SDK_ROOT }}/platforms
+            ${{ env.ANDROID_SDK_ROOT }}/platform-tools
+            ${{ env.ANDROID_SDK_ROOT }}/build-tools
+            ${{ env.ANDROID_SDK_ROOT }}/ndk
+            ${{ env.ANDROID_SDK_ROOT }}/cmake
+            ${{ env.ANDROID_SDK_ROOT }}/cmdline-tools
+            ${{ env.ANDROID_SDK_ROOT }}/licenses
+          key: ${{ runner.os }}-android-sdk-${{ env.ANDROID_API }}-${{ env.BUILD_TOOLS_VERSION }}-${{ env.NDK_VERSION }}-${{ env.CMAKE_VERSION }}
+          restore-keys: |
+            ${{ runner.os }}-android-sdk-
+
       - name: Install Android SDK components (NDK, CMake, build-tools)
+        if: steps.cache-android.outputs.cache-hit != 'true'
         run: |
           # Ensure sdkmanager is available in PATH (setup-android usually provides this)
           echo "Android SDK root: $ANDROID_SDK_ROOT"
@@ -66,7 +87,7 @@ jobs:
 
           # Install specific components; these version strings are commonly available.
           # You may change the NDK version if you need a specific one.
-          yes | "$SDKMANAGER" "ndk;23.1.7779620" "cmake;3.22.1" "build-tools;33.0.2" "platforms;android-33"
+          yes | "$SDKMANAGER" "ndk;${NDK_VERSION}" "cmake;${CMAKE_VERSION}" "build-tools;${BUILD_TOOLS_VERSION}" "platforms;android-${ANDROID_API}"
 
           # Accept licenses (in case they weren't accepted)
           yes | "$SDKMANAGER" --licenses || true
@@ -77,9 +98,6 @@ jobs:
           ls -la "$ANDROID_SDK_ROOT/ndk" || true
           echo "CMake under $ANDROID_SDK_ROOT/cmake:"
           ls -la "$ANDROID_SDK_ROOT/cmake" || true
-
-      - name: Clean previously built outputs
-        run: ./gradlew clean --no-daemon --stacktrace
 
       - name: Build debug APK (includes native libs from NDK)
         run: ./gradlew assembleDebug --no-daemon --stacktrace
