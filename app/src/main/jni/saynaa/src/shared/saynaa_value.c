@@ -449,7 +449,11 @@ Function* newFunction(VM* vm, const char* name, int length, Module* owner,
 
     } else {
       Fn* fn = ALLOCATE(vm, Fn);
+    #if defined(SAYNAA_REG_VM)
+      UintBufferInit(&fn->opcodes);
+    #else
       ByteBufferInit(&fn->opcodes);
+    #endif
       UintBufferInit(&fn->oplines);
       fn->stack_size = 0;
       func->fn = fn;
@@ -477,7 +481,11 @@ Function* newFunctionRaw(VM* vm, Module* owner, String* name, String* docstring,
   func->docstring = (docstring != NULL) ? docstring->data : NULL;
 
   Fn* fn = ALLOCATE(vm, Fn);
+#if defined(SAYNAA_REG_VM)
+  UintBufferInit(&fn->opcodes);
+#else
   ByteBufferInit(&fn->opcodes);
+#endif
   UintBufferInit(&fn->oplines);
   fn->stack_size = 0;
   func->fn = fn;
@@ -1466,7 +1474,11 @@ void freeObject(VM* vm, Object* thiz) {
       {
         Function* func = (Function*) thiz;
         if (!func->is_native) {
+#if defined(SAYNAA_REG_VM)
+          UintBufferClear(&func->fn->opcodes, vm);
+#else
           ByteBufferClear(&func->fn->opcodes, vm);
+#endif
           UintBufferClear(&func->fn->oplines, vm);
           DEALLOCATE(vm, func->fn, Fn);
         }

@@ -11,6 +11,8 @@
 #include "../utils/saynaa_debug.h"
 #include "../utils/saynaa_utils.h"
 
+#include <stdlib.h>
+
 /*****************************************************************************/
 /* TOKENS                                                                    */
 /*****************************************************************************/
@@ -450,6 +452,80 @@ static OpInfo opcode_info[] = {
 #include "../shared/saynaa_opcodes.h"
 #undef OPCODE
 };
+
+#if defined(SAYNAA_REG_VM)
+typedef struct {
+  int start;
+  int end;
+  int reg;
+} RegInterval;
+
+// Assign registers with liveness-based reuse using a simple linear scan.
+static int regallocAssignIntervals(RegInterval* intervals, int count) {
+  if (intervals == NULL || count <= 0)
+    return 0;
+
+  // Insertion sort by start to keep allocation deterministic.
+  for (int i = 1; i < count; i++) {
+    RegInterval key = intervals[i];
+    int j = i - 1;
+    while (j >= 0 && intervals[j].start > key.start) {
+      intervals[j + 1] = intervals[j];
+      j--;
+    }
+    intervals[j + 1] = key;
+  }
+
+  int reg_count = 0;
+  int free_regs_count = 0;
+  int free_regs_capacity = 8;
+  int* free_regs = (int*) malloc(sizeof(int) * free_regs_capacity);
+  if (free_regs == NULL)
+    return 0;
+
+  RegInterval* active = (RegInterval*) malloc(sizeof(RegInterval) * count);
+  if (active == NULL) {
+    free(free_regs);
+    return 0;
+  }
+  int active_count = 0;
+
+  for (int i = 0; i < count; i++) {
+    RegInterval* current = &intervals[i];
+
+    // Expire old intervals.
+    for (int a = 0; a < active_count;) {
+      if (active[a].end < current->start) {
+        if (free_regs_count == free_regs_capacity) {
+          free_regs_capacity *= 2;
+          free_regs = (int*) realloc(free_regs, sizeof(int) * free_regs_capacity);
+          if (free_regs == NULL) {
+            free(active);
+            return 0;
+          }
+        }
+        free_regs[free_regs_count++] = active[a].reg;
+        active[a] = active[active_count - 1];
+        active_count--;
+        continue;
+      }
+      a++;
+    }
+
+    if (free_regs_count > 0) {
+      current->reg = free_regs[--free_regs_count];
+    } else {
+      current->reg = reg_count++;
+    }
+
+    active[active_count++] = *current;
+  }
+
+  free(active);
+  free(free_regs);
+  return reg_count;
+}
+#endif
 
 /*****************************************************************************/
 /* INITIALIZATION FUNCTIONS                                                  */
@@ -2693,7 +2769,11 @@ static void compilerPushFunc(Compiler* compiler, Func* fn, Function* func, FuncT
 
 // Emit a single byte and return it's index.
 static int emitByte(Compiler* compiler, int byte) {
+#if defined(SAYNAA_REG_VM)
+  UintBufferWrite(&_FN->opcodes, compiler->parser.vm, (uint32_t) (uint8_t) byte);
+#else
   ByteBufferWrite(&_FN->opcodes, compiler->parser.vm, (uint8_t) byte);
+#endif
   UintBufferWrite(&_FN->oplines, compiler->parser.vm, compiler->parser.previous.line);
   return (int) _FN->opcodes.count - 1;
 }
@@ -3779,7 +3859,11 @@ Result compile(VM* vm, Module* module, const char* source, const CompileOptions*
   // If we're compiling for a module that was already compiled (when running
   // REPL or evaluating an expression) we don't need the old main anymore.
   // just use the globals and functions of the module and use a new body func.
+#if defined(SAYNAA_REG_VM)
+  UintBufferClear(&module->body->fn->fn->opcodes, vm);
+#else
   ByteBufferClear(&module->body->fn->fn->opcodes, vm);
+#endif
 
   // Remember the count of constants, names, and globals, If the compilation
   // failed discard all of them and roll back.

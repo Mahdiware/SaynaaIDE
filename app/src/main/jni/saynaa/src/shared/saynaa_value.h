@@ -373,7 +373,11 @@ struct Module {
 
 // A struct contain opcodes and other information of a compiled function.
 typedef struct {
+#if defined(SAYNAA_REG_VM)
+  UintBuffer opcodes; //< Buffer of 32-bit instructions.
+#else
   ByteBuffer opcodes; //< Buffer of opcodes.
+#endif
   UintBuffer oplines; //< Line number of opcodes for debug (1 based).
   int stack_size;     //< Maximum size of stack required.
 } Fn;
@@ -508,7 +512,11 @@ struct Upvalue {
 };
 
 typedef struct {
+#if defined(SAYNAA_REG_VM)
+  const uint32_t* ip;     //< Pointer to the next instruction word.
+#else
   const uint8_t* ip;      //< Pointer to the next instruction byte code.
+#endif
   const Closure* closure; //< Closure of the frame.
   Var* rbp;               //< Stack base pointer. (%rbp)
   Var thiz;               //< This reference of the current method.

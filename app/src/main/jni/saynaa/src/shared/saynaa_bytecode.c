@@ -529,8 +529,13 @@ Result saynaa_bytecode_serialize_module(VM* vm, Module* module,
 
           bc_write_u32(out, vm, fn->fn->opcodes.count);
           if (fn->fn->opcodes.count > 0) {
+#if defined(SAYNAA_REG_VM)
+            ByteBufferAddString(out, vm, (const char*) fn->fn->opcodes.data,
+                                fn->fn->opcodes.count * sizeof(uint32_t));
+#else
             ByteBufferAddString(out, vm, (const char*) fn->fn->opcodes.data,
                                 fn->fn->opcodes.count);
+#endif
           }
 
           bc_write_u32(out, vm, fn->fn->oplines.count);
@@ -578,8 +583,13 @@ typedef struct {
   uint8_t is_method;
   uint32_t upvalue_count;
   int32_t stack_size;
+#if defined(SAYNAA_REG_VM)
+  uint32_t* opcodes;
+  uint32_t opcodes_count;
+#else
   uint8_t* opcodes;
   uint32_t opcodes_count;
+#endif
   uint32_t* oplines;
   uint32_t oplines_count;
 } PendingFunction;
@@ -598,7 +608,12 @@ static void free_pending_functions(VM* vm, PendingFunction* fns, uint32_t count)
   for (uint32_t i = 0; i < count; i++) {
     PendingFunction* pending = &fns[i];
     if (pending->opcodes != NULL) {
+    #if defined(SAYNAA_REG_VM)
+      size_t size = pending->opcodes_count * sizeof(uint32_t);
+      vmRealloc(vm, pending->opcodes, size, 0);
+    #else
       vmRealloc(vm, pending->opcodes, pending->opcodes_count, 0);
+    #endif
       pending->opcodes = NULL;
     }
     if (pending->oplines != NULL) {
@@ -743,19 +758,33 @@ Result saynaa_bytecode_deserialize_module(VM* vm, Module* module,
             status = RESULT_BYTECODE_TRUNCATED;
             goto cleanup;
           }
+#if defined(SAYNAA_REG_VM)
+          size_t opcodes_size = pending.opcodes_count * sizeof(uint32_t);
+          if (opcodes_size > reader.size - reader.offset) {
+#else
           if (pending.opcodes_count > reader.size - reader.offset) {
+#endif
             status = RESULT_BYTECODE_TRUNCATED;
             goto cleanup;
           }
           pending.opcodes = NULL;
           if (pending.opcodes_count > 0) {
+#if defined(SAYNAA_REG_VM)
+            pending.opcodes = (uint32_t*) vmRealloc(vm, NULL, 0, opcodes_size);
+#else
             pending.opcodes = (uint8_t*) vmRealloc(vm, NULL, 0, pending.opcodes_count);
+#endif
             if (pending.opcodes == NULL) {
               status = RESULT_BYTECODE_IO_ERROR;
               goto cleanup;
             }
+#if defined(SAYNAA_REG_VM)
+            memcpy(pending.opcodes, reader.data + reader.offset, opcodes_size);
+            reader.offset += opcodes_size;
+#else
             memcpy(pending.opcodes, reader.data + reader.offset, pending.opcodes_count);
             reader.offset += pending.opcodes_count;
+#endif
           }
 
           if (!bc_read_u32(&reader, &pending.oplines_count)) {
@@ -868,13 +897,21 @@ Result saynaa_bytecode_deserialize_module(VM* vm, Module* module,
 
     fn->fn->stack_size = pending->stack_size;
 
-    if (pending->opcodes_count > 0) {
+        if (pending->opcodes_count > 0) {
+    #if defined(SAYNAA_REG_VM)
+      UintBufferReserve(&fn->fn->opcodes, vm, pending->opcodes_count);
+      memcpy(fn->fn->opcodes.data, pending->opcodes,
+         pending->opcodes_count * sizeof(uint32_t));
+      fn->fn->opcodes.count = pending->opcodes_count;
+      vmRealloc(vm, pending->opcodes, pending->opcodes_count * sizeof(uint32_t), 0);
+    #else
       ByteBufferReserve(&fn->fn->opcodes, vm, pending->opcodes_count);
       memcpy(fn->fn->opcodes.data, pending->opcodes, pending->opcodes_count);
       fn->fn->opcodes.count = pending->opcodes_count;
       vmRealloc(vm, pending->opcodes, pending->opcodes_count, 0);
+    #endif
       pending->opcodes = NULL;
-    }
+        }
 
     if (pending->oplines_count > 0) {
       UintBufferReserve(&fn->fn->oplines, vm, pending->oplines_count);

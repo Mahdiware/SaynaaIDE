@@ -13,6 +13,44 @@
 // parameters in bytes, and the third indicates how many stack slots will be
 // affected after executing the instruction.
 
+#if defined(SAYNAA_REG_VM)
+
+// Register-based instruction encoding (32-bit): OP(6) A(8) B(9) C(9)
+// Format variants: ABC, ABx, AsBx.
+#define BC_OP_MASK 0x3f
+#define BC_A_MASK 0xff
+#define BC_B_MASK 0x1ff
+#define BC_C_MASK 0x1ff
+
+#define BC_OP_SHIFT 0
+#define BC_A_SHIFT 6
+#define BC_C_SHIFT 14
+#define BC_B_SHIFT 23
+
+#define BC_GET_OP(i) ((uint8_t) (((i) >> BC_OP_SHIFT) & BC_OP_MASK))
+#define BC_GET_A(i) ((uint8_t) (((i) >> BC_A_SHIFT) & BC_A_MASK))
+#define BC_GET_B(i) ((uint16_t) (((i) >> BC_B_SHIFT) & BC_B_MASK))
+#define BC_GET_C(i) ((uint16_t) (((i) >> BC_C_SHIFT) & BC_C_MASK))
+
+#define BC_GET_Bx(i) ((uint16_t) (((i) >> BC_C_SHIFT) & 0x3ffff))
+#define BC_GET_sBx(i) ((int32_t) (BC_GET_Bx(i)) - 131071)
+
+#define BC_CREATE_ABC(op, a, b, c) \
+  ((uint32_t) ((op) & BC_OP_MASK) \
+   | (((uint32_t) (a) & BC_A_MASK) << BC_A_SHIFT) \
+   | (((uint32_t) (c) & BC_C_MASK) << BC_C_SHIFT) \
+   | (((uint32_t) (b) & BC_B_MASK) << BC_B_SHIFT))
+
+#define BC_CREATE_ABx(op, a, bx) \
+  ((uint32_t) ((op) & BC_OP_MASK) \
+   | (((uint32_t) (a) & BC_A_MASK) << BC_A_SHIFT) \
+   | (((uint32_t) (bx) & 0x3ffff) << BC_C_SHIFT))
+
+#define BC_CREATE_AsBx(op, a, sbx) \
+  BC_CREATE_ABx(op, a, (uint32_t) ((sbx) + 131071))
+
+#endif
+
 // Load the constant at index [arg] from the script's literals.
 // params: 2 byte (uint16_t) index value.
 OPCODE(PUSH_CONSTANT, 2, 1)

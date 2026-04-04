@@ -293,8 +293,12 @@ void dumpFunctionCode(VM* vm, Function* func) {
   } while (false)
 #define PRINT_INT(value) _PRINT_INT(value, _INT_WIDTH)
 
+#if defined(SAYNAA_REG_VM)
+#define READ_WORD() (opcodes[i++])
+#else
 #define READ_BYTE() (opcodes[i++])
 #define READ_SHORT() (i += 2, opcodes[i - 2] << 8 | opcodes[i - 1])
+#endif
 
 #define NO_ARGS() NEWLINE()
 
@@ -310,8 +314,13 @@ void dumpFunctionCode(VM* vm, Function* func) {
     NEWLINE(); \
   } while (false)
 
+#if defined(SAYNAA_REG_VM)
+  uint32_t i = 0;
+  uint32_t* opcodes = func->fn->opcodes.data;
+#else
   uint32_t i = 0;
   uint8_t* opcodes = func->fn->opcodes.data;
+#endif
   uint32_t* lines = func->fn->oplines.data;
   uint32_t line = 1, last_line = 0;
 
@@ -347,13 +356,29 @@ void dumpFunctionCode(VM* vm, Function* func) {
     _PRINT_INT(i, _INT_WIDTH - 1);
     PRINT(_INDENTATION);
 
+  #if defined(SAYNAA_REG_VM)
+    const char* op_name = op_names[BC_GET_OP(opcodes[i])];
+  #else
     const char* op_name = op_names[opcodes[i]];
+  #endif
     uint32_t op_length = (uint32_t) strlen(op_name);
     PRINT(op_name);
     for (uint32_t j = 0; j < 16 - op_length; j++) { // Padding.
       PRINT(" ");
     }
 
+  #if defined(SAYNAA_REG_VM)
+    uint32_t insn = READ_WORD();
+    Opcode op = (Opcode) BC_GET_OP(insn);
+    PRINT_INT(BC_GET_A(insn));
+    PRINT(" ");
+    PRINT_INT(BC_GET_B(insn));
+    PRINT(" ");
+    PRINT_INT(BC_GET_C(insn));
+    NEWLINE();
+    (void) op;
+    continue;
+  #else
     Opcode op = (Opcode) func->fn->opcodes.data[i++];
     switch (op) {
       case OP_PUSH_CONSTANT:
@@ -709,6 +734,7 @@ void dumpFunctionCode(VM* vm, Function* func) {
         UNREACHABLE();
         break;
     }
+  #endif
   }
 
   NEWLINE();

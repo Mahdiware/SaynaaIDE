@@ -11,6 +11,8 @@
 
 typedef struct {
   SaynaaBytecode bytecode;
+  char* source;
+  Handle* target_module;
 } CompileInfo;
 
 static char* copyCString(VM* vm, const char* text) {
@@ -71,6 +73,8 @@ void* _compileNew(VM* vm) {
   CompileInfo* info = (CompileInfo*) Realloc(vm, NULL, sizeof(CompileInfo));
   ASSERT(info != NULL, "Realloc failed.");
   saynaa_bytecode_init(&info->bytecode);
+  info->source = NULL;
+  info->target_module = NULL;
   return info;
 }
 
@@ -79,6 +83,12 @@ void _compileDelete(VM* vm, void* ptr) {
   if (info == NULL)
     return;
   saynaa_bytecode_clear(vm, &info->bytecode);
+  if (info->source != NULL) {
+    Realloc(vm, info->source, 0);
+  }
+  if (info->target_module != NULL) {
+    releaseHandle(vm, info->target_module);
+  }
   Realloc(vm, info, 0);
 }
 
@@ -92,16 +102,25 @@ static CompileInfo* compileGetInfo(VM* vm) {
 }
 
 static bool compileSourceCode(VM* vm, CompileInfo* info, const char* code) {
+  if (info->source != NULL) {
+    Realloc(vm, info->source, 0);
+    info->source = NULL;
+  }
+  info->source = copyCString(vm, code);
+  if (info->source == NULL) {
+    SetRuntimeError(vm, "Failed to copy source code.");
+    return false;
+  }
   bool ok = compileSourceToPayload(vm, info, code);
   if (!ok)
     return false;
   return true;
 }
 
-saynaa_function(_compileInit, "Compile._init(code:String) -> Null",
+saynaa_function(_compileInit, "Compile._init(code:String, [module:Module]) -> Null",
                 "Initialize and compile a source code to bytecode.") {
   int argc = GetArgc(vm);
-  if (!CheckArgcRange(vm, argc, 1, 1))
+  if (!CheckArgcRange(vm, argc, 1, 2))
     return;
 
   const char* code = NULL;
@@ -111,6 +130,20 @@ saynaa_function(_compileInit, "Compile._init(code:String) -> Null",
   CompileInfo* info = compileGetInfo(vm);
   if (info == NULL)
     return;
+
+  if (info->target_module != NULL) {
+    releaseHandle(vm, info->target_module);
+    info->target_module = NULL;
+  }
+
+  if (argc == 2) {
+    VarType type = GetSlotType(vm, 2);
+    if (type != vNULL) {
+      if (!ValidateSlotType(vm, 2, vMODULE))
+        return;
+      info->target_module = GetSlotHandle(vm, 2);
+    }
+  }
 
   if (!compileSourceCode(vm, info, code))
     return;
@@ -151,6 +184,33 @@ saynaa_function(_compileRun, "Compile.run() -> Null",
   CompileInfo* info = compileGetInfo(vm);
   if (info == NULL)
     return;
+
+  if (info->target_module != NULL) {
+    if (info->source == NULL) {
+      SetRuntimeError(vm, "No source code available to run.");
+      return;
+    }
+    Var module_var = info->target_module->value;
+    if (getVarType(module_var) != vMODULE) {
+      SetRuntimeError(vm, "Invalid module handle.");
+      return;
+    }
+
+    Module* module = (Module*) AS_OBJ(module_var);
+    CompileOptions options = newCompilerOptions();
+    options.runtime = true;
+    Result status = compile(vm, module, info->source, &options);
+    if (status != RESULT_SUCCESS) {
+      if (!VM_HAS_ERROR(vm))
+        SetRuntimeError(vm, "Failed to compile code.");
+      return;
+    }
+    status = vmCallFunction(vm, module->body, 0, NULL, NULL);
+    if (status != RESULT_SUCCESS && !VM_HAS_ERROR(vm))
+      SetRuntimeError(vm, "Failed to run code.");
+    return;
+  }
+
   if (info->bytecode.data == NULL || info->bytecode.size == 0) {
     SetRuntimeError(vm, "No bytecode available to run.");
     return;
@@ -161,17 +221,17 @@ saynaa_function(_compileRun, "Compile.run() -> Null",
 }
 
 saynaa_function(
-    _compileBuiltin, "Compile(code:String) -> Compile",
-    "Create a Compile instance for [path].") {
+    _compileBuiltin, "Compile(code:String, [module:Module]) -> Compile",
+    "Create a Compile instance for [code].") {
   int argc = GetArgc(vm);
-  if (!CheckArgcRange(vm, argc, 1, 1))
+  if (!CheckArgcRange(vm, argc, 1, 2))
     return;
 
   const char* code = NULL;
   if (!ValidateSlotString(vm, 1, &code, NULL))
     return;
 
-  reserveSlots(vm, 2);
+  reserveSlots(vm, 3);
 
   if (!ImportModule(vm, "compile", 0))
     return; // slot[0] = compile module
@@ -179,8 +239,9 @@ saynaa_function(
     return; // slot[0] = Compile class
 
   setSlotString(vm, 1, code); // slot[1] = code
-  if (!NewInstance(vm, 0, 0, 1, 1))
-    return; // slot[0] = Compile(path)
+  // slot[2] already contains module when argc == 2.
+  if (!NewInstance(vm, 0, 0, argc, 1))
+    return; // slot[0] = Compile(code[, module])
 }
 
 void registerModuleCompile(VM* vm) {
@@ -192,11 +253,11 @@ void registerModuleCompile(VM* vm) {
                          _compileNew, _compileDelete,
                          "Compile source code to bytecode and run it.");
 
-  ADD_METHOD(cls, "_init", _compileInit, 1);
+  ADD_METHOD(cls, "_init", _compileInit, -1);
   ADD_METHOD(cls, "save", _compileSave, 1);
   ADD_METHOD(cls, "run", _compileRun, 0);
 
-  RegisterBuiltinFn(vm, "Compile", _compileBuiltin, 1, DOCSTRING(_compileBuiltin));
+  RegisterBuiltinFn(vm, "Compile", _compileBuiltin, -1, DOCSTRING(_compileBuiltin));
 
   registerModule(vm, module);
   releaseHandle(vm, cls);

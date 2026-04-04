@@ -6,6 +6,7 @@
 #include "saynaa_vm.h"
 
 #include "../shared/saynaa_bytecode.h"
+#include "../runtime/saynaa_core.h"
 #include "../utils/saynaa_debug.h"
 #include "../utils/saynaa_utils.h"
 
@@ -18,6 +19,19 @@ typedef struct {
   VarBuffer* modules;
   Module* target_module;
 } WildcardImportRuntimeData;
+
+// Fast numeric check for VM hot paths.
+static inline bool vmIsNumeric(Var v, double* out) {
+  if (IS_NUM(v)) {
+    *out = AS_NUM(v);
+    return true;
+  }
+  if (IS_INT(v)) {
+    *out = (double) AS_INT(v);
+    return true;
+  }
+  return false;
+}
 
 /*****************************************************************************/
 /* IMPORT HELPERS                                                            */
@@ -1045,7 +1059,11 @@ Result vmRunFiber(VM* vm, Fiber* fiber_) {
   fiber_->state = FIBER_RUNNING;
 
   // The instruction pointer.
+#if defined(SAYNAA_REG_VM)
+  register const uint32_t* ip;
+#else
   register const uint8_t* ip;
+#endif
 
   register Var* rbp;         //< Stack base pointer register.
   register Var* thiz;        //< Points to the this in the current call frame.
@@ -1066,8 +1084,14 @@ Result vmRunFiber(VM* vm, Fiber* fiber_) {
 #define POP() (*(--fiber->sp))
 #define DROP() (--fiber->sp)
 #define PEEK(off) (*(fiber->sp + (off)))
+#if defined(SAYNAA_REG_VM)
+#define READ_BYTE() ((uint8_t) (*ip++))
+#define READ_SHORT() \
+  (ip += 2, (uint16_t) ((((uint16_t) ip[-2]) << 8) | (uint16_t) ip[-1]))
+#else
 #define READ_BYTE() (*ip++)
 #define READ_SHORT() (ip += 2, (uint16_t) ((ip[-2] << 8) | ip[-1]))
+#endif
 
 // Switch back to the caller of the current fiber, will be called when we're
 // done with the fiber or aborting it for runtime errors.
@@ -1120,11 +1144,25 @@ Result vmRunFiber(VM* vm, Fiber* fiber_) {
 #error "OPCODE" should not be deifined here.
 #endif
 
-#define SWITCH() \
-  Opcode instruction; \
-  switch (instruction = (Opcode) READ_BYTE())
+#if defined(__GNUC__) || defined(__clang__)
+#define USE_COMPUTED_GOTO 1
+#else
+#define USE_COMPUTED_GOTO 0
+#endif
+
+  Opcode instruction;
+
+#if USE_COMPUTED_GOTO
+#define OPCODE(CODE) L_##CODE
+#define DISPATCH() \
+  do { \
+    instruction = (Opcode) READ_BYTE(); \
+    goto *dispatch_table[instruction]; \
+  } while (false)
+#else
 #define OPCODE(CODE) case OP_##CODE
 #define DISPATCH() goto L_vm_main_loop
+#endif
 
   // Load the fiber's top call frame to the vm's execution variables.
   LOAD_FRAME();
@@ -1148,7 +1186,18 @@ L_vm_main_loop:
 #endif
 #undef _DUMP_STACK
 
-  SWITCH() {
+#if USE_COMPUTED_GOTO
+#undef OPCODE
+#define OPCODE(name, params, stack) &&L_##name,
+  static void* dispatch_table[] = {
+#include "../shared/saynaa_opcodes.h"
+  };
+#undef OPCODE
+#define OPCODE(CODE) L_##CODE
+  DISPATCH();
+#else
+  switch (instruction = (Opcode) READ_BYTE()) {
+#endif
     OPCODE(PUSH_CONSTANT) : {
       uint16_t index = READ_SHORT();
       ASSERT_INDEX(index, module->constants.count);
@@ -2114,6 +2163,14 @@ L_vm_main_loop:
       Var r = PEEK(-1), l = PEEK(-2);
       uint8_t inplace = READ_BYTE();
       ASSERT(inplace <= 1, OOPS);
+      double n1, n2;
+      if (vmIsNumeric(l, &n1) && vmIsNumeric(r, &n2)) {
+        Var result = VAR_NUM(n1 + n2);
+        DROP();
+        DROP(); // r, l
+        PUSH(result);
+        DISPATCH();
+      }
       Var result = varAdd(vm, l, r, inplace);
       DROP();
       DROP(); // r, l
@@ -2128,6 +2185,14 @@ L_vm_main_loop:
       Var r = PEEK(-1), l = PEEK(-2);
       uint8_t inplace = READ_BYTE();
       ASSERT(inplace <= 1, OOPS);
+      double n1, n2;
+      if (vmIsNumeric(l, &n1) && vmIsNumeric(r, &n2)) {
+        Var result = VAR_NUM(n1 - n2);
+        DROP();
+        DROP(); // r, l
+        PUSH(result);
+        DISPATCH();
+      }
       Var result = varSubtract(vm, l, r, inplace);
       DROP();
       DROP(); // r, l
@@ -2142,6 +2207,14 @@ L_vm_main_loop:
       Var r = PEEK(-1), l = PEEK(-2);
       uint8_t inplace = READ_BYTE();
       ASSERT(inplace <= 1, OOPS);
+      double n1, n2;
+      if (vmIsNumeric(l, &n1) && vmIsNumeric(r, &n2)) {
+        Var result = VAR_NUM(n1 * n2);
+        DROP();
+        DROP(); // r, l
+        PUSH(result);
+        DISPATCH();
+      }
       Var result = varMultiply(vm, l, r, inplace);
       DROP();
       DROP(); // r, l
@@ -2156,6 +2229,18 @@ L_vm_main_loop:
       Var r = PEEK(-1), l = PEEK(-2);
       uint8_t inplace = READ_BYTE();
       ASSERT(inplace <= 1, OOPS);
+      double n1, n2;
+      if (vmIsNumeric(l, &n1) && vmIsNumeric(r, &n2)) {
+        if (n2 == 0) {
+          VM_SET_ERROR(vm, newString(vm, "Division by zero."));
+          CHECK_ERROR();
+        }
+        Var result = VAR_NUM(n1 / n2);
+        DROP();
+        DROP(); // r, l
+        PUSH(result);
+        DISPATCH();
+      }
       Var result = varDivide(vm, l, r, inplace);
       DROP();
       DROP(); // r, l
@@ -2170,6 +2255,14 @@ L_vm_main_loop:
       Var r = PEEK(-1), l = PEEK(-2);
       uint8_t inplace = READ_BYTE();
       ASSERT(inplace <= 1, OOPS);
+      double n1, n2;
+      if (vmIsNumeric(l, &n1) && vmIsNumeric(r, &n2)) {
+        Var result = VAR_NUM(pow(n1, n2));
+        DROP();
+        DROP(); // r, l
+        PUSH(result);
+        DISPATCH();
+      }
       Var result = varExponent(vm, l, r, inplace);
       DROP();
       DROP(); // r, l
@@ -2184,6 +2277,18 @@ L_vm_main_loop:
       Var r = PEEK(-1), l = PEEK(-2);
       uint8_t inplace = READ_BYTE();
       ASSERT(inplace <= 1, OOPS);
+      double n1, n2;
+      if (vmIsNumeric(l, &n1) && vmIsNumeric(r, &n2)) {
+        if (n2 == 0) {
+          VM_SET_ERROR(vm, newString(vm, "Division by zero."));
+          CHECK_ERROR();
+        }
+        Var result = VAR_NUM(fmod(n1, n2));
+        DROP();
+        DROP(); // r, l
+        PUSH(result);
+        DISPATCH();
+      }
       Var result = varModulo(vm, l, r, inplace);
       DROP();
       DROP(); // r, l
@@ -2198,6 +2303,15 @@ L_vm_main_loop:
       Var r = PEEK(-1), l = PEEK(-2);
       uint8_t inplace = READ_BYTE();
       ASSERT(inplace <= 1, OOPS);
+      double n1, n2;
+      if (vmIsNumeric(l, &n1) && vmIsNumeric(r, &n2)
+          && floor(n1) == n1 && floor(n2) == n2) {
+        Var result = VAR_NUM((double) (((int64_t) n1) & ((int64_t) n2)));
+        DROP();
+        DROP(); // r, l
+        PUSH(result);
+        DISPATCH();
+      }
       Var result = varBitAnd(vm, l, r, inplace);
       DROP();
       DROP(); // r, l
@@ -2212,6 +2326,15 @@ L_vm_main_loop:
       Var r = PEEK(-1), l = PEEK(-2);
       uint8_t inplace = READ_BYTE();
       ASSERT(inplace <= 1, OOPS);
+      double n1, n2;
+      if (vmIsNumeric(l, &n1) && vmIsNumeric(r, &n2)
+          && floor(n1) == n1 && floor(n2) == n2) {
+        Var result = VAR_NUM((double) (((int64_t) n1) | ((int64_t) n2)));
+        DROP();
+        DROP(); // r, l
+        PUSH(result);
+        DISPATCH();
+      }
       Var result = varBitOr(vm, l, r, inplace);
       DROP();
       DROP(); // r, l
@@ -2226,6 +2349,15 @@ L_vm_main_loop:
       Var r = PEEK(-1), l = PEEK(-2);
       uint8_t inplace = READ_BYTE();
       ASSERT(inplace <= 1, OOPS);
+      double n1, n2;
+      if (vmIsNumeric(l, &n1) && vmIsNumeric(r, &n2)
+          && floor(n1) == n1 && floor(n2) == n2) {
+        Var result = VAR_NUM((double) (((int64_t) n1) ^ ((int64_t) n2)));
+        DROP();
+        DROP(); // r, l
+        PUSH(result);
+        DISPATCH();
+      }
       Var result = varBitXor(vm, l, r, inplace);
       DROP();
       DROP(); // r, l
@@ -2240,6 +2372,15 @@ L_vm_main_loop:
       Var r = PEEK(-1), l = PEEK(-2);
       uint8_t inplace = READ_BYTE();
       ASSERT(inplace <= 1, OOPS);
+      double n1, n2;
+      if (vmIsNumeric(l, &n1) && vmIsNumeric(r, &n2)
+          && floor(n1) == n1 && floor(n2) == n2) {
+        Var result = VAR_NUM((double) (((int64_t) n1) << ((int64_t) n2)));
+        DROP();
+        DROP(); // r, l
+        PUSH(result);
+        DISPATCH();
+      }
       Var result = varBitLshift(vm, l, r, inplace);
       DROP();
       DROP(); // r, l
@@ -2254,6 +2395,15 @@ L_vm_main_loop:
       Var r = PEEK(-1), l = PEEK(-2);
       uint8_t inplace = READ_BYTE();
       ASSERT(inplace <= 1, OOPS);
+      double n1, n2;
+      if (vmIsNumeric(l, &n1) && vmIsNumeric(r, &n2)
+          && floor(n1) == n1 && floor(n2) == n2) {
+        Var result = VAR_NUM((double) (((int64_t) n1) >> ((int64_t) n2)));
+        DROP();
+        DROP(); // r, l
+        PUSH(result);
+        DISPATCH();
+      }
       Var result = varBitRshift(vm, l, r, inplace);
       DROP();
       DROP(); // r, l
@@ -2266,6 +2416,23 @@ L_vm_main_loop:
     OPCODE(EQEQ) : {
       // Don't pop yet, we need the reference for gc.
       Var r = PEEK(-1), l = PEEK(-2);
+      double n1, n2;
+      if (vmIsNumeric(l, &n1) && vmIsNumeric(r, &n2)) {
+        Var result = VAR_BOOL(n1 == n2);
+        DROP();
+        DROP(); // r, l
+        PUSH(result);
+        DISPATCH();
+      }
+      if (IS_OBJ_TYPE(l, OBJ_STRING) && IS_OBJ_TYPE(r, OBJ_STRING)) {
+        String* ls = AS_STRING(l);
+        String* rs = AS_STRING(r);
+        Var result = VAR_BOOL(IS_STR_EQ(ls, rs));
+        DROP();
+        DROP(); // r, l
+        PUSH(result);
+        DISPATCH();
+      }
       Var result = varEqals(vm, l, r);
       DROP();
       DROP(); // r, l
@@ -2277,6 +2444,23 @@ L_vm_main_loop:
     OPCODE(NOTEQ) : {
       // Don't pop yet, we need the reference for gc.
       Var r = PEEK(-1), l = PEEK(-2);
+      double n1, n2;
+      if (vmIsNumeric(l, &n1) && vmIsNumeric(r, &n2)) {
+        Var result = VAR_BOOL(n1 != n2);
+        DROP();
+        DROP(); // r, l
+        PUSH(result);
+        DISPATCH();
+      }
+      if (IS_OBJ_TYPE(l, OBJ_STRING) && IS_OBJ_TYPE(r, OBJ_STRING)) {
+        String* ls = AS_STRING(l);
+        String* rs = AS_STRING(r);
+        Var result = VAR_BOOL(!IS_STR_EQ(ls, rs));
+        DROP();
+        DROP(); // r, l
+        PUSH(result);
+        DISPATCH();
+      }
       Var result = varEqals(vm, l, r);
       DROP();
       DROP(); // r, l
@@ -2288,6 +2472,14 @@ L_vm_main_loop:
     OPCODE(LT) : {
       // Don't pop yet, we need the reference for gc.
       Var r = PEEK(-1), l = PEEK(-2);
+      double n1, n2;
+      if (vmIsNumeric(l, &n1) && vmIsNumeric(r, &n2)) {
+        Var result = VAR_BOOL(n1 < n2);
+        DROP();
+        DROP(); // r, l
+        PUSH(result);
+        DISPATCH();
+      }
       Var result = varLesser(vm, l, r);
       DROP();
       DROP(); // r, l
@@ -2299,6 +2491,14 @@ L_vm_main_loop:
     OPCODE(LTEQ) : {
       // Don't pop yet, we need the reference for gc.
       Var r = PEEK(-1), l = PEEK(-2);
+      double n1, n2;
+      if (vmIsNumeric(l, &n1) && vmIsNumeric(r, &n2)) {
+        Var result = VAR_BOOL(n1 <= n2);
+        DROP();
+        DROP(); // r, l
+        PUSH(result);
+        DISPATCH();
+      }
 
       Var result = varLesser(vm, l, r);
       CHECK_ERROR();
@@ -2317,6 +2517,14 @@ L_vm_main_loop:
     OPCODE(GT) : {
       // Don't pop yet, we need the reference for gc.
       Var r = PEEK(-1), l = PEEK(-2);
+      double n1, n2;
+      if (vmIsNumeric(l, &n1) && vmIsNumeric(r, &n2)) {
+        Var result = VAR_BOOL(n1 > n2);
+        DROP();
+        DROP(); // r, l
+        PUSH(result);
+        DISPATCH();
+      }
       Var result = varGreater(vm, l, r);
       DROP();
       DROP(); // r, l
@@ -2328,6 +2536,14 @@ L_vm_main_loop:
     OPCODE(GTEQ) : {
       // Don't pop yet, we need the reference for gc.
       Var r = PEEK(-1), l = PEEK(-2);
+      double n1, n2;
+      if (vmIsNumeric(l, &n1) && vmIsNumeric(r, &n2)) {
+        Var result = VAR_BOOL(n1 >= n2);
+        DROP();
+        DROP(); // r, l
+        PUSH(result);
+        DISPATCH();
+      }
       Var result = varGreater(vm, l, r);
       CHECK_ERROR();
       bool gteq = toBool(result);
@@ -2387,11 +2603,15 @@ L_vm_main_loop:
     }
 
     OPCODE(END) : UNREACHABLE();
+#if !USE_COMPUTED_GOTO
     break;
 
     default:
       UNREACHABLE();
+#endif
+#if !USE_COMPUTED_GOTO
   }
+#endif
 
   UNREACHABLE();
   return RESULT_RUNTIME_ERROR;

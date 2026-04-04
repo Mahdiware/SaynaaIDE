@@ -18,7 +18,11 @@
 // Payload format magic and version. Bump version when payload layout changes.
 #define SAYNAA_BYTECODE_PAYLOAD_MAGIC "SBC1"
 #define SAYNAA_BYTECODE_PAYLOAD_MAGIC_SIZE 4
+#if defined(SAYNAA_REG_VM)
+#define SAYNAA_BYTECODE_PAYLOAD_VERSION 3
+#else
 #define SAYNAA_BYTECODE_PAYLOAD_VERSION 2
+#endif
 
 typedef struct SaynaaBytecodeHeader {
   uint8_t magic[SAYNAA_BYTECODE_MAGIC_SIZE];
