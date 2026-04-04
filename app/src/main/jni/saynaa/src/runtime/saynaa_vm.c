@@ -6,7 +6,6 @@
 #include "saynaa_vm.h"
 
 #include "../shared/saynaa_bytecode.h"
-#include "../runtime/saynaa_core.h"
 #include "../utils/saynaa_debug.h"
 #include "../utils/saynaa_utils.h"
 
@@ -19,19 +18,6 @@ typedef struct {
   VarBuffer* modules;
   Module* target_module;
 } WildcardImportRuntimeData;
-
-// Fast numeric check for VM hot paths.
-static inline bool vmIsNumeric(Var v, double* out) {
-  if (IS_NUM(v)) {
-    *out = AS_NUM(v);
-    return true;
-  }
-  if (IS_INT(v)) {
-    *out = (double) AS_INT(v);
-    return true;
-  }
-  return false;
-}
 
 /*****************************************************************************/
 /* IMPORT HELPERS                                                            */
@@ -1044,6 +1030,19 @@ static void vmReportError(VM* vm) {
   reportRuntimeError(vm, vm->fiber);
 }
 
+// Fast numeric check for VM hot paths.
+static inline bool vmIsNumeric(Var v, double* out) {
+  if (IS_NUM(v)) {
+    *out = AS_NUM(v);
+    return true;
+  }
+  if (IS_INT(v)) {
+    *out = (double) AS_INT(v);
+    return true;
+  }
+  return false;
+}
+
 /******************************************************************************
  * RUNTIME                                                                    *
  *****************************************************************************/
@@ -1059,11 +1058,7 @@ Result vmRunFiber(VM* vm, Fiber* fiber_) {
   fiber_->state = FIBER_RUNNING;
 
   // The instruction pointer.
-#if defined(SAYNAA_REG_VM)
-  register const uint32_t* ip;
-#else
   register const uint8_t* ip;
-#endif
 
   register Var* rbp;         //< Stack base pointer register.
   register Var* thiz;        //< Points to the this in the current call frame.
@@ -1084,14 +1079,8 @@ Result vmRunFiber(VM* vm, Fiber* fiber_) {
 #define POP() (*(--fiber->sp))
 #define DROP() (--fiber->sp)
 #define PEEK(off) (*(fiber->sp + (off)))
-#if defined(SAYNAA_REG_VM)
-#define READ_BYTE() ((uint8_t) (*ip++))
-#define READ_SHORT() \
-  (ip += 2, (uint16_t) ((((uint16_t) ip[-2]) << 8) | (uint16_t) ip[-1]))
-#else
 #define READ_BYTE() (*ip++)
 #define READ_SHORT() (ip += 2, (uint16_t) ((ip[-2] << 8) | ip[-1]))
-#endif
 
 // Switch back to the caller of the current fiber, will be called when we're
 // done with the fiber or aborting it for runtime errors.
