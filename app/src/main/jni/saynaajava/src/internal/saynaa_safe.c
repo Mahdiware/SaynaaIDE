@@ -6,8 +6,7 @@ bool clear_jni_exception_with_log(JNIEnv* env, const char* where) {
   if (!(*env)->ExceptionCheck(env))
     return false;
 
-  __android_log_print(
-      ANDROID_LOG_ERROR, SAYNAAJAVA_TAG, "JNI exception at %s", where == NULL ? "<unknown>" : where);
+  LOGE("JNI exception at %s", where == NULL ? "<unknown>" : where);
   (*env)->ExceptionDescribe(env);
   (*env)->ExceptionClear(env);
   return true;

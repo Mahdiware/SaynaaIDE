@@ -203,7 +203,7 @@ void java_class_str(VM* vm) {
 void java_class_call(VM* vm) {
   JavaClassNative* thiz = (JavaClassNative*) GetThis(vm);
   if (thiz == NULL || thiz->class_ref == NULL) {
-    debug_log(ANDROID_LOG_ERROR, "Invalid JavaClass instance.");
+    LOGE("Invalid JavaClass instance.");
     SetRuntimeError(vm, "Invalid JavaClass instance.");
     return;
   }
@@ -213,7 +213,7 @@ void java_class_call(VM* vm) {
 
   jobject classObj = (*env)->NewLocalRef(env, thiz->class_ref->global);
   if (classObj == NULL) {
-    debug_log(ANDROID_LOG_ERROR, "JavaClass._call failed to access class reference.");
+    LOGE("JavaClass._call failed to access class reference.");
     SetRuntimeError(vm, "JavaClass._call failed to access class reference.");
     return;
   }
@@ -384,7 +384,7 @@ void java_class_call(VM* vm) {
   jobjectArray args = make_args_array(env, vm, bridge, 1, argc);
   if (VM_HAS_ERROR(vm) || (args == NULL && argc > 0)) {
     if (!VM_HAS_ERROR(vm) && argc > 0)
-      debug_log(ANDROID_LOG_ERROR, "JavaClass._call argument conversion failed.");
+      LOGE("JavaClass._call argument conversion failed.");
       SetRuntimeError(vm, "JavaClass._call argument conversion failed.");
     if (args != NULL)
       (*env)->DeleteLocalRef(env, args);
@@ -406,12 +406,11 @@ void java_class_call(VM* vm) {
   }
 
   if (obj == NULL) {
-    debug_log(ANDROID_LOG_ERROR, "JavaClass._call returned null.");
+    LOGE("JavaClass._call returned null.");
     const char* clsName = NULL;
     if (classNameObj != NULL)
       clsName = (*env)->GetStringUTFChars(env, classNameObj, NULL);
-    __android_log_print(ANDROID_LOG_ERROR, SAYNAAJAVA_TAG,
-        "JavaClass._call returned null for class=%s", clsName == NULL ? "<unknown>" : clsName);
+    LOGE("JavaClass._call returned null for class=%s", clsName == NULL ? "<unknown>" : clsName);
     if (classNameObj != NULL && clsName != NULL)
       (*env)->ReleaseStringUTFChars(env, classNameObj, clsName);
     SetRuntimeError(vm, "JavaClass._call returned null. Check logcat for constructor mismatch.");
@@ -601,6 +600,49 @@ void java_method_call(VM* vm) {
   BridgeState* bridge = bridge_from_vm(vm);
   JNIEnv* env = env_from_jvm(bridge->jvm);
   int argc = GetArgc(vm);
+  if (bridge != NULL && bridge->javaBridgeClass != NULL && bridge->mResolveCallbackInterface != NULL
+      && thiz->method_name != NULL && argc > 0) {
+    jstring jMethod = (*env)->NewStringUTF(env, thiz->method_name);
+    if (jMethod != NULL) {
+      jobject targetRef = (*env)->NewLocalRef(env, thiz->target_ref->global);
+      if (targetRef != NULL) {
+        for (int i = 0; i < argc; i++) {
+          int slot = 1 + i;
+          if (GetSlotType(vm, slot) != vMAP)
+            continue;
+
+          jobject iface = (*env)->CallStaticObjectMethod(
+              env, bridge->javaBridgeClass, bridge->mResolveCallbackInterface,
+              targetRef, jMethod, (jint) argc, (jint) i);
+
+          if ((*env)->ExceptionCheck(env)) {
+            throw_if_exception(vm, env, "resolveCallbackInterface failed");
+            if (iface != NULL)
+              (*env)->DeleteLocalRef(env, iface);
+            continue;
+          }
+
+          if (iface == NULL)
+            continue;
+
+          int callbackId = register_map_callback(vm, slot, "*");
+          if (callbackId <= 0) {
+            (*env)->DeleteLocalRef(env, iface);
+            continue;
+          }
+
+          jobject proxy = create_native_callback_proxy(env, vm, bridge, (jstring) iface, "*", callbackId);
+          (*env)->DeleteLocalRef(env, iface);
+          if (proxy != NULL) {
+            java_to_slot(env, vm, bridge, slot, proxy);
+            (*env)->DeleteLocalRef(env, proxy);
+          }
+        }
+        (*env)->DeleteLocalRef(env, targetRef);
+      }
+      (*env)->DeleteLocalRef(env, jMethod);
+    }
+  }
   jobjectArray args = make_args_array(env, vm, bridge, 1, argc);
   jobject ret = NULL;
 

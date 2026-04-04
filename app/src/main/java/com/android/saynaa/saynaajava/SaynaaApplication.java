@@ -28,6 +28,7 @@ public class SaynaaApplication extends Application implements SaynaaContext {
   protected String saynaaExtDir;
   private boolean isUpdata;
   private SharedPreferences mSharedPreferences;
+  private SaynaaState saynaaState;
 
   public String getPathFromUri(Uri uri) {
     String path = null;
@@ -70,7 +71,6 @@ public class SaynaaApplication extends Application implements SaynaaContext {
 
   @Override
   public String getSaynaaPath() {
-    // TODO: Implement this method
     return null;
   }
 
@@ -108,12 +108,10 @@ public class SaynaaApplication extends Application implements SaynaaContext {
   }
 
   public String getLibDir() {
-    // TODO: Implement this method
     return libDir;
   }
 
   public String getOdexDir() {
-    // TODO: Implement this method
     return odexDir;
   }
 
@@ -178,7 +176,6 @@ public class SaynaaApplication extends Application implements SaynaaContext {
 
   @Override
   public String getSaynaaDir() {
-    // TODO: Implement this method
     return localDir;
   }
 
@@ -229,12 +226,10 @@ public class SaynaaApplication extends Application implements SaynaaContext {
   }
 
   public Object get(String name) {
-    // TODO: Implement this method
     return data.get(name);
   }
 
   public String getLocalDir() {
-    // TODO: Implement this method
     return localDir;
   }
 
@@ -251,7 +246,6 @@ public class SaynaaApplication extends Application implements SaynaaContext {
 
   @Override
   public void setSaynaaExtDir(String dir) {
-    // TODO: Implement this method
     if (Environment.getExternalStorageState().equals(Environment.MEDIA_MOUNTED)) {
       String sdDir = Environment.getExternalStorageDirectory().getAbsolutePath();
       saynaaExtDir = new File(sdDir, dir).getAbsolutePath();
@@ -277,8 +271,10 @@ public class SaynaaApplication extends Application implements SaynaaContext {
 
   @Override
   public SaynaaState getSaynaaState() {
-    // TODO: Implement this method
-    return null;
+    if (saynaaState == null || saynaaState.isClosed()) {
+      saynaaState = SaynaaStateFactory.newState(this);
+    }
+    return saynaaState;
   }
 
   @Override

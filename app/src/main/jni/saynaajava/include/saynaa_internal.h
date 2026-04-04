@@ -12,10 +12,6 @@
 
 #define JAVA_REF_MAGIC 0x534A5246u /* SJRF */
 
-static inline void debug_log(int priority, const char* message) {
-  __android_log_print(priority, SAYNAAJAVA_TAG, "%s", message == NULL ? "" : message);
-}
-
 typedef struct JavaRef {
   unsigned int magic;
   JavaVM* jvm;
@@ -50,6 +46,7 @@ typedef struct BridgeState {
   jmethodID mSetFieldValue;
   jmethodID mGetFieldFromSlots;
   jmethodID mSetFieldFromSlots;
+  jmethodID mResolveCallbackInterface;
   jmethodID mCreateProxy;
   jmethodID mCreateProxyFromSlots;
   jmethodID mResolveInterfaceNameFromSlots;
@@ -182,6 +179,8 @@ extern int register_map_callback(VM* vm, int mapSlot, const char* methodName);
 extern CallbackEntry* find_callback(VM* vm, int callbackId);
 extern bool invoke_registered_callback(JNIEnv* env, VM* vm, BridgeState* bridge,
     CallbackEntry* entry, const char* runtimeMethodName, jobject args, jobject* outResult);
+extern bool invoke_registered_callback_from_slots(JNIEnv* env, VM* vm, BridgeState* bridge,
+  CallbackEntry* entry, const char* runtimeMethodName, int argStart, int argCount, jobject* outResult);
 extern jobject create_native_callback_proxy(JNIEnv* env, VM* vm, BridgeState* bridge,
     jstring jInterface, const char* methodName, int callbackId);
 extern void release_bridge_handle(VM* vm, Handle** handlePtr);

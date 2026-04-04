@@ -4,7 +4,7 @@ import "android.text.*"
 import "android.os.*"
 import "com.android.saynaa.*"
 
-function print(msg)
+function toast(msg)
 	Toast.makeText(activity, msg, Toast.LENGTH_SHORT).show()
 end
 
@@ -12,7 +12,7 @@ loadDex("hello.dex")
 import "com.saynaa.dextest.Hello"
 
 msg = Hello.hello()
-print(msg)
+toast(msg)
 
 
 DemoLayout = {
@@ -133,6 +133,19 @@ DemoLayout = {
       textColor: '#000000',
       padding: '12dp'
     }
+  }, 
+  {
+    # testing
+    LinearLayout,
+    orientation: 'vertical',
+    layout_width: 'match_parent',
+    layout_height: 'wrap_content',
+    {
+      SeekBar,
+      id: 'Seekbar',
+      layout_width: 'match_parent',
+      layout_height: 'wrap_content'
+    }
   }
 }
 
@@ -146,7 +159,7 @@ function runfunc_test(arg1, arg2, arg3, arg4)
 end
 
 # fix it, this bug
-# assert(activity.runFunc("runfunc_test", 1, 2, 3, 4) == 10, "activity.runFunc return mismatch")
+assert(activity.runFunc("runfunc_test", 1, 2, 3, 40) == 46, "activity.runFunc return mismatch")
 
 function onCreate(arg1)
   activity.setContentView(root)
@@ -165,6 +178,19 @@ Editor.setText('print("Hello from CodeEditor")\n')
 nextpage.setOnClickListener(View.OnClickListener({
   onClick: function(v)
     print('next page button clicked')
-	activity.newActivity('main1')
+    activity.newActivity('main1')
   end
 }))
+
+Seekbar.setOnSeekBarChangeListener({
+  onProgressChanged: function(seekBar, progress, fromUser)
+    # why progress is null
+    Description.setText("SeekBar progress: " + tostring(progress))
+  end,
+  onStartTrackingTouch: function(seekBar)
+    Description.setText('SeekBar tracking started')
+  end,
+  onStopTrackingTouch: function(seekBar)
+    Description.setText('SeekBar tracking stopped')
+  end
+})

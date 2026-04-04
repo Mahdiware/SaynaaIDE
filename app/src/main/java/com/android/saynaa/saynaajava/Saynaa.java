@@ -33,12 +33,12 @@ public class Saynaa {
     return saynaa_doString(code);
   }
 
-  public synchronized void executeSnippet(String code) {
-    executeSnippetWithViewNative(code, null);
+  public synchronized int runStringPcall(String code) {
+    return saynaa_doStringPcall(code);
   }
 
-  public synchronized void executeSnippetWithView(String code, View view) {
-    executeSnippetWithViewNative(code, view);
+  public synchronized void setLastEventView(View view) {
+    saynaa_setLastEventView(view);
   }
 
   public synchronized void invokeCallback(int callbackId, Object arg0) {
@@ -53,12 +53,70 @@ public class Saynaa {
     return invokeCallbackMethodWithResultNative(callbackId, methodName, args);
   }
 
+  public synchronized Object invokeCallbackMethodWithResultFromSlots(
+      int callbackId, String methodName, int argStart, int argCount) {
+    return invokeCallbackMethodWithResultFromSlotsNative(callbackId, methodName, argStart, argCount);
+  }
+
   public synchronized PCallResult pcall(String functionName, Object... args) {
     return saynaa_pcall(functionName, args);
   }
 
   public synchronized Object getGlobal(String name) {
     return saynaa_getGlobal(name);
+  }
+
+  public synchronized int getGlobalFunctionId(String name) {
+    return saynaa_getGlobalFunctionId(name);
+  }
+
+  public synchronized boolean callFunctionById(int functionId, int argStart, int argCount, int retSlot) {
+    return saynaa_callFunctionById(functionId, argStart, argCount, retSlot);
+  }
+
+  public synchronized Object callFunctionByIdWithArgs(int functionId, Object... args) {
+    if (isClosed() || functionId < 0) {
+      return null;
+    }
+
+    int argc = args == null ? 0 : args.length;
+    int argStart = 1;
+    int retSlot = 0;
+    reserveSlots(argStart + Math.max(argc, 0) + 2);
+
+    for (int i = 0; i < argc; i++) {
+      if (!JavaBridge.pushToSlot(this, argStart + i, args[i])) {
+        return null;
+      }
+    }
+
+    if (!callFunctionById(functionId, argStart, argc, retSlot)) {
+      return null;
+    }
+    return JavaBridge.slotToJava(this, retSlot);
+  }
+
+  public synchronized Object callFunctionByIdWithView(int functionId, View view, Object... args) {
+    setLastEventView(view);
+    try {
+      return callFunctionByIdWithArgs(functionId, args);
+    } finally {
+      setLastEventView(null);
+    }
+  }
+
+  public synchronized Object callGlobalFunction(String name, Object... args) {
+    int functionId = getGlobalFunctionId(name);
+    return callFunctionByIdWithArgs(functionId, args);
+  }
+
+  public synchronized Object callGlobalFunctionWithView(String name, View view, Object... args) {
+    setLastEventView(view);
+    try {
+      return callGlobalFunction(name, args);
+    } finally {
+      setLastEventView(null);
+    }
   }
 
   public synchronized boolean setGlobal(String name, Object value) {
@@ -192,13 +250,17 @@ public class Saynaa {
   }
 
   private synchronized native void execute(Context context);
-  private synchronized native void executeSnippetWithViewNative(String code, View view);
+  private synchronized native int saynaa_doStringPcall(String code);
+  private synchronized native void saynaa_setLastEventView(View view);
   private synchronized native void invokeCallbackNative(int callbackId, Object arg0);
   private synchronized native CPtr saynaa_open();
   private synchronized native PCallResult saynaa_pcall(String functionName, Object[] args);
   private synchronized native int saynaa_doFile(String fileName);
   private synchronized native int saynaa_doString(String code);
   private synchronized native Object saynaa_getGlobal(String name);
+  private synchronized native int saynaa_getGlobalFunctionId(String name);
+  private synchronized native boolean saynaa_callFunctionById(
+      int functionId, int argStart, int argCount, int retSlot);
   private synchronized native boolean saynaa_setGlobal(String name, Object value);
   private synchronized native boolean saynaa_setGlobalFromSlot(String name, int slot);
   private synchronized native void saynaa_reserveSlots(int count);
@@ -228,4 +290,6 @@ public class Saynaa {
   private synchronized native void invokeCallbackMethodNative(int callbackId, String methodName, Object[] args);
   private synchronized native Object invokeCallbackMethodWithResultNative(
       int callbackId, String methodName, Object[] args);
+  private synchronized native Object invokeCallbackMethodWithResultFromSlotsNative(
+      int callbackId, String methodName, int argStart, int argCount);
 }

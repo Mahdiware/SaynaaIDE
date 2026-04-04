@@ -2,7 +2,7 @@
 #include "saynaa_exports.h"
 #include "saynaa_jni.h"
 
-static Result run_snippet_with_pcall(VM* vm, const char* code) {
+static Result run_string_pcall(VM* vm, const char* code) {
   if (vm == NULL || code == NULL)
     return RESULT_RUNTIME_ERROR;
   return RunStringPcall(vm, code);
@@ -72,6 +72,8 @@ JNIEXPORT jobject JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1open
       "getFieldFromSlots", "(Lcom/android/saynaa/saynaajava/Saynaa;III)Z");
     bridge->mSetFieldFromSlots = (*env)->GetStaticMethodID(env, bridge->javaBridgeClass,
       "setFieldFromSlots", "(Lcom/android/saynaa/saynaajava/Saynaa;IIII)Z");
+  bridge->mResolveCallbackInterface = (*env)->GetStaticMethodID(env, bridge->javaBridgeClass,
+      "resolveCallbackInterface", "(Ljava/lang/Object;Ljava/lang/String;II)Ljava/lang/String;");
   bridge->mCreateProxy = (*env)->GetStaticMethodID(env, bridge->javaBridgeClass,
       "createProxy", "(Lcom/android/saynaa/saynaajava/Saynaa;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Ljava/lang/Object;");
     bridge->mCreateProxyFromSlots = (*env)->GetStaticMethodID(env, bridge->javaBridgeClass,
@@ -107,7 +109,7 @@ JNIEXPORT jobject JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1open
       || bridge->mCallStaticJavaMethod == NULL || bridge->mCallFromSlots == NULL
       || bridge->mCallStaticFromSlots == NULL || bridge->mGetFieldValue == NULL
       || bridge->mSetFieldValue == NULL || bridge->mGetFieldFromSlots == NULL
-      || bridge->mSetFieldFromSlots == NULL
+      || bridge->mSetFieldFromSlots == NULL || bridge->mResolveCallbackInterface == NULL
       || bridge->mCreateProxy == NULL || bridge->mCreateProxyFromSlots == NULL
       || bridge->mResolveInterfaceNameFromSlots == NULL || bridge->mCreateNativeCallbackProxy == NULL
       || bridge->mGetDefaultInterfaceMethodName == NULL || bridge->mPushToSlot == NULL
@@ -326,6 +328,57 @@ JNIEXPORT jobject JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1getG
   jobject resultValue = slot_to_java(env, vm, bridge, 1);
   releaseHandle(vm, handle);
   return resultValue;
+}
+
+JNIEXPORT jint JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1getGlobalFunctionId(
+    JNIEnv* env, jobject thiz, jstring name) {
+  VM* vm = vm_from_saynaa(env, thiz);
+  if (vm == NULL || name == NULL)
+    return (jint) -1;
+
+  BridgeState* bridge = bridge_from_vm(vm);
+  const char* key = (*env)->GetStringUTFChars(env, name, NULL);
+  if (key == NULL)
+    return (jint) -1;
+
+  Module* module = get_or_create_main_module(vm, bridge);
+  if (module == NULL) {
+    (*env)->ReleaseStringUTFChars(env, name, key);
+    return (jint) -1;
+  }
+
+  int idx = moduleGetGlobalIndex(module, key, (uint32_t) strlen(key));
+  (*env)->ReleaseStringUTFChars(env, name, key);
+  return (jint) idx;
+}
+
+JNIEXPORT jboolean JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1callFunctionById(
+    JNIEnv* env, jobject thiz, jint functionId, jint argStart, jint argCount, jint retSlot) {
+  VM* vm = vm_from_saynaa(env, thiz);
+  if (vm == NULL || functionId < 0)
+    return JNI_FALSE;
+  if (argStart < 0 || argCount < 0)
+    return JNI_FALSE;
+
+  BridgeState* bridge = bridge_from_vm(vm);
+  Module* module = get_or_create_main_module(vm, bridge);
+  if (module == NULL)
+    return JNI_FALSE;
+
+  if (functionId >= (jint) module->globals.count)
+    return JNI_FALSE;
+
+  int needed = argStart + argCount;
+  if (retSlot >= needed)
+    needed = retSlot + 1;
+  if (needed < 1)
+    needed = 1;
+  reserveSlots(vm, needed);
+
+  vm->fiber->ret[0] = module->globals.data[functionId];
+  if (!CallFunction(vm, 0, (int) argCount, (int) argStart, (int) retSlot))
+    return JNI_FALSE;
+  return JNI_TRUE;
 }
 
 JNIEXPORT jboolean JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1setGlobal(
@@ -759,38 +812,39 @@ JNIEXPORT jint JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1doStrin
   return (jint) ret;
 }
 
-JNIEXPORT void JNICALL Java_com_android_saynaa_saynaajava_Saynaa_executeSnippetWithViewNative(
-    JNIEnv* env, jobject thiz, jstring snippet, jobject view) {
+JNIEXPORT jint JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1doStringPcall(
+    JNIEnv* env, jobject thiz, jstring codeString) {
   VM* vm = vm_from_saynaa(env, thiz);
-  if (vm == NULL || snippet == NULL)
+  if (vm == NULL || codeString == NULL)
+    return (jint) RESULT_RUNTIME_ERROR;
+
+  ensure_activity_and_paths(env, vm, thiz);
+
+  const char* code = (*env)->GetStringUTFChars(env, codeString, NULL);
+  if (code == NULL)
+    return (jint) RESULT_RUNTIME_ERROR;
+
+  Result ret = run_string_pcall(vm, code);
+  (*env)->ReleaseStringUTFChars(env, codeString, code);
+  return (jint) ret;
+}
+
+JNIEXPORT void JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1setLastEventView(
+    JNIEnv* env, jobject thiz, jobject view) {
+  VM* vm = vm_from_saynaa(env, thiz);
+  if (vm == NULL)
     return;
 
   BridgeState* bridge = bridge_from_vm(vm);
-  if (bridge != NULL) {
-    if (bridge->lastEventView != NULL) {
-      (*env)->DeleteGlobalRef(env, bridge->lastEventView);
-      bridge->lastEventView = NULL;
-    }
-    if (view != NULL)
-      bridge->lastEventView = (*env)->NewGlobalRef(env, view);
-  }
-
-  const char* code = (*env)->GetStringUTFChars(env, snippet, NULL);
-  if (code == NULL)
+  if (bridge == NULL)
     return;
 
-  Result result = run_snippet_with_pcall(vm, code);
-
-  (*env)->ReleaseStringUTFChars(env, snippet, code);
-
-  if (bridge != NULL && bridge->lastEventView != NULL) {
+  if (bridge->lastEventView != NULL) {
     (*env)->DeleteGlobalRef(env, bridge->lastEventView);
     bridge->lastEventView = NULL;
   }
-
-  if (result != RESULT_SUCCESS) {
-    __android_log_print(ANDROID_LOG_ERROR, SAYNAAJAVA_TAG,
-        "Saynaa snippet-with-view execution failed with code: %d", (int) result);
+  if (view != NULL) {
+    bridge->lastEventView = (*env)->NewGlobalRef(env, view);
   }
 }
 
@@ -798,7 +852,7 @@ JNIEXPORT void JNICALL Java_com_android_saynaa_saynaajava_Saynaa_execute(
     JNIEnv* env, jobject thiz, jobject context) {
   VM* vm = vm_from_saynaa(env, thiz);
   if (vm == NULL) {
-    __android_log_print(ANDROID_LOG_ERROR, SAYNAAJAVA_TAG, "VM not initialized.");
+    LOGE("VM not initialized.");
     return;
   }
 
@@ -844,14 +898,13 @@ JNIEXPORT void JNICALL Java_com_android_saynaa_saynaajava_Saynaa_execute(
 
   Result result;
   if (path != NULL && path[0] != '\0') {
-    __android_log_print(ANDROID_LOG_INFO, SAYNAAJAVA_TAG, "Running script file... path=%s", path);
+    LOGI("Running script file... path=%s", path);
     result = saynaa_run_file_in_main_module(vm, path);
   } else if (code != NULL) {
-    __android_log_print(
-        ANDROID_LOG_INFO, SAYNAAJAVA_TAG, "Running script... source_len=%d", (int) strlen(code));
+    LOGI("Running script... source_len=%d", (int) strlen(code));
     result = saynaa_run_in_main_module(vm, code, "@(String)");
   } else {
-    __android_log_print(ANDROID_LOG_ERROR, SAYNAAJAVA_TAG, "Neither scriptPath nor source is available.");
+    LOGE("Neither scriptPath nor source is available.");
     if (source != NULL)
       (*env)->DeleteLocalRef(env, source);
     if (scriptPath != NULL)
@@ -871,12 +924,12 @@ JNIEXPORT void JNICALL Java_com_android_saynaa_saynaajava_Saynaa_execute(
   }
 
   if (result != RESULT_SUCCESS) {
-    __android_log_print(ANDROID_LOG_ERROR, SAYNAAJAVA_TAG, "Saynaa execution failed with code: %d", (int) result);
+    LOGE("Saynaa execution failed with code: %d", (int) result);
     if (vm->fiber != NULL && vm->fiber->error != NULL && vm->fiber->error->data != NULL) {
-      __android_log_print(ANDROID_LOG_ERROR, SAYNAAJAVA_TAG, "VM error: %s", vm->fiber->error->data);
+      LOGE("VM error: %s", vm->fiber->error->data);
     }
   } else {
-    __android_log_print(ANDROID_LOG_INFO, SAYNAAJAVA_TAG, "Saynaa execution finished successfully.");
+    LOGI("Saynaa execution finished successfully.");
   }
 }
 
@@ -912,13 +965,11 @@ JNIEXPORT void JNICALL Java_com_android_saynaa_saynaajava_Saynaa_invokeCallbackN
 
   if (!ok) {
     const char* err = (vm->fiber != NULL && vm->fiber->error != NULL) ? vm->fiber->error->data : "<unknown>";
-    __android_log_print(ANDROID_LOG_ERROR, SAYNAAJAVA_TAG,
-        "invokeCallbackNative failed for callbackId=%d err=%s", (int) callbackId, err);
+    LOGE("invokeCallbackNative failed for callbackId=%d err=%s", (int) callbackId, err);
     if (vm->fiber != NULL)
       vm->fiber->error = NULL;
   } else {
-    __android_log_print(ANDROID_LOG_INFO, SAYNAAJAVA_TAG,
-        "invokeCallbackNative succeeded for callbackId=%d", (int) callbackId);
+    LOGI("invokeCallbackNative succeeded for callbackId=%d", (int) callbackId);
   }
 }
 
@@ -953,13 +1004,11 @@ JNIEXPORT void JNICALL Java_com_android_saynaa_saynaajava_Saynaa_invokeCallbackM
 
   if (!ok) {
     const char* err = (vm->fiber != NULL && vm->fiber->error != NULL) ? vm->fiber->error->data : "<unknown>";
-    __android_log_print(ANDROID_LOG_ERROR, SAYNAAJAVA_TAG,
-        "invokeCallbackNative failed for callbackId=%d err=%s", (int) callbackId, err);
+    LOGE("invokeCallbackNative failed for callbackId=%d err=%s", (int) callbackId, err);
     if (vm->fiber != NULL)
       vm->fiber->error = NULL;
   } else {
-    __android_log_print(ANDROID_LOG_INFO, SAYNAAJAVA_TAG,
-        "invokeCallbackNative succeeded for callbackId=%d", (int) callbackId);
+    LOGI("invokeCallbackNative succeeded for callbackId=%d", (int) callbackId);
   }
 }
 
@@ -995,8 +1044,52 @@ JNIEXPORT jobject JNICALL Java_com_android_saynaa_saynaajava_Saynaa_invokeCallba
 
   if (!ok) {
     const char* err = (vm->fiber != NULL && vm->fiber->error != NULL) ? vm->fiber->error->data : "<unknown>";
-    __android_log_print(ANDROID_LOG_ERROR, SAYNAAJAVA_TAG,
-        "invokeCallbackMethodWithResultNative failed for callbackId=%d err=%s", (int) callbackId, err);
+    LOGE("invokeCallbackMethodWithResultNative failed for callbackId=%d err=%s", (int) callbackId, err);
+    if (vm->fiber != NULL)
+      vm->fiber->error = NULL;
+    return NULL;
+  }
+
+  return result;
+}
+
+JNIEXPORT jobject JNICALL Java_com_android_saynaa_saynaajava_Saynaa_invokeCallbackMethodWithResultFromSlotsNative(
+    JNIEnv* env, jobject thiz, jint callbackId, jstring methodName, jint argStart, jint argCount) {
+  VM* vm = vm_from_saynaa(env, thiz);
+  if (vm == NULL || callbackId <= 0)
+    return NULL;
+
+  if (argStart < 0 || argCount < 0)
+    return NULL;
+
+  BridgeState* bridge = bridge_from_vm(vm);
+  if (bridge == NULL)
+    return NULL;
+
+  CallbackEntry* entry = find_callback(vm, (int) callbackId);
+  if (entry == NULL)
+    return NULL;
+
+  if (!ensure_wrapper_classes(vm))
+    return NULL;
+
+  if (vm->fiber != NULL)
+    vm->fiber->error = NULL;
+
+  const char* runtimeMethodName = NULL;
+  if (methodName != NULL)
+    runtimeMethodName = (*env)->GetStringUTFChars(env, methodName, NULL);
+
+  jobject result = NULL;
+  bool ok = invoke_registered_callback_from_slots(
+      env, vm, bridge, entry, runtimeMethodName, (int) argStart, (int) argCount, &result);
+
+  if (methodName != NULL && runtimeMethodName != NULL)
+    (*env)->ReleaseStringUTFChars(env, methodName, runtimeMethodName);
+
+  if (!ok) {
+    const char* err = (vm->fiber != NULL && vm->fiber->error != NULL) ? vm->fiber->error->data : "<unknown>";
+    LOGE("invokeCallbackMethodWithResultFromSlotsNative failed for callbackId=%d err=%s", (int) callbackId, err);
     if (vm->fiber != NULL)
       vm->fiber->error = NULL;
     return NULL;

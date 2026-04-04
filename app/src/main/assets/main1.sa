@@ -88,6 +88,23 @@ assert_pcall(result, 'java.createProxy script failed')
 assert(result[1] == true, 'java.createProxy script mismatch')
 
 result = pcall(function()
+	proxy_called = false
+	listener = java.createProxy('android.view.View$OnLongClickListener', {
+		onLongClick: function(v)
+			proxy_called = true
+			return false
+		end
+	})
+	assert(listener != null, 'java.createProxy OnLongClickListener returned null')
+	dummy = View(activity)
+	ret = java.call(listener, 'onLongClick', dummy)
+	assert(proxy_called == true, 'java.createProxy OnLongClickListener not called')
+	return ret
+end)
+assert_pcall(result, 'java.createProxy OnLongClickListener failed')
+assert(result[1] == false, 'java.createProxy OnLongClickListener return mismatch')
+
+result = pcall(function()
 	state = { ok: false }
 	proxy = java.create('java.lang.Runnable', {
 		run: function()
@@ -153,6 +170,8 @@ btn2.setText('Open main2')
 btn3 = Button(activity)
 btn3.setText('Run proxy syntax test')
 
+
+
 root.addView(title)
 root.addView(subtitle)
 root.addView(status)
@@ -199,12 +218,14 @@ function onCreate(arg1)
 end
 
 function onCreateOptionsMenu(menu)
-	menu.add('option 1')
-	menu.add('option 2')
-	menu.add('option 3')
+    menu.add(0, 0, 0, "option 1")
+    menu.add(0, 1, 0, "option 2")
+    menu.add(0, 2, 0, "option 3")
+    return true
 end
 
 function onOptionsItemSelected(item)
+	print("item: ${item.getTitle()}, id: ${item.getItemId()}")
 end
 
 long_click_cb = {

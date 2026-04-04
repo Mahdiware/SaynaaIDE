@@ -162,8 +162,7 @@ int register_callback(VM* vm, int slot) {
   entry->next = bridge->callbacks;
   bridge->callbacks = entry;
 
-  __android_log_print(
-      ANDROID_LOG_INFO, SAYNAAJAVA_TAG, "Registered callback id=%d from slot=%d", entry->id, slot);
+  LOGI("Registered callback id=%d from slot=%d", entry->id, slot);
 
   return entry->id;
 }
@@ -207,8 +206,7 @@ int register_map_callback(VM* vm, int mapSlot, const char* methodName) {
   entry->next = bridge->callbacks;
   bridge->callbacks = entry;
 
-  __android_log_print(ANDROID_LOG_INFO, SAYNAAJAVA_TAG, "Registered map callback id=%d method=%s",
-      entry->id, entry->methodName == NULL ? "" : entry->methodName);
+  LOGI("Registered map callback id=%d method=%s", entry->id, entry->methodName == NULL ? "" : entry->methodName);
 
   return entry->id;
 }
@@ -262,7 +260,7 @@ bool invoke_registered_callback(JNIEnv* env, VM* vm, BridgeState* bridge, Callba
 
   if (entry->fnHandle != NULL) {
     setSlotHandle(vm, 1, entry->fnHandle);
-    ok = CallFunction(vm, 1, 1, argStart, argEnd);
+    ok = CallFunction(vm, 1, argc, argStart, argEnd);
     resultSlot = 1;
   } else if (entry->mapHandle != NULL) {
     const char* methodKey = runtimeMethodName;
@@ -280,10 +278,64 @@ bool invoke_registered_callback(JNIEnv* env, VM* vm, BridgeState* bridge, Callba
     setSlotString(vm, keySlot, methodKey);
 
     if (CallMethod(vm, 1, "get", 1, keySlot, fnSlot) && GetSlotType(vm, fnSlot) == vCLOSURE) {
-      ok = CallFunction(vm, fnSlot, 1, argStart, argEnd);
+      ok = CallFunction(vm, fnSlot, argc, argStart, argEnd);
       resultSlot = fnSlot;
     } else {
       // If the callback method is absent in the map/table, do nothing.
+      ok = true;
+    }
+  }
+
+  if (ok && outResult != NULL && resultSlot > 0) {
+    *outResult = slot_to_java(env, vm, bridge, resultSlot);
+  }
+
+  return ok;
+}
+
+bool invoke_registered_callback_from_slots(JNIEnv* env, VM* vm, BridgeState* bridge,
+    CallbackEntry* entry, const char* runtimeMethodName, int argStart, int argCount,
+    jobject* outResult) {
+  if (vm == NULL || bridge == NULL || entry == NULL)
+    return false;
+
+  if (outResult != NULL)
+    *outResult = NULL;
+
+  if (argCount < 0 || argStart < 0) {
+    SetRuntimeError(vm, "Invalid callback argument range.");
+    return false;
+  }
+
+  int argEnd = argCount > 0 ? (argStart + argCount - 1) : (argStart - 1);
+  reserveSlots(vm, argEnd + 8);
+
+  bool ok = false;
+  int resultSlot = 0;
+
+  if (entry->fnHandle != NULL) {
+    setSlotHandle(vm, 1, entry->fnHandle);
+    ok = CallFunction(vm, 1, argCount, argStart, argEnd);
+    resultSlot = 1;
+  } else if (entry->mapHandle != NULL) {
+    const char* methodKey = runtimeMethodName;
+    if (methodKey == NULL || methodKey[0] == '\0')
+      methodKey = entry->methodName;
+
+    if (methodKey == NULL || methodKey[0] == '\0') {
+      SetRuntimeError(vm, "callback method name is missing.");
+      return false;
+    }
+
+    int keySlot = argEnd + 1;
+    int fnSlot = argEnd + 2;
+    setSlotHandle(vm, 1, entry->mapHandle);
+    setSlotString(vm, keySlot, methodKey);
+
+    if (CallMethod(vm, 1, "get", 1, keySlot, fnSlot) && GetSlotType(vm, fnSlot) == vCLOSURE) {
+      ok = CallFunction(vm, fnSlot, argCount, argStart, argEnd);
+      resultSlot = fnSlot;
+    } else {
       ok = true;
     }
   }
@@ -332,12 +384,11 @@ jobject create_native_callback_proxy(JNIEnv* env, VM* vm, BridgeState* bridge, j
 
 void android_stdout_write(VM* vm, const char* text) {
   (void) vm;
-  __android_log_print(ANDROID_LOG_INFO, SAYNAAJAVA_TAG, "%s", text == NULL ? "" : text);
+  LOGI("%s", text == NULL ? "" : text);
 }
 
 void android_stderr_write(VM* vm, const char* text) {
-  __android_log_print(ANDROID_LOG_ERROR, SAYNAAJAVA_TAG, "%s", text == NULL ? "" : text);
-
+  LOGE("%s", text == NULL ? "" : text);
   if (vm == NULL || text == NULL || text[0] == '\0')
     return;
 
@@ -1505,8 +1556,51 @@ void fn_call(VM* vm) {
   }
 
   JNIEnv* env = env_from_jvm(bridge->jvm);
+  jobject target = slot_to_java(env, vm, bridge, 1);
+  const char* methodName = GetSlotString(vm, 2, NULL);
+  if (target != NULL && methodName != NULL && bridge->mResolveCallbackInterface != NULL) {
+    jstring jMethod = (*env)->NewStringUTF(env, methodName);
+    if (jMethod != NULL) {
+      int callArgc = argc - 2;
+      for (int i = 0; i < callArgc; i++) {
+        int slot = 3 + i;
+        if (GetSlotType(vm, slot) != vMAP)
+          continue;
+
+        jobject iface = (*env)->CallStaticObjectMethod(
+            env, bridge->javaBridgeClass, bridge->mResolveCallbackInterface,
+            target, jMethod, (jint) callArgc, (jint) i);
+
+        if ((*env)->ExceptionCheck(env)) {
+          throw_if_exception(vm, env, "resolveCallbackInterface failed");
+          if (iface != NULL)
+            (*env)->DeleteLocalRef(env, iface);
+          continue;
+        }
+
+        if (iface == NULL)
+          continue;
+
+        int callbackId = register_map_callback(vm, slot, "*");
+        if (callbackId <= 0) {
+          (*env)->DeleteLocalRef(env, iface);
+          continue;
+        }
+
+        jobject proxy = create_native_callback_proxy(env, vm, bridge, (jstring) iface, "*", callbackId);
+        (*env)->DeleteLocalRef(env, iface);
+        if (proxy != NULL) {
+          java_to_slot(env, vm, bridge, slot, proxy);
+          (*env)->DeleteLocalRef(env, proxy);
+        }
+      }
+      (*env)->DeleteLocalRef(env, jMethod);
+    }
+  }
   jobject saynaaObj = (*env)->NewLocalRef(env, bridge->saynaaObject);
   if (saynaaObj == NULL) {
+    if (target != NULL)
+      (*env)->DeleteLocalRef(env, target);
     SetRuntimeError(vm, "java.call Saynaa object is not available.");
     return;
   }
@@ -1516,6 +1610,8 @@ void fn_call(VM* vm) {
       (jint) 1, (jint) 2, (jint) 3, (jint) (argc - 2), (jint) 0);
 
   (*env)->DeleteLocalRef(env, saynaaObj);
+  if (target != NULL)
+    (*env)->DeleteLocalRef(env, target);
 
   if ((*env)->ExceptionCheck(env)) {
     throw_if_exception(vm, env, "java.call failed");
@@ -1840,6 +1936,7 @@ void register_java_api(VM* vm) {
   RegisterBuiltinFn(vm, "astable", fn_astable, 1, "astable(javaArrayOrIterable) -> Saynaa List.");
   RegisterBuiltinFn(vm, "loadLib", fn_loadLib, 2, "loadLib(className, methodName).");
   RegisterBuiltinFn(vm, "java_length", fn_length, 1, "java_length(javaValue) -> number.");
+  RegisterBuiltinFn(vm, "tostring", fn_javaToString, 1, "tostring(value) -> string.");
 }
 
 bool ensure_java_module(VM* vm) {
