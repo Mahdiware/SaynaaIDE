@@ -1134,9 +1134,14 @@ Result vmRunFiber(VM* vm, Fiber* fiber_) {
 #endif
 
 #if defined(__GNUC__) || defined(__clang__)
-#define USE_COMPUTED_GOTO 1
+    // testing arm crash when added computed goto
+    #if defined(__x86_64__) || defined(__i386__)
+        #define USE_COMPUTED_GOTO 1
+    #else
+        #define USE_COMPUTED_GOTO 0
+    #endif
 #else
-#define USE_COMPUTED_GOTO 0
+    #define USE_COMPUTED_GOTO 0
 #endif
 
   Opcode instruction;
