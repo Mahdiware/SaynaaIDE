@@ -353,6 +353,10 @@ struct Module {
   VarBuffer globals;
   UintBuffer global_names;
 
+  // Cache for global name -> global index lookup. Rebuilt lazily when dirty.
+  Map* global_indices;
+  bool global_indices_dirty;
+
   // Top level statements of a module are compiled to an implicit function
   // body which will be executed if it's imported for the first time.
   Closure* body;
@@ -613,6 +617,9 @@ struct Class {
   // A buffer of methods of the class.
   ClosureBuffer methods;
 
+  // Cached method-name -> method closure map for fast lookup.
+  Map* method_lookup;
+
   // Static attributes of the class.
   Map* static_attribs;
 
@@ -662,6 +669,9 @@ void varInitObject(Object* thiz, VM* vm, ObjectType type);
 
 String* newStringLength(VM* vm, const char* text, uint32_t length);
 
+// Returns an interned short string (for identifier/name heavy paths).
+String* newInternedStringLength(VM* vm, const char* text, uint32_t length);
+
 String* newStringVaArgs(VM* vm, const char* fmt, va_list args);
 
 // An inline function/macro implementation of newString(). Set below 0 to 1, to
@@ -677,6 +687,10 @@ String* newStringVaArgs(VM* vm, const char* fmt, va_list args);
 // Allocate new string using the cstring [text].
 #define newString(vm, text) \
   (newStringLength(vm, text, (!(text)) ? 0 : (uint32_t) strlen(text)))
+
+// Allocate/find an interned short string using a C-string.
+#define newInternedString(vm, text) \
+  (newInternedStringLength(vm, text, (!(text)) ? 0 : (uint32_t) strlen(text)))
 #endif
 
 List* newList(VM* vm, uint32_t size);
@@ -860,6 +874,10 @@ uint32_t moduleSetGlobal(VM* vm, Module* module, const char* name, uint32_t leng
 // Search for the [name] in the module's globals and return it's index.
 // If not found it'll return -1.
 int moduleGetGlobalIndex(Module* module, const char* name, uint32_t length);
+
+// Search for a global index by string object name. This path uses a cached
+// lookup map and is intended for runtime hot paths.
+int moduleGetGlobalIndexByName(VM* vm, Module* module, String* name);
 
 // Delete a global by name. Returns true if deleted, false if not found.
 bool moduleDeleteGlobal(VM* vm, Module* module, const char* name, uint32_t length);

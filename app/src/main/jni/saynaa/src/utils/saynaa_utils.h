@@ -86,6 +86,9 @@ uint32_t utilHashNumber(double num);
 // Generate a hash code for [string].
 uint32_t utilHashString(const char* string);
 
+// Generate a hash code for the first [length] bytes of [string].
+uint32_t utilHashStringLength(const char* string, uint32_t length);
+
 // Convert the string to number. On success it'll return NULL and set the
 // [num] value. Otherwise it'll return a C literal string containing the error
 // message.

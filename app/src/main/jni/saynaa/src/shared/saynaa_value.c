@@ -194,6 +194,10 @@ static void popMarkedObjectsInternal(Object* obj, VM* vm) {
         markObject(vm, &module->path->_super);
         markObject(vm, &module->name->_super);
 
+        if (module->global_indices != NULL) {
+          markObject(vm, &module->global_indices->_super);
+        }
+
         markVarBuffer(vm, &module->globals);
         vm->bytes_allocated += sizeof(Var) * module->globals.capacity;
 
@@ -296,6 +300,8 @@ static void popMarkedObjectsInternal(Object* obj, VM* vm) {
         vm->bytes_allocated += sizeof(Class);
         markObject(vm, &cls->owner->_super);
         markObject(vm, &cls->name->_super);
+        if (cls->method_lookup != NULL)
+          markObject(vm, &cls->method_lookup->_super);
         markObject(vm, &cls->static_attribs->_super);
         // don't need to mark magic_methods, they are all in cls->methods.
 
@@ -354,7 +360,33 @@ String* newStringLength(VM* vm, const char* text, uint32_t length) {
 
   if (length != 0 && text != NULL)
     memcpy(string->data, text, length);
-  string->hash = utilHashString(string->data);
+  string->hash = utilHashStringLength(string->data, string->length);
+
+  return string;
+}
+
+String* newInternedStringLength(VM* vm, const char* text, uint32_t length) {
+  ASSERT(length == 0 || text != NULL, "Unexpected NULL string.");
+
+  // Keep interning focused on short identifiers/names.
+  const uint32_t max_interned_length = 64;
+
+  uint32_t hash = utilHashStringLength(text, length);
+  if (length <= max_interned_length) {
+    String* interned = vmFindInternedString(vm, text, length, hash);
+    if (interned != NULL) {
+      return interned;
+    }
+  }
+
+  String* string = _allocateString(vm, length);
+  if (length != 0 && text != NULL)
+    memcpy(string->data, text, length);
+  string->hash = hash;
+
+  if (length <= max_interned_length) {
+    vmInternString(vm, string);
+  }
 
   return string;
 }
@@ -409,9 +441,16 @@ Module* newModule(VM* vm) {
   memset(module, 0, sizeof(Module));
   varInitObject(&module->_super, vm, OBJ_MODULE);
 
+  vmPushTempRef(vm, &module->_super); // module.
+
   VarBufferInit(&module->globals);
   UintBufferInit(&module->global_names);
   VarBufferInit(&module->constants);
+
+  module->global_indices = newMap(vm);
+  module->global_indices_dirty = true;
+
+  vmPopTempRef(vm); // module.
 
   return module;
 }
@@ -598,6 +637,7 @@ Class* newClass(VM* vm, const char* name, int length, Class* super,
   vmPushTempRef(vm, &cls->_super); // class.
 
   ClosureBufferInit(&cls->methods);
+  cls->method_lookup = newMap(vm);
   cls->static_attribs = newMap(vm);
 
   cls->class_of = vINSTANCE;
@@ -617,7 +657,7 @@ Class* newClass(VM* vm, const char* name, int length, Class* super,
       *cls_index = _cls_index;
     moduleSetGlobal(vm, module, name, length, VAR_OBJ(cls));
   } else {
-    cls->name = newStringLength(vm, name, (uint32_t) length);
+    cls->name = newInternedStringLength(vm, name, (uint32_t) length);
   }
 
   vmPopTempRef(vm); // class.
@@ -633,6 +673,7 @@ Class* newClassRaw(VM* vm, Module* owner, String* name, String* docstring) {
   vmPushTempRef(vm, &cls->_super); // class.
 
   ClosureBufferInit(&cls->methods);
+  cls->method_lookup = newMap(vm);
   cls->static_attribs = newMap(vm);
 
   cls->class_of = vINSTANCE;
@@ -1565,7 +1606,7 @@ String* moduleAddString(Module* module, VM* vm, const char* name,
 
   // If we reach here the name doesn't exists in the buffer, so add it and
   // return the index.
-  String* new_name = newStringLength(vm, name, length);
+  String* new_name = newInternedStringLength(vm, name, length);
   vmPushTempRef(vm, &new_name->_super); // new_name
   VarBufferWrite(&module->constants, vm, VAR_OBJ(new_name));
   vmPopTempRef(vm); // new_name
@@ -1583,6 +1624,45 @@ String* moduleGetStringAt(Module* module, int index) {
     return (String*) AS_OBJ(constant);
   }
   return NULL;
+}
+
+static void _moduleRebuildGlobalIndices(VM* vm, Module* module) {
+  ASSERT(module != NULL && module->global_indices != NULL, OOPS);
+
+  mapClear(vm, module->global_indices);
+
+  for (uint32_t i = 0; i < module->global_names.count; i++) {
+    uint32_t name_index = module->global_names.data[i];
+    String* g_name = moduleGetStringAt(module, (int) name_index);
+    if (g_name != NULL) {
+      mapSet(vm, module->global_indices, VAR_OBJ(g_name), VAR_INT((int32_t) i));
+    }
+  }
+
+  module->global_indices_dirty = false;
+}
+
+int moduleGetGlobalIndexByName(VM* vm, Module* module, String* name) {
+  ASSERT(vm != NULL && module != NULL && name != NULL, OOPS);
+
+  if (module->global_indices == NULL) {
+    module->global_indices = newMap(vm);
+    module->global_indices_dirty = true;
+  }
+
+  if (module->global_indices_dirty) {
+    _moduleRebuildGlobalIndices(vm, module);
+  }
+
+  Var index = mapGet(module->global_indices, VAR_OBJ(name));
+  if (IS_INT(index)) {
+    int32_t g_index = AS_INT(index);
+    if (g_index >= 0 && (uint32_t) g_index < module->globals.count) {
+      return g_index;
+    }
+  }
+
+  return -1;
 }
 
 uint32_t moduleSetGlobal(VM* vm, Module* module, const char* name, uint32_t length, Var value) {
@@ -1608,6 +1688,7 @@ uint32_t moduleSetGlobal(VM* vm, Module* module, const char* name, uint32_t leng
   moduleAddString(module, vm, name, length, &name_index);
   UintBufferWrite(&module->global_names, vm, name_index);
   VarBufferWrite(&module->globals, vm, value);
+  module->global_indices_dirty = true;
 
   if (IS_OBJ(value))
     vmPopTempRef(vm);
@@ -1648,6 +1729,8 @@ bool moduleDeleteGlobal(VM* vm, Module* module, const char* name, uint32_t lengt
     module->globals.count--;
   if (module->global_names.count > 0)
     module->global_names.count--;
+
+  module->global_indices_dirty = true;
 
   return true;
 }

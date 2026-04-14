@@ -4,6 +4,7 @@
  */
 
 #include "saynaa_utils.h"
+#include "../shared/saynaa_common.h"
 
 #include <assert.h>
 #include <ctype.h>
@@ -227,6 +228,26 @@ uint32_t utilHashString(const char* string) {
 
   for (const char* c = string; *c != '\0'; c++) {
     hash ^= *c;
+    hash *= FNV_prime_32_bit;
+  }
+
+  return hash;
+
+#undef FNV_prime_32_bit
+#undef FNV_offset_basis_32_bit
+}
+
+uint32_t utilHashStringLength(const char* string, uint32_t length) {
+  // FNV-1a hash. See: http://www.isthe.com/chongo/tech/comp/fnv/
+
+#define FNV_prime_32_bit 16777619u
+#define FNV_offset_basis_32_bit 2166136261u
+
+  ASSERT(length == 0 || string != NULL, "Unexpected NULL string.");
+
+  uint32_t hash = FNV_offset_basis_32_bit;
+  for (uint32_t i = 0; i < length; i++) {
+    hash ^= (uint8_t) string[i];
     hash *= FNV_prime_32_bit;
   }
 

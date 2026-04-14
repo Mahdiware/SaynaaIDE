@@ -146,12 +146,25 @@ VM* NewVM(Configuration* config) {
   vm->min_heap_size = MIN_HEAP_SIZE;
   vm->heap_fill_percent = HEAP_FILL_PERCENT;
 
+  vm->interned_strings_capacity = 1024;
+  vm->interned_strings_count = 0;
+  vm->interned_strings = (String**) vm->config.realloc_fn(
+      NULL, sizeof(String*) * vm->interned_strings_capacity,
+      vm->config.user_data);
+  ASSERT(vm->interned_strings != NULL, "Out of memory.");
+  memset(vm->interned_strings, 0,
+         sizeof(String*) * vm->interned_strings_capacity);
+
   vm->modules = newMap(vm);
   vm->search_paths = newList(vm, 8);
   vm->searchers = newList(vm, 8);
 
   vm->builtins_count = 0;
   vm->time = 0;
+
+  vm->method_cache_class = NULL;
+  vm->method_cache_name = NULL;
+  vm->method_cache_closure = NULL;
 
   // This is necessary to prevent garbage collection skip the entry in this
   // array while we're building it.
@@ -182,6 +195,10 @@ void FreeVM(VM* vm) {
 
   vm->working_set = (Object**) vm->config.realloc_fn(vm->working_set, 0,
                                                      vm->config.user_data);
+
+  vm->interned_strings = (String**) vm->config.realloc_fn(vm->interned_strings,
+                                                           0,
+                                                           vm->config.user_data);
 
   // Validate that all handles have been released by the host application.
   // If handles remain, it indicates a resource leak in the host's usage of the VM.

@@ -95,6 +95,11 @@ struct VM {
   //      - otherwise path of the module.
   Map* modules;
 
+  // Interned short strings table for fast identifier/name reuse.
+  String** interned_strings;
+  uint32_t interned_strings_count;
+  uint32_t interned_strings_capacity;
+
   // List of directories that used for search modules.
   List* search_paths;
   List* searchers;
@@ -107,6 +112,11 @@ struct VM {
   // type of the objects are enums starting from 0 we can directly get the
   // class by using their enum (ex: primitives[OBJ_LIST]).
   Class* builtin_classes[vINSTANCE];
+
+  // Monomorphic cache for repeated class method lookups.
+  Class* method_cache_class;
+  String* method_cache_name;
+  Closure* method_cache_closure;
 
   // Current fiber.
   Fiber* fiber;
@@ -187,6 +197,13 @@ void vmRegisterModule(VM* vm, Module* module, String* key);
 // Returns the module, where the [key] could be either it's name or path that
 // was used to register the module. If it doesn't exists, returns NULL.
 Module* vmGetModule(VM* vm, String* key);
+
+// Lookup an interned string by raw bytes/hash.
+String* vmFindInternedString(VM* vm, const char* text, uint32_t length,
+                             uint32_t hash);
+
+// Insert a string into the intern table if not already present.
+void vmInternString(VM* vm, String* string);
 
 // ((Context switching - start))
 // Prepare a new fiber for execution with the given arguments. That can be used

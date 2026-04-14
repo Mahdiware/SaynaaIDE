@@ -11,6 +11,95 @@
 
 #include <math.h>
 
+#define INTERN_TABLE_INITIAL_CAPACITY 1024u
+#define INTERN_TABLE_LOAD_PERCENT 75u
+
+static void vmResizeInternTable(VM* vm, uint32_t new_capacity) {
+  ASSERT(vm != NULL, OOPS);
+  ASSERT(new_capacity >= INTERN_TABLE_INITIAL_CAPACITY, OOPS);
+
+  String** new_entries = (String**) vm->config.realloc_fn(
+      NULL, sizeof(String*) * new_capacity, vm->config.user_data);
+  ASSERT(new_entries != NULL, "Out of memory.");
+  memset(new_entries, 0, sizeof(String*) * new_capacity);
+
+  uint32_t new_count = 0;
+  if (vm->interned_strings != NULL) {
+    uint32_t mask = new_capacity - 1;
+    for (uint32_t i = 0; i < vm->interned_strings_capacity; i++) {
+      String* str = vm->interned_strings[i];
+      if (str == NULL)
+        continue;
+
+      uint32_t index = str->hash & mask;
+      while (new_entries[index] != NULL) {
+        index = (index + 1) & mask;
+      }
+
+      new_entries[index] = str;
+      new_count++;
+    }
+
+    vm->config.realloc_fn(vm->interned_strings, 0, vm->config.user_data);
+  }
+
+  vm->interned_strings = new_entries;
+  vm->interned_strings_capacity = new_capacity;
+  vm->interned_strings_count = new_count;
+}
+
+String* vmFindInternedString(VM* vm, const char* text, uint32_t length,
+                             uint32_t hash) {
+  ASSERT(vm != NULL, OOPS);
+  ASSERT(length == 0 || text != NULL, OOPS);
+
+  if (vm->interned_strings == NULL || vm->interned_strings_capacity == 0)
+    return NULL;
+
+  uint32_t mask = vm->interned_strings_capacity - 1;
+  uint32_t index = hash & mask;
+
+  for (uint32_t scanned = 0; scanned < vm->interned_strings_count; scanned++) {
+    String* candidate = vm->interned_strings[index];
+    if (candidate == NULL)
+      return NULL;
+
+    if (candidate->hash == hash && candidate->length == length
+        && (length == 0 || memcmp(candidate->data, text, length) == 0)) {
+      return candidate;
+    }
+
+    index = (index + 1) & mask;
+  }
+
+  return NULL;
+}
+
+void vmInternString(VM* vm, String* string) {
+  ASSERT(vm != NULL && string != NULL, OOPS);
+
+  if (vm->interned_strings == NULL || vm->interned_strings_capacity == 0) {
+    vmResizeInternTable(vm, INTERN_TABLE_INITIAL_CAPACITY);
+  }
+
+  if ((vm->interned_strings_count + 1) * 100
+      > vm->interned_strings_capacity * INTERN_TABLE_LOAD_PERCENT) {
+    vmResizeInternTable(vm, vm->interned_strings_capacity * 2);
+  }
+
+  if (vmFindInternedString(vm, string->data, string->length, string->hash) != NULL)
+    return;
+
+  uint32_t mask = vm->interned_strings_capacity - 1;
+  uint32_t index = string->hash & mask;
+  while (vm->interned_strings[index] != NULL) {
+    index = (index + 1) & mask;
+  }
+
+  vm->interned_strings[index] = string;
+  vm->interned_strings_count++;
+}
+
 typedef struct {
   VM* vm;
   String* base_ptr;
@@ -208,6 +297,11 @@ Module* vmGetModule(VM* vm, String* key) {
 }
 
 void vmCollectGarbage(VM* vm) {
+  // Drop transient caches before mark/sweep to avoid stale raw pointers.
+  vm->method_cache_class = NULL;
+  vm->method_cache_name = NULL;
+  vm->method_cache_closure = NULL;
+
   // Mark builtin functions.
   for (int i = 0; i < vm->builtins_count; i++) {
     markObject(vm, &vm->builtins_funcs[i]->_super);
@@ -226,6 +320,14 @@ void vmCollectGarbage(VM* vm) {
   // Mark the modules and search path.
   markObject(vm, &vm->modules->_super);
   markObject(vm, &vm->search_paths->_super);
+
+  // Interned strings are shared by identifier/name heavy paths.
+  for (uint32_t i = 0; i < vm->interned_strings_capacity; i++) {
+    String* string = vm->interned_strings[i];
+    if (string != NULL) {
+      markObject(vm, &string->_super);
+    }
+  }
 
   // Mark temp references.
   for (int i = 0; i < vm->temp_reference_count; i++) {
@@ -1133,13 +1235,8 @@ Result vmRunFiber(VM* vm, Fiber* fiber_) {
 #error "OPCODE" should not be deifined here.
 #endif
 
-#if defined(__GNUC__) || defined(__clang__)
-    // testing arm crash when added computed goto
-    #if defined(__x86_64__) || defined(__i386__)
-        #define USE_COMPUTED_GOTO 1
-    #else
-        #define USE_COMPUTED_GOTO 0
-    #endif
+#if (defined(__GNUC__) || defined(__clang__)) && !defined(NO_COMPUTED_GOTO)
+    #define USE_COMPUTED_GOTO 1
 #else
     #define USE_COMPUTED_GOTO 0
 #endif
@@ -1331,7 +1428,7 @@ L_vm_main_loop:
         RUNTIME_ERROR(stringFormat(vm, "Invalid global name in module data."));
       }
 
-      int g_index = moduleGetGlobalIndex(module, name->data, name->length);
+      int g_index = moduleGetGlobalIndexByName(vm, module, name);
       if (g_index == -1) {
         int missing_index = moduleGetGlobalIndex(module, LITS__missing,
                                                  (uint32_t) strlen(LITS__missing));
@@ -1633,7 +1730,7 @@ L_vm_main_loop:
             RUNTIME_ERROR(stringFormat(vm, "Invalid import target name in module data."));
           }
 
-          int g_index = moduleGetGlobalIndex(module, gname->data, gname->length);
+          int g_index = moduleGetGlobalIndexByName(vm, module, gname);
           if (g_index == -1) {
             _imported = VAR_NULL;
           } else {

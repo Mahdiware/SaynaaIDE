@@ -2277,7 +2277,17 @@ static void initializePrimitiveClasses(VM* vm) {
     fn->native = ptr; \
     fn->arity = arity_; \
     vmPushTempRef(vm, &fn->_super); /* fn. */ \
-    ClosureBufferWrite(&vm->builtin_classes[type]->methods, vm, newClosure(vm, fn)); \
+    Closure* method = newClosure(vm, fn); \
+    vmPushTempRef(vm, &method->_super); /* method. */ \
+    ClosureBufferWrite(&vm->builtin_classes[type]->methods, vm, method); \
+    if (vm->builtin_classes[type]->method_lookup == NULL) { \
+      vm->builtin_classes[type]->method_lookup = newMap(vm); \
+    } \
+    String* method_name = newInternedString(vm, name); \
+    vmPushTempRef(vm, &method_name->_super); /* method_name. */ \
+    mapSet(vm, vm->builtin_classes[type]->method_lookup, VAR_OBJ(method_name), VAR_OBJ(method)); \
+    vmPopTempRef(vm); /* method_name. */ \
+    vmPopTempRef(vm); /* method. */ \
     vmPopTempRef(vm); /* fn. */ \
   } while (false)
 
@@ -2387,6 +2397,14 @@ Var preConstructThis(VM* vm, Class* cls) {
 }
 
 void bindMethod(VM* vm, Class* cls, Closure* method) {
+  ASSERT(vm != NULL && cls != NULL && method != NULL, OOPS);
+
+  if (vm->method_cache_class == cls) {
+    vm->method_cache_class = NULL;
+    vm->method_cache_name = NULL;
+    vm->method_cache_closure = NULL;
+  }
+
   // TODO: check hash instead of using strcmp?
   if (strcmp(method->fn->name, LITS__init) == 0) {
     cls->magic_methods[METHOD_INIT] = method;
@@ -2412,6 +2430,22 @@ void bindMethod(VM* vm, Class* cls, Closure* method) {
     cls->magic_methods[METHOD_DELATTR] = method;
   } else if (strcmp(method->fn->name, LITS__call) == 0) {
     cls->magic_methods[METHOD_CALL] = method;
+  }
+
+  if (cls->method_lookup == NULL) {
+    cls->method_lookup = newMap(vm);
+  }
+
+  if (method->fn->name != NULL) {
+    String* method_name = newInternedString(vm, method->fn->name);
+    vmPushTempRef(vm, &method_name->_super); // method_name
+
+    Var key = VAR_OBJ(method_name);
+    if (IS_UNDEF(mapGet(cls->method_lookup, key))) {
+      mapSet(vm, cls->method_lookup, key, VAR_OBJ(method));
+    }
+
+    vmPopTempRef(vm); // method_name
   }
 
   ClosureBufferWrite(&cls->methods, vm, method);
@@ -2451,17 +2485,34 @@ Class* getClass(VM* vm, Var instance) {
 
 // Returns a method on a class (it'll walk up the inheritance tree to search
 // and if the method not found, it'll return NULL.
-static inline Closure* clsGetMethod(Class* cls, String* name) {
+static inline Closure* clsGetMethod(VM* vm, Class* cls, String* name) {
   Class* cls_ = cls;
   do {
+    if (cls_->method_lookup != NULL) {
+      Var method = mapGet(cls_->method_lookup, VAR_OBJ(name));
+      if (IS_OBJ_TYPE(method, OBJ_CLOSURE)) {
+        Closure* closure = (Closure*) AS_OBJ(method);
+        ASSERT(closure->fn->is_method, OOPS);
+        return closure;
+      }
+    }
+
+    // Fallback for classes that may have direct method-buffer writes.
     for (int i = 0; i < (int) cls_->methods.count; i++) {
       Closure* method_ = cls_->methods.data[i];
       ASSERT(method_->fn->is_method, OOPS);
       const char* method_name = method_->fn->name;
       if (IS_CSTR_EQ(name, method_name, strlen(method_name))) {
+        if (cls_->method_lookup != NULL) {
+          String* cached_name = newInternedString(vm, method_name);
+          vmPushTempRef(vm, &cached_name->_super); // cached_name
+          mapSet(vm, cls_->method_lookup, VAR_OBJ(cached_name), VAR_OBJ(method_));
+          vmPopTempRef(vm); // cached_name
+        }
         return method_;
       }
     }
+
     cls_ = cls_->super_class;
   } while (cls_ != NULL);
   return NULL;
@@ -2471,8 +2522,19 @@ bool hasMethod(VM* vm, Var thiz, String* name, Closure** _method) {
   Class* cls = getClass(vm, thiz);
   ASSERT(cls != NULL, OOPS);
 
-  Closure* method_ = clsGetMethod(cls, name);
+  if (vm->method_cache_class == cls
+      && vm->method_cache_name == name
+      && vm->method_cache_closure != NULL) {
+    *_method = vm->method_cache_closure;
+    return true;
+  }
+
+  Closure* method_ = clsGetMethod(vm, cls, name);
   if (method_ != NULL) {
+    vm->method_cache_class = cls;
+    vm->method_cache_name = name;
+    vm->method_cache_closure = method_;
+
     *_method = method_;
     return true;
   }
@@ -2502,7 +2564,7 @@ Closure* getSuperMethod(VM* vm, Var thiz, String* name) {
     return NULL;
   };
 
-  Closure* method = clsGetMethod(super, name);
+  Closure* method = clsGetMethod(vm, super, name);
   if (method == NULL) {
     VM_SET_ERROR(vm, stringFormat(vm, "'@' class has no method named '@'.",
                                   super->name, name));
@@ -3060,7 +3122,7 @@ Var varGetAttrib(VM* vm, Var on, String* attrib, bool skipGetter, bool callable)
         }
 
         // Search in globals.
-        int index = moduleGetGlobalIndex(module, attrib->data, attrib->length);
+        int index = moduleGetGlobalIndexByName(vm, module, attrib);
         if (index != -1) {
           ASSERT_INDEX((uint32_t) index, module->globals.count);
           return module->globals.data[index];
@@ -3161,13 +3223,13 @@ Var varGetAttrib(VM* vm, Var on, String* attrib, bool skipGetter, bool callable)
         if (!IS_UNDEF(value))
           return value;
 
-        for (int i = 0; i < (int) cls->methods.count; i++) {
-          Closure* method_ = cls->methods.data[i];
-          ASSERT(method_->fn->is_method, OOPS);
-          const char* method_name = method_->fn->name;
-          if (IS_CSTR_EQ(attrib, method_name, strlen(method_name))) {
-            return VAR_OBJ(newMethodBind(vm, method_));
-          }
+        Closure* method_ = clsGetMethod(vm, cls, attrib);
+        if (method_ != NULL) {
+          MethodBind* mb = newMethodBind(vm, method_);
+          vmPushTempRef(vm, &mb->_super);
+          mb->instance = on;
+          vmPopTempRef(vm);
+          return VAR_OBJ(mb);
         }
       }
       break;

@@ -1,4 +1,6 @@
-ENABLE_WARNINGS := false # Top-level switch: set to true to enable warnings, false to disable
+ENABLE_WARNINGS := false
+COMPUTED_GOTO   := -DNO_COMPUTED_GOTO
+
 
 ifeq ($(ENABLE_WARNINGS),true)
     WARNINGS := -Wall -Wextra -Wno-unused-parameter -Wno-unused-function
@@ -21,6 +23,7 @@ LOCAL_CFLAGS += -std=c99 \
                  -fdata-sections \
                  -fvisibility=hidden \
                  -fvisibility-inlines-hidden \
+                 $(COMPUTED_GOTO) \
                  $(DEBUG_FLAGS) \
                  $(WARNINGS)
 
@@ -32,5 +35,6 @@ LOCAL_CPPFLAGS += -std=c++14 \
                    -fvisibility=hidden \
                    -ffunction-sections \
                    -fdata-sections \
+                   $(COMPUTED_GOTO) \
                    $(DEBUG_FLAGS) \
                    $(WARNINGS)
