@@ -1,4 +1,4 @@
-name: Build Android APK (Java + NDK, unsigned)
+name: Build Android APK (Java + NDK)
 
 on:
   push:
@@ -9,36 +9,38 @@ on:
 
 jobs:
   build:
-    name: Build debug APKs (no signing, NDK enabled)
+    name: Build APKs
     runs-on: ubuntu-latest
 
     permissions:
       contents: write
 
     env:
-      GRADLE_OPTS: -Dorg.gradle.caching=true -Dorg.gradle.parallel=true -Dorg.gradle.configureondemand=true -Dkotlin.incremental=true
-      # Note: android-actions/setup-android@v3 will populate ANDROID_SDK_ROOT/ANDROID_HOME
-      ANDROID_API: "33"
-      BUILD_TOOLS_VERSION: "33.0.2"
-      NDK_VERSION: "23.1.7779620"
+      GRADLE_OPTS: >-
+        -Dorg.gradle.caching=true
+        -Dorg.gradle.parallel=true
+        -Dorg.gradle.configureondemand=true
+        -Dkotlin.incremental=true
+      ANDROID_API: "34"
+      BUILD_TOOLS_VERSION: "34.0.0"
+      NDK_VERSION: "26.1.10909125"
       CMAKE_VERSION: "3.22.1"
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Android SDK (tools + platform-tools)
-        uses: android-actions/setup-android@v3
-        with:
-          api-level: ${{ env.ANDROID_API }}
-          # This action installs platform-tools and basic SDK; we will install NDK/CMake explicitly below.
-
-      - name: Set up Java (required for Gradle)
+      - name: Set up Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: "17"
           cache: gradle
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          api-level: ${{ env.ANDROID_API }}
 
       - name: Grant execute permission for Gradle wrapper
         run: chmod +x gradlew
@@ -53,7 +55,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-gradle-
 
-      - name: Cache Android SDK/NDK
+      - name: Cache Android SDK components
         uses: actions/cache@v4
         id: cache-android
         with:
@@ -69,59 +71,76 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-android-sdk-
 
-      - name: Install Android SDK components (NDK, CMake, build-tools)
+      - name: Install Android SDK components
         if: steps.cache-android.outputs.cache-hit != 'true'
         run: |
-          # Ensure sdkmanager is available in PATH (setup-android usually provides this)
+          set -eux
+
           echo "Android SDK root: $ANDROID_SDK_ROOT"
+
           SDKMANAGER="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
           if [ ! -x "$SDKMANAGER" ]; then
-            # fallback for some runner images that put sdkmanager elsewhere
             SDKMANAGER=$(which sdkmanager || true)
           fi
-          if [ -z "$SDKMANAGER" ]; then
-            echo "sdkmanager not found in PATH; listing $ANDROID_SDK_ROOT"
+
+          if [ -z "${SDKMANAGER:-}" ]; then
+            echo "sdkmanager not found"
             ls -la "$ANDROID_SDK_ROOT" || true
             exit 1
           fi
 
-          # Install specific components; these version strings are commonly available.
-          # You may change the NDK version if you need a specific one.
-          yes | "$SDKMANAGER" "ndk;${NDK_VERSION}" "cmake;${CMAKE_VERSION}" "build-tools;${BUILD_TOOLS_VERSION}" "platforms;android-${ANDROID_API}"
+          yes | "$SDKMANAGER" \
+            "platforms;android-${ANDROID_API}" \
+            "build-tools;${BUILD_TOOLS_VERSION}" \
+            "platform-tools" \
+            "ndk;${NDK_VERSION}" \
+            "cmake;${CMAKE_VERSION}"
 
-          # Accept licenses (in case they weren't accepted)
           yes | "$SDKMANAGER" --licenses || true
 
-      - name: Show installed ndk / cmake versions
+      - name: Show installed SDK/NDK
         run: |
-          echo "NDK list under $ANDROID_SDK_ROOT/ndk:"
+          set -eux
+          echo "SDK root: $ANDROID_SDK_ROOT"
+          ls -la "$ANDROID_SDK_ROOT" || true
+          echo "NDK:"
           ls -la "$ANDROID_SDK_ROOT/ndk" || true
-          echo "CMake under $ANDROID_SDK_ROOT/cmake:"
-          ls -la "$ANDROID_SDK_ROOT/cmake" || true
+          echo "Build tools:"
+          ls -la "$ANDROID_SDK_ROOT/build-tools" || true
 
-      - name: Build debug APK (includes native libs from NDK)
+      - name: Clean project
+        run: ./gradlew clean --no-daemon
+
+      - name: Build debug APK
         run: ./gradlew assembleDebug --no-daemon --stacktrace
 
-      - name: Collect APK artifacts (debug and any splits)
+      - name: Build release APK
+        run: ./gradlew assembleRelease --no-daemon --stacktrace
+
+      - name: Verify native libraries
+        run: |
+          set -eux
+          find . -type f -name "*.so" -exec file {} \;
+
+      - name: Collect APK artifacts
         run: |
           set -eux
           ARTIFACT_DIR="$GITHUB_WORKSPACE/artifacts"
           mkdir -p "$ARTIFACT_DIR"
-          # Copy any debug apks (including per-ABI splits) into artifacts folder
-          find app/build/outputs -type f -name "*debug*.apk" -exec cp {} "$ARTIFACT_DIR"/ \; || true
-          # If Gradle produced split apks at build/outputs/flutter-apk (not applicable in Java projects normally),
-          # copy that too just in case
-          find build -type f -name "*debug*.apk" -exec cp {} "$ARTIFACT_DIR"/ \; || true
-          echo "Artifacts saved to $ARTIFACT_DIR"
+
+          find app/build/outputs -type f -name "*.apk" -exec cp {} "$ARTIFACT_DIR"/ \; || true
+          find build -type f -name "*.apk" -exec cp {} "$ARTIFACT_DIR"/ \; || true
+
+          echo "Artifacts:"
           ls -la "$ARTIFACT_DIR"
 
       - name: Upload APK artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: android-apks-debug
+          name: android-apks
           path: artifacts/*.apk
 
-      - name: Create GitHub Release (manual dispatch only — auto tag uses run number)
+      - name: Create GitHub Release
         if: github.event_name == 'workflow_dispatch'
         uses: softprops/action-gh-release@v2
         with:

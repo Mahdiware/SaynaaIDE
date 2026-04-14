@@ -11,7 +11,7 @@ endif
 ifeq ($(APP_OPTIM),debug)
     DEBUG_FLAGS := -DDEBUG -O0 -g3 -fno-omit-frame-pointer
 else
-    DEBUG_FLAGS := -DNDEBUG -g0 -fomit-frame-pointer
+    DEBUG_FLAGS := -DNDEBUG -O3 -fomit-frame-pointer
 endif
 
 # Define global flags

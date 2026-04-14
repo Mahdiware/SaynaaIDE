@@ -8,12 +8,13 @@ function toast(msg)
 	Toast.makeText(activity, msg, Toast.LENGTH_SHORT).show()
 end
 
+/*
 loadDex("hello.dex")
 import "com.saynaa.dextest.Hello"
 
 msg = Hello.hello()
 toast(msg)
-
+*/
 
 DemoLayout = {
   LinearLayout,

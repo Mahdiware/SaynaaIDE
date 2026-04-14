@@ -31,9 +31,19 @@ android {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            externalNativeBuild {
+                ndkBuild {
+                    arguments "NDK_DEBUG=0"
+                }
+            }
         }
         debug {
             jniDebuggable = true
+            externalNativeBuild {
+                ndkBuild {
+                    arguments "NDK_DEBUG=1"
+                }
+            }
         }
     }
 
