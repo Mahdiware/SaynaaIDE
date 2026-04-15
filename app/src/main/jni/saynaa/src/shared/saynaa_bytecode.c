@@ -956,8 +956,7 @@ Result saynaa_bytecode_deserialize_module(VM* vm, Module* module,
     status = RESULT_BYTECODE_TRUNCATED;
     goto cleanup;
   }
-  if (version == SAYNAA_BYTECODE_PAYLOAD_VERSION
-      && version != SAYNAA_BYTECODE_PAYLOAD_MIN_VERSION) {
+  if (version == SAYNAA_BYTECODE_PAYLOAD_VERSION) {
     return saynaa_bytecode_deserialize_module_v3(vm, module, data, data_size);
   }
   if (version != SAYNAA_BYTECODE_PAYLOAD_MIN_VERSION) {

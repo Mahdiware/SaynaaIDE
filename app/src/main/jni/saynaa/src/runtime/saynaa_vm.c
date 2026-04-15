@@ -2475,8 +2475,10 @@ L_vm_main_loop:
                 && (aic->receiver_obj == NULL
                     || (IS_OBJ(on) && AS_OBJ(on) == aic->receiver_obj))) {
               MethodBind* mb = newMethodBind(vm, aic->method);
+              vmPushTempRef(vm, &mb->_super); // mb.
               mb->instance = on;
               value = VAR_OBJ(mb);
+              vmPopTempRef(vm); // mb.
               cache_hit = true;
             }
             break;
@@ -2564,8 +2566,10 @@ L_vm_main_loop:
                 && (aic->receiver_obj == NULL
                     || (IS_OBJ(on) && AS_OBJ(on) == aic->receiver_obj))) {
               MethodBind* mb = newMethodBind(vm, aic->method);
+              vmPushTempRef(vm, &mb->_super); // mb.
               mb->instance = on;
               value = VAR_OBJ(mb);
+              vmPopTempRef(vm); // mb.
               cache_hit = true;
             }
             break;
