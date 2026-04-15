@@ -357,6 +357,10 @@ struct Module {
   Map* global_indices;
   bool global_indices_dirty;
 
+  // Hot lookup cache for repeated global-name access on the same module.
+  String* global_lookup_name_cache;
+  int32_t global_lookup_index_cache;
+
   // Top level statements of a module are compiled to an implicit function
   // body which will be executed if it's imported for the first time.
   Closure* body;
@@ -368,9 +372,9 @@ struct Module {
   bool initialized;
 
 #ifndef NO_DL
-  // If the module loaded from a native extension, this handle will reference
-  // to the platform dependent handle of that module and will be released
-  // when the module garbage collected.
+  // If the module loaded from a native extension, this pointer references the
+  // VM-managed native library cache entry and will be released on module GC.
+  // The cache entry owns the platform dependent library handle.
   void* handle;
 #endif
 };
@@ -645,6 +649,8 @@ typedef struct {
   VarBuffer fields; //< Var buffer of the instance.
 } Inst;
 
+#define INSTANCE_INLINE_ATTR_CAPACITY 8
+
 struct Instance {
   Object _super;
 
@@ -656,6 +662,12 @@ struct Instance {
   // getters and if the attribute not exists we'll continue search in the
   // bellow attribs map.
   void* native;
+
+  // Hot attributes are stored inline to avoid per-instance map allocation and
+  // hashing overhead for common small objects (e.g. vectors/matrices).
+  uint8_t inline_attrib_count;
+  String* inline_attrib_names[INSTANCE_INLINE_ATTR_CAPACITY];
+  Var inline_attrib_values[INSTANCE_INLINE_ATTR_CAPACITY];
 
   // Dynamic attributes of an instance.
   Map* attribs;
@@ -838,8 +850,14 @@ List* listAdd(VM* vm, List* l1, List* l2);
 // VAR_UNDEFINED.
 Var mapGet(Map* thiz, Var key);
 
+// String-key specialization for hot attribute/name lookups.
+Var mapGetStringKey(Map* thiz, String* key);
+
 // Add the [key], [value] entry to the map.
 void mapSet(VM* vm, Map* thiz, Var key, Var value);
+
+// String-key specialization for hot attribute/name writes.
+void mapSetStringKey(VM* vm, Map* thiz, String* key, Var value);
 
 // Remove all the entries from the map.
 void mapClear(VM* vm, Map* thiz);

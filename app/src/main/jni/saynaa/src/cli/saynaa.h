@@ -289,6 +289,9 @@ PUBLIC void RegisterBuiltinFn(VM* vm, const char* name, nativeFn fn, int arity,
 // the last character of the path **must** be a path seperator '/' or '\\'.
 PUBLIC void AddSearchPath(VM* vm, const char* path);
 
+// Clears import resolution cache entries.
+PUBLIC void ClearImportResolveCache(VM* vm);
+
 // Invoke allocator directly.  This function should be called
 // when the host application want to send strings to the VM that are claimed
 // by the VM once the caller returned it. For other uses you **should** call

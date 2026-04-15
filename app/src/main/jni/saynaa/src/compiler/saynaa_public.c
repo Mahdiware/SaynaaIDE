@@ -158,6 +158,9 @@ VM* NewVM(Configuration* config) {
   vm->modules = newMap(vm);
   vm->search_paths = newList(vm, 8);
   vm->searchers = newList(vm, 8);
+  vm->import_resolve_cache = newMap(vm);
+  vm->import_resolve_cache_entries = 0;
+  vm->import_resolve_cache_limit = 4096;
 
   vm->builtins_count = 0;
   vm->time = 0;
@@ -165,6 +168,7 @@ VM* NewVM(Configuration* config) {
   vm->method_cache_class = NULL;
   vm->method_cache_name = NULL;
   vm->method_cache_closure = NULL;
+  vm->inline_cache_epoch = 1;
 
   // This is necessary to prevent garbage collection skip the entry in this
   // array while we're building it.
@@ -251,6 +255,15 @@ void AddSearchPath(VM* vm, const char* path) {
   vmPushTempRef(vm, &spath->_super); // spath.
   listAppend(vm, vm->search_paths, VAR_OBJ(spath));
   vmPopTempRef(vm); // spath.
+
+  // Search path mutations invalidate resolved import path cache entries.
+  ClearImportResolveCache(vm);
+}
+
+void ClearImportResolveCache(VM* vm) {
+  CHECK_ARG_NULL(vm);
+  mapClear(vm, vm->import_resolve_cache);
+  vm->import_resolve_cache_entries = 0;
 }
 
 Handle* NewModule(VM* vm, const char* name) {
@@ -563,15 +576,17 @@ static Result runFileAutoDetect(VM* vm, const char* path, bool* is_bytecode) {
         if (status == RESULT_SUCCESS) {
           const uint8_t* payload = (const uint8_t*) source
                                    + SAYNAA_BYTECODE_HEADER_SIZE;
-          status = saynaa_bytecode_validate_payload(payload, header.bytecode_size);
-          if (status == RESULT_SUCCESS) {
-            status = saynaa_bytecode_deserialize_module(vm, module, payload,
-                                                        header.bytecode_size);
-          }
+          status = saynaa_bytecode_deserialize_module(vm, module, payload,
+                                                      header.bytecode_size);
         }
 
         if (status != RESULT_SUCCESS) {
           result = RESULT_COMPILE_ERROR;
+          if (!VM_HAS_ERROR(vm)) {
+            VM_SET_ERROR(vm,
+                         stringFormat(vm, "Bytecode deserialize failed: $",
+                                      saynaa_status_message(status), false));
+          }
         } else {
           initializeModule(vm, module, true);
           result = RESULT_SUCCESS;

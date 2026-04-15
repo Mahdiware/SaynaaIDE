@@ -1,0 +1,46 @@
+import java
+import package
+import loadlayout
+
+# Classpath prefixes for fallback resolution
+classpath = ["java.lang."]
+
+package.searchers.append(function (name)
+   # Support wildcard import: "java.util.*"
+   if name.endswith(".*") then
+      out = name.split("*")
+
+      if out.length == 2 then
+          if classpath.find(out[0]) == -1 then
+              classpath.append(out[0])  # register package prefix
+          end
+          return true  # mark as handled
+      end
+   end
+
+   # Try direct class bind: "java.lang.String"
+   result = pcall(java.bindClass, name)
+   if result[0] then
+       return result[1]
+   end
+
+   return null  # not handled
+end)
+
+_module._missing = function(name)
+    for path in classpath do
+        result = pcall(java.bindClass, path + name)
+
+        if result[0] and result[1] != null then
+            define(name, result[1])  # cache
+            return result[1]
+        end
+    end
+end
+
+function loadDex(path)
+    if activity == null then
+        assert(false, 'loadDex: activity is null')
+    end
+    return activity.loadDex(path)
+end

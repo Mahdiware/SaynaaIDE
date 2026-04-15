@@ -31,6 +31,39 @@ struct Handle {
   Handle* next;
 };
 
+#ifndef NO_DL
+typedef struct NativeLibCacheEntry NativeLibCacheEntry;
+#endif
+
+#define VM_METHOD_INLINE_CACHE_SIZE 1024u
+#define VM_ATTRIB_INLINE_CACHE_SIZE 2048u
+
+typedef enum {
+  VM_ATTRIB_IC_NONE = 0,
+  VM_ATTRIB_IC_INST_INLINE = 1,
+  VM_ATTRIB_IC_MODULE_GLOBAL = 2,
+  VM_ATTRIB_IC_METHOD_BIND = 3,
+} VMAttribInlineCacheKind;
+
+typedef struct {
+  const uint8_t* site;
+  uint32_t epoch;
+  Class* cls;
+  String* name;
+  Closure* method;
+} VMMethodInlineCacheEntry;
+
+typedef struct {
+  const uint8_t* site;
+  uint32_t epoch;
+  VMAttribInlineCacheKind kind;
+  String* name;
+  Class* receiver_cls;
+  Object* receiver_obj;
+  uint32_t slot_or_index;
+  Closure* method;
+} VMAttribInlineCacheEntry;
+
 //  Virtual Machine. It'll contain the state of the execution, stack,
 // heap, and manage memory allocations.
 struct VM {
@@ -104,6 +137,13 @@ struct VM {
   List* search_paths;
   List* searchers;
 
+  // Import path resolution cache.
+  // Key: from-path (String) or VAR_NULL for default search root.
+  // Value: Map[path(String)] -> resolved(String) or VAR_FALSE (negative cache).
+  Map* import_resolve_cache;
+  uint32_t import_resolve_cache_entries;
+  uint32_t import_resolve_cache_limit;
+
   // Array of all builtin functions.
   Closure* builtins_funcs[BUILTIN_FN_CAPACITY];
   int builtins_count;
@@ -118,6 +158,16 @@ struct VM {
   String* method_cache_name;
   Closure* method_cache_closure;
 
+  // Opcode-site inline cache epoch and storage.
+  uint32_t inline_cache_epoch;
+  VMMethodInlineCacheEntry method_inline_cache[VM_METHOD_INLINE_CACHE_SIZE];
+  VMAttribInlineCacheEntry attrib_inline_cache[VM_ATTRIB_INLINE_CACHE_SIZE];
+
+#ifndef NO_DL
+  // Loaded native libraries cache, keyed by resolved module path.
+  NativeLibCacheEntry* native_dl_cache;
+#endif
+
   // Current fiber.
   Fiber* fiber;
 };
@@ -125,12 +175,12 @@ struct VM {
 // A realloc() function wrapper which handles memory allocations of the VM.
 // - To allocate new memory pass NULL to parameter [memory] and 0 to
 //   parameter [old_size] on failure it'll return NULL.
-// - To free an already allocated memory pass 0 to parameter [old_size]
-//   and it'll returns NULL.
+// - To free an already allocated memory pass 0 to parameter [new_size]
+//   and it returns NULL.
 // - The [old_size] parameter is required to keep track of the VM's
 //    allocations to trigger the garbage collections.
-// If deallocating (free) using vmRealloc the old_size should be 0 as it's not
-// going to track deallocated bytes, instead use garbage collector to do it.
+// Pass an accurate [old_size] whenever possible to keep allocation accounting
+// stable and reduce unnecessary full-GC triggers.
 void* vmRealloc(VM* vm, void* memory, size_t old_size, size_t new_size);
 
 // Create and return a new handle for the [value].
@@ -204,6 +254,9 @@ String* vmFindInternedString(VM* vm, const char* text, uint32_t length,
 
 // Insert a string into the intern table if not already present.
 void vmInternString(VM* vm, String* string);
+
+// Invalidate opcode-site inline caches (e.g. after GC or class method changes).
+void vmInvalidateInlineCaches(VM* vm);
 
 // ((Context switching - start))
 // Prepare a new fiber for execution with the given arguments. That can be used

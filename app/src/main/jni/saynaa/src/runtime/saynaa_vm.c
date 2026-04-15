@@ -11,12 +11,21 @@
 
 #include <math.h>
 
-#define INTERN_TABLE_INITIAL_CAPACITY 1024u
-#define INTERN_TABLE_LOAD_PERCENT 75u
+#define INTERN_POOL_INITIAL_CAPACITY 1024u
+#define INTERN_POOL_LOAD_PERCENT 75u
 
-static void vmResizeInternTable(VM* vm, uint32_t new_capacity) {
+static uint32_t vmStringPoolTargetCapacity(uint32_t live_count) {
+  uint32_t capacity = INTERN_POOL_INITIAL_CAPACITY;
+  while (capacity < UINT32_MAX / 2
+         && live_count * 100 > capacity * INTERN_POOL_LOAD_PERCENT) {
+    capacity *= 2;
+  }
+  return capacity;
+}
+
+static void vmResizeStringPool(VM* vm, uint32_t new_capacity) {
   ASSERT(vm != NULL, OOPS);
-  ASSERT(new_capacity >= INTERN_TABLE_INITIAL_CAPACITY, OOPS);
+  ASSERT(new_capacity >= INTERN_POOL_INITIAL_CAPACITY, OOPS);
 
   String** new_entries = (String**) vm->config.realloc_fn(
       NULL, sizeof(String*) * new_capacity, vm->config.user_data);
@@ -48,12 +57,65 @@ static void vmResizeInternTable(VM* vm, uint32_t new_capacity) {
   vm->interned_strings_count = new_count;
 }
 
+// Rebuild the interned string pool keeping only live strings.
+// The pool does not keep strings alive by itself.
+static void vmSweepStringPool(VM* vm) {
+  ASSERT(vm != NULL, OOPS);
+
+  if (vm->interned_strings == NULL || vm->interned_strings_capacity == 0) {
+    return;
+  }
+
+  uint32_t live_count = 0;
+  bool has_dead = false;
+  for (uint32_t i = 0; i < vm->interned_strings_capacity; i++) {
+    String* str = vm->interned_strings[i];
+    if (str == NULL)
+      continue;
+
+    if (str->_super.is_marked)
+      live_count++;
+    else
+      has_dead = true;
+  }
+
+  // Nothing to reclaim on this cycle.
+  if (!has_dead)
+    return;
+
+  uint32_t new_capacity = vmStringPoolTargetCapacity(live_count);
+  String** new_entries = (String**) vm->config.realloc_fn(
+      NULL, sizeof(String*) * new_capacity, vm->config.user_data);
+  ASSERT(new_entries != NULL, "Out of memory.");
+  memset(new_entries, 0, sizeof(String*) * new_capacity);
+
+  uint32_t mask = new_capacity - 1;
+  for (uint32_t i = 0; i < vm->interned_strings_capacity; i++) {
+    String* str = vm->interned_strings[i];
+    if (str == NULL || !str->_super.is_marked)
+      continue;
+
+    uint32_t index = str->hash & mask;
+    while (new_entries[index] != NULL) {
+      index = (index + 1) & mask;
+    }
+    new_entries[index] = str;
+  }
+
+  vm->config.realloc_fn(vm->interned_strings, 0, vm->config.user_data);
+  vm->interned_strings = new_entries;
+  vm->interned_strings_capacity = new_capacity;
+  vm->interned_strings_count = live_count;
+}
+
 String* vmFindInternedString(VM* vm, const char* text, uint32_t length,
                              uint32_t hash) {
   ASSERT(vm != NULL, OOPS);
   ASSERT(length == 0 || text != NULL, OOPS);
 
   if (vm->interned_strings == NULL || vm->interned_strings_capacity == 0)
+    return NULL;
+  if (vm->interned_strings_count == 0)
     return NULL;
 
   uint32_t mask = vm->interned_strings_capacity - 1;
@@ -79,12 +141,12 @@ void vmInternString(VM* vm, String* string) {
   ASSERT(vm != NULL && string != NULL, OOPS);
 
   if (vm->interned_strings == NULL || vm->interned_strings_capacity == 0) {
-    vmResizeInternTable(vm, INTERN_TABLE_INITIAL_CAPACITY);
+    vmResizeStringPool(vm, INTERN_POOL_INITIAL_CAPACITY);
   }
 
   if ((vm->interned_strings_count + 1) * 100
-      > vm->interned_strings_capacity * INTERN_TABLE_LOAD_PERCENT) {
-    vmResizeInternTable(vm, vm->interned_strings_capacity * 2);
+      > vm->interned_strings_capacity * INTERN_POOL_LOAD_PERCENT) {
+    vmResizeStringPool(vm, vm->interned_strings_capacity * 2);
   }
 
   if (vmFindInternedString(vm, string->data, string->length, string->hash) != NULL)
@@ -107,6 +169,23 @@ typedef struct {
   VarBuffer* modules;
   Module* target_module;
 } WildcardImportRuntimeData;
+
+#define VM_METHOD_INLINE_CACHE_MASK (VM_METHOD_INLINE_CACHE_SIZE - 1u)
+#define VM_ATTRIB_INLINE_CACHE_MASK (VM_ATTRIB_INLINE_CACHE_SIZE - 1u)
+
+static inline VMMethodInlineCacheEntry* vmMethodInlineCacheAt(VM* vm,
+                                                               const uint8_t* site) {
+  uintptr_t key = (uintptr_t) site;
+  return &vm->method_inline_cache[((key >> 2) ^ (key >> 9))
+                                  & VM_METHOD_INLINE_CACHE_MASK];
+}
+
+static inline VMAttribInlineCacheEntry* vmAttribInlineCacheAt(VM* vm,
+                                                               const uint8_t* site) {
+  uintptr_t key = (uintptr_t) site;
+  return &vm->attrib_inline_cache[((key >> 2) ^ (key >> 10))
+                                  & VM_ATTRIB_INLINE_CACHE_MASK];
+}
 
 /*****************************************************************************/
 /* IMPORT HELPERS                                                            */
@@ -239,23 +318,25 @@ Handle* vmNewHandle(VM* vm, Var value) {
 }
 
 void* vmRealloc(VM* vm, void* memory, size_t old_size, size_t new_size) {
-  // Track the total allocated memory of the VM to trigger the GC.
-  // if vmRealloc is called for freeing, the old_size would be 0 since
-  // deallocated bytes are traced by garbage collector.
-  //
-  // If we're running a garbage collection, VM's byte allocated will be
-  // re-calculated at vmCollectGarbage() which is equal to the remaining
-  // objects after clening the garbage. And clearing a garbage will
-  // recursively invoke this function so we shouldn't modify it.
+  // Track heap delta to trigger GC on growth. During sweep we keep accounting
+  // frozen and recalculate bytes_allocated from marked objects.
   if (!vm->collecting_garbage) {
-    vm->bytes_allocated += new_size - old_size;
+    if (new_size >= old_size) {
+      vm->bytes_allocated += new_size - old_size;
+    } else {
+      size_t released = old_size - new_size;
+      vm->bytes_allocated = (released >= vm->bytes_allocated)
+                                ? 0
+                                : vm->bytes_allocated - released;
+    }
   }
 
   // If we're garbage collecting no new allocation is allowed.
   ASSERT(!vm->collecting_garbage || new_size == 0,
          "No new allocation is allowed while garbage collection is running.");
 
-  if (new_size > 0 && vm->bytes_allocated > vm->next_gc) {
+  // Trigger GC only when an operation grows memory.
+  if (new_size > old_size && vm->bytes_allocated > vm->next_gc) {
     ASSERT(vm->collecting_garbage == false, OOPS);
     vm->collecting_garbage = true;
     vmCollectGarbage(vm);
@@ -270,6 +351,18 @@ void vmPushTempRef(VM* vm, Object* obj) {
   ASSERT(vm->temp_reference_count < MAX_TEMP_REFERENCE,
          "Too many temp references");
   vm->temp_reference[vm->temp_reference_count++] = obj;
+}
+
+void vmInvalidateInlineCaches(VM* vm) {
+  ASSERT(vm != NULL, OOPS);
+
+  vm->inline_cache_epoch++;
+  if (vm->inline_cache_epoch == 0) {
+    // Rare wrap-around: fully clear cache metadata.
+    memset(vm->method_inline_cache, 0, sizeof(vm->method_inline_cache));
+    memset(vm->attrib_inline_cache, 0, sizeof(vm->attrib_inline_cache));
+    vm->inline_cache_epoch = 1;
+  }
 }
 
 void vmPopTempRef(VM* vm) {
@@ -301,6 +394,7 @@ void vmCollectGarbage(VM* vm) {
   vm->method_cache_class = NULL;
   vm->method_cache_name = NULL;
   vm->method_cache_closure = NULL;
+  vmInvalidateInlineCaches(vm);
 
   // Mark builtin functions.
   for (int i = 0; i < vm->builtins_count; i++) {
@@ -320,14 +414,7 @@ void vmCollectGarbage(VM* vm) {
   // Mark the modules and search path.
   markObject(vm, &vm->modules->_super);
   markObject(vm, &vm->search_paths->_super);
-
-  // Interned strings are shared by identifier/name heavy paths.
-  for (uint32_t i = 0; i < vm->interned_strings_capacity; i++) {
-    String* string = vm->interned_strings[i];
-    if (string != NULL) {
-      markObject(vm, &string->_super);
-    }
-  }
+  markObject(vm, &vm->import_resolve_cache->_super);
 
   // Mark temp references.
   for (int i = 0; i < vm->temp_reference_count; i++) {
@@ -356,6 +443,9 @@ void vmCollectGarbage(VM* vm) {
   // referenced objects. This will repeat till no more objects left in the
   // working set.
   popMarkedObjects(vm);
+
+  // Interned string pool is weak: keep only strings marked through real roots.
+  vmSweepStringPool(vm);
 
   // Now [vm->bytes_allocated] is equal to the number of bytes allocated for
   // the root objects which are marked above. Since we're garbage collecting
@@ -411,7 +501,7 @@ bool vmPrepareFiber(VM* vm, Fiber* fiber, int argc, Var* argv) {
   ASSERT(fiber->closure->fn->arity >= -1,
          OOPS " (Forget to initialize arity.)");
 
-  // Like lua: Extra arguments are thrown away; extra parameters get null.
+  // Current call semantics: extra arguments are dropped; missing ones become null.
   int nulls = 0;
   if (fiber->closure->fn->arity != -1) {
     if (argc > fiber->closure->fn->arity) {
@@ -586,6 +676,99 @@ Result vmCallFunction(VM* vm, Closure* fn, int argc, Var* argv, Var* ret) {
 
 #ifndef NO_DL
 
+struct NativeLibCacheEntry {
+  NativeLibCacheEntry* prev;
+  NativeLibCacheEntry* next;
+  char* path;
+  void* os_handle;
+  uint32_t refs;
+};
+
+static void* _dlCacheAlloc(VM* vm, size_t size) {
+  return vm->config.realloc_fn(NULL, size, vm->config.user_data);
+}
+
+static void _dlCacheFree(VM* vm, void* ptr) {
+  if (ptr != NULL) {
+    vm->config.realloc_fn(ptr, 0, vm->config.user_data);
+  }
+}
+
+static NativeLibCacheEntry* _dlCacheFind(VM* vm, const char* resolved_path) {
+  for (NativeLibCacheEntry* entry = vm->native_dl_cache; entry != NULL; entry = entry->next) {
+    if (strcmp(entry->path, resolved_path) == 0) {
+      return entry;
+    }
+  }
+  return NULL;
+}
+
+static NativeLibCacheEntry* _dlCacheAcquire(VM* vm, String* resolved) {
+  NativeLibCacheEntry* entry = _dlCacheFind(vm, resolved->data);
+  if (entry != NULL) {
+    entry->refs++;
+    return entry;
+  }
+
+  ASSERT(vm->config.load_dl_fn != NULL, OOPS);
+  void* os_handle = vm->config.load_dl_fn(vm, resolved->data);
+  if (os_handle == NULL)
+    return NULL;
+
+  entry = (NativeLibCacheEntry*) _dlCacheAlloc(vm, sizeof(NativeLibCacheEntry));
+  if (entry == NULL) {
+    if (vm->config.unload_dl_fn)
+      vm->config.unload_dl_fn(vm, os_handle);
+    return NULL;
+  }
+
+  char* path = (char*) _dlCacheAlloc(vm, (size_t) resolved->length + 1);
+  if (path == NULL) {
+    _dlCacheFree(vm, entry);
+    if (vm->config.unload_dl_fn)
+      vm->config.unload_dl_fn(vm, os_handle);
+    return NULL;
+  }
+
+  memcpy(path, resolved->data, (size_t) resolved->length);
+  path[resolved->length] = '\0';
+
+  entry->prev = NULL;
+  entry->next = vm->native_dl_cache;
+  if (entry->next != NULL)
+    entry->next->prev = entry;
+  entry->path = path;
+  entry->os_handle = os_handle;
+  entry->refs = 1;
+  vm->native_dl_cache = entry;
+
+  return entry;
+}
+
+static void _dlCacheRelease(VM* vm, NativeLibCacheEntry* entry) {
+  ASSERT(entry != NULL, OOPS);
+  ASSERT(entry->refs > 0, OOPS);
+
+  entry->refs--;
+  if (entry->refs > 0)
+    return;
+
+  if (entry->prev != NULL) {
+    entry->prev->next = entry->next;
+  } else {
+    vm->native_dl_cache = entry->next;
+  }
+
+  if (entry->next != NULL)
+    entry->next->prev = entry->prev;
+
+  if (vm->config.unload_dl_fn != NULL)
+    vm->config.unload_dl_fn(vm, entry->os_handle);
+
+  _dlCacheFree(vm, entry->path);
+  _dlCacheFree(vm, entry);
+}
+
 // Returns true if the path ends with ".dll" or ".so".
 static bool _isPathDL(String* path) {
   const char* dlext[] = {
@@ -595,8 +778,12 @@ static bool _isPathDL(String* path) {
   };
 
   for (const char** ext = dlext; *ext != NULL; ext++) {
-    const char* start = path->data + (path->length - strlen(*ext));
-    if (!strncmp(start, *ext, strlen(*ext)))
+    size_t ext_len = strlen(*ext);
+    if ((size_t) path->length < ext_len)
+      continue;
+
+    const char* start = path->data + (path->length - ext_len);
+    if (!strncmp(start, *ext, ext_len))
       return true;
   }
 
@@ -609,10 +796,8 @@ static Module* _importDL(VM* vm, String* resolved, String* name) {
     return NULL;
   }
 
-  ASSERT(vm->config.load_dl_fn != NULL, OOPS);
-  void* handle = vm->config.load_dl_fn(vm, resolved->data);
-
-  if (handle == NULL) {
+  NativeLibCacheEntry* lib_entry = _dlCacheAcquire(vm, resolved);
+  if (lib_entry == NULL) {
     VM_SET_ERROR(vm, stringFormat(vm, "Error loading module at \"@\"", resolved));
     return NULL;
   }
@@ -622,15 +807,18 @@ static Module* _importDL(VM* vm, String* resolved, String* name) {
   // because the stack might be reallocated if it grows.
   uintptr_t ret_offset = vm->fiber->ret - vm->fiber->stack;
   vm->fiber->ret = vm->fiber->sp;
-  Handle* lhandle = vm->config.import_dl_fn(vm, handle);
+  Handle* lhandle = vm->config.import_dl_fn(vm, lib_entry->os_handle);
   vm->fiber->ret = vm->fiber->stack + ret_offset;
 
   if (lhandle == NULL) {
+    vmUnloadDlHandle(vm, lib_entry);
     VM_SET_ERROR(vm, stringFormat(vm, "Error loading module at \"@\"", resolved));
     return NULL;
   }
 
   if (!IS_OBJ_TYPE(lhandle->value, OBJ_MODULE)) {
+    releaseHandle(vm, lhandle);
+    vmUnloadDlHandle(vm, lib_entry);
     VM_SET_ERROR(vm, stringFormat(vm,
                                   "Returned handle wasn't a "
                                   "module at \"@\"",
@@ -641,7 +829,7 @@ static Module* _importDL(VM* vm, String* resolved, String* name) {
   Module* module = (Module*) AS_OBJ(lhandle->value);
   module->name = name;
   module->path = resolved;
-  module->handle = handle;
+  module->handle = lib_entry;
   vmRegisterModule(vm, module, resolved);
 
   releaseHandle(vm, lhandle);
@@ -649,8 +837,9 @@ static Module* _importDL(VM* vm, String* resolved, String* name) {
 }
 
 void vmUnloadDlHandle(VM* vm, void* handle) {
-  if (handle && vm->config.unload_dl_fn)
-    vm->config.unload_dl_fn(vm, handle);
+  if (handle == NULL)
+    return;
+  _dlCacheRelease(vm, (NativeLibCacheEntry*) handle);
 }
 #endif // NO_DL
 
@@ -799,38 +988,112 @@ static Module* _importResolved(VM* vm, String* resolved, String* name) {
   return module;
 }
 
-static Var _importPathSearch(VM* vm, String* path) {
-  char* _resolved = NULL;
-  const char* from_path = NULL;
-  uint32_t search_path_idx = 0;
-
-  do {
-    // If we reached here. It's not a native module (ie. module's absolute
-    // path is required to import and cache).
-    _resolved = vm->config.resolve_path_fn(vm, from_path, path->data);
-    if (_resolved)
-      break;
-
-    if (search_path_idx >= vm->search_paths->elements.count)
-      break;
-
-    Var sp = vm->search_paths->elements.data[search_path_idx++];
-    ASSERT(IS_OBJ_TYPE(sp, OBJ_STRING), OOPS);
-    from_path = ((String*) AS_OBJ(sp))->data;
-
-  } while (true);
-
-  if (_resolved == NULL) {
-    return VAR_NULL;
+static Map* _getImportResolveBucket(VM* vm, Var from_key, bool create) {
+  Var bucket_var = mapGet(vm->import_resolve_cache, from_key);
+  if (!IS_UNDEF(bucket_var)) {
+    ASSERT(IS_OBJ_TYPE(bucket_var, OBJ_MAP), OOPS);
+    return (Map*) AS_OBJ(bucket_var);
   }
 
-  String* resolved = newString(vm, _resolved);
-  Realloc(vm, _resolved, 0);
+  if (!create)
+    return NULL;
 
-  Module* module = _importResolved(vm, resolved, path);
-  if (module == NULL)
-    return VAR_NULL;
-  return VAR_OBJ(module);
+  Map* bucket = newMap(vm);
+  vmPushTempRef(vm, &bucket->_super); // bucket.
+  mapSet(vm, vm->import_resolve_cache, from_key, VAR_OBJ(bucket));
+  vmPopTempRef(vm); // bucket.
+  return bucket;
+}
+
+static bool _resolvePathCacheGet(VM* vm, Var from_key, String* path,
+                                 String** resolved) {
+  Map* bucket = _getImportResolveBucket(vm, from_key, false);
+  if (bucket == NULL)
+    return false;
+
+  Var cached = mapGet(bucket, VAR_OBJ(path));
+  if (IS_UNDEF(cached))
+    return false;
+
+  if (IS_FALSE(cached)) {
+    *resolved = NULL;
+    return true;
+  }
+
+  ASSERT(IS_OBJ_TYPE(cached, OBJ_STRING), OOPS);
+  *resolved = AS_STRING(cached);
+  return true;
+}
+
+static void _resolvePathCacheSet(VM* vm, Var from_key, String* path,
+                                 String* resolved) {
+  if (vm->import_resolve_cache_entries >= vm->import_resolve_cache_limit) {
+    ClearImportResolveCache(vm);
+  }
+
+  Map* bucket = _getImportResolveBucket(vm, from_key, true);
+  ASSERT(bucket != NULL, OOPS);
+
+  Var existing = mapGet(bucket, VAR_OBJ(path));
+  bool is_new = IS_UNDEF(existing);
+
+  if (resolved != NULL)
+    mapSet(vm, bucket, VAR_OBJ(path), VAR_OBJ(resolved));
+  else
+    mapSet(vm, bucket, VAR_OBJ(path), VAR_FALSE);
+
+  if (is_new)
+    vm->import_resolve_cache_entries++;
+}
+
+static String* _resolvePathWithCache(VM* vm, Var from_key, const char* from_path,
+                                     String* path) {
+  String* resolved = NULL;
+  if (_resolvePathCacheGet(vm, from_key, path, &resolved)) {
+    return resolved;
+  }
+
+  char* raw = vm->config.resolve_path_fn(vm, from_path, path->data);
+  if (raw == NULL) {
+    _resolvePathCacheSet(vm, from_key, path, NULL);
+    return NULL;
+  }
+
+  resolved = newString(vm, raw);
+  Realloc(vm, raw, 0);
+
+  vmPushTempRef(vm, &resolved->_super); // resolved.
+  _resolvePathCacheSet(vm, from_key, path, resolved);
+  vmPopTempRef(vm); // resolved.
+
+  return resolved;
+}
+
+static Var _importPathSearch(VM* vm, String* path) {
+  // Try resolver from default root first, then each configured search path.
+  const uint32_t candidates = (uint32_t) vm->search_paths->elements.count + 1;
+  for (uint32_t idx = 0; idx < candidates; idx++) {
+    Var from_key = VAR_NULL;
+    const char* from_path = NULL;
+
+    if (idx > 0) {
+      Var sp = vm->search_paths->elements.data[idx - 1];
+      ASSERT(IS_OBJ_TYPE(sp, OBJ_STRING), OOPS);
+      from_key = sp;
+      from_path = AS_STRING(sp)->data;
+    }
+
+    String* resolved = _resolvePathWithCache(vm, from_key, from_path, path);
+    if (resolved == NULL)
+      continue;
+
+    Module* module = _importResolved(vm, resolved, path);
+    if (module == NULL)
+      return VAR_NULL;
+    return VAR_OBJ(module);
+  }
+
+  return VAR_NULL;
 }
 
 void vmStandardSearcher(VM* vm) {
@@ -871,15 +1134,20 @@ Var vmImportModule(VM* vm, String* from, String* path) {
     }
   } else {
     // Relative Import Logic
+    if (vm->config.resolve_path_fn == NULL) {
+      VM_SET_ERROR(vm,
+                   newString(vm, "Cannot import. The hosting application "
+                                 "haven't registered the module loading API"));
+      return VAR_NULL;
+    }
+
     const char* from_path = (from) ? from->data : NULL;
-    char* _resolved = vm->config.resolve_path_fn(vm, from_path, path->data);
-    if (_resolved == NULL) {
-      Realloc(vm, _resolved, 0);
+    Var from_key = (from != NULL) ? VAR_OBJ(from) : VAR_NULL;
+    String* resolved = _resolvePathWithCache(vm, from_key, from_path, path);
+    if (resolved == NULL) {
       VM_SET_ERROR(vm, stringFormat(vm, "Cannot import module '@'", path));
       return VAR_NULL;
     }
-    String* resolved = newString(vm, _resolved);
-    Realloc(vm, _resolved, 0);
 
     // We use _importResolved which handles cache check for resolved path
     Module* mod = _importResolved(vm, resolved, path);
@@ -903,6 +1171,21 @@ Var vmImportModule(VM* vm, String* from, String* path) {
     } // TODO: Handle MethodBind/Class? For now assume closure (native or script).
 
     if (closure) {
+      // Fast path for the default searcher to avoid fiber setup overhead.
+      if (closure->fn->is_native && closure->fn->native == vmStandardSearcher) {
+        bool needs_pop = false;
+        String* search_path = importNameToPath(vm, path, &needs_pop);
+        Var result = _importPathSearch(vm, search_path);
+        if (needs_pop)
+          vmPopTempRef(vm);
+
+        if (!IS_NULL(result)) {
+          return result;
+        }
+
+        continue;
+      }
+
       Var args[1] = {VAR_OBJ(path)};
       Var result;
       // Call searcher(path)
@@ -1791,13 +2074,38 @@ L_vm_main_loop:
       goto L_do_call;
 
       OPCODE(METHOD_CALL) : {
+        const uint8_t* call_site = ip - 1;
         argc = READ_BYTE();
         fiber->ret = (fiber->sp - argc - 1);
         fiber->thiz = *fiber->ret; //< This for the next call.
 
         index = READ_SHORT();
         name = moduleGetStringAt(module, (int) index);
-        callable = getMethod(vm, fiber->thiz, name, NULL);
+
+        Class* recv_cls = getClass(vm, fiber->thiz);
+        VMMethodInlineCacheEntry* mic = vmMethodInlineCacheAt(vm, call_site);
+        if (mic->site == call_site
+            && mic->epoch == vm->inline_cache_epoch
+            && mic->cls == recv_cls
+            && mic->name == name
+            && mic->method != NULL) {
+          callable = VAR_OBJ(mic->method);
+          goto L_do_call;
+        }
+
+        Closure* resolved_method = NULL;
+        if (hasMethod(vm, fiber->thiz, name, &resolved_method)) {
+          callable = VAR_OBJ(resolved_method);
+
+          mic->site = call_site;
+          mic->epoch = vm->inline_cache_epoch;
+          mic->cls = recv_cls;
+          mic->name = name;
+          mic->method = resolved_method;
+          goto L_do_call;
+        }
+
+        callable = varGetAttrib(vm, fiber->thiz, name, false, true);
         CHECK_ERROR();
         goto L_do_call;
       }
@@ -1920,7 +2228,7 @@ L_vm_main_loop:
       // If we reached here it's a valid callable.
       ASSERT(closure != NULL, OOPS);
 
-      // Like lua: Extra arguments are thrown away; extra parameters get null.
+      // Current call semantics: extra arguments are dropped; missing ones become null.
       if (closure->fn->arity != -1) {
         if (argc > closure->fn->arity) { // adjust stack
           fiber->sp -= argc - closure->fn->arity;
@@ -2133,23 +2441,179 @@ L_vm_main_loop:
     }
 
     OPCODE(GET_ATTRIB) : {
+      const uint8_t* attrib_site = ip - 1;
       Var on = PEEK(-1); // Don't pop yet, we need the reference for gc.
       String* name = moduleGetStringAt(module, READ_SHORT());
       ASSERT(name != NULL, OOPS);
-      Var value = varGetAttrib(vm, on, name, false, false);
+
+      VMAttribInlineCacheEntry* aic = vmAttribInlineCacheAt(vm, attrib_site);
+      Var value = VAR_UNDEFINED;
+      bool cache_hit = false;
+
+      if (aic->site == attrib_site
+          && aic->epoch == vm->inline_cache_epoch
+          && aic->name == name) {
+        switch (aic->kind) {
+          case VM_ATTRIB_IC_INST_INLINE:
+            if (IS_OBJ_TYPE(on, OBJ_INST)) {
+              Instance* inst = (Instance*) AS_OBJ(on);
+              uint32_t slot = aic->slot_or_index;
+              if (inst->cls == aic->receiver_cls
+                  && slot < inst->inline_attrib_count) {
+                String* slot_name = inst->inline_attrib_names[slot];
+                if (slot_name == name) {
+                  value = inst->inline_attrib_values[slot];
+                  cache_hit = true;
+                }
+              }
+            }
+            break;
+
+          case VM_ATTRIB_IC_METHOD_BIND:
+            if (aic->method != NULL
+                && getClass(vm, on) == aic->receiver_cls
+                && (aic->receiver_obj == NULL
+                    || (IS_OBJ(on) && AS_OBJ(on) == aic->receiver_obj))) {
+              MethodBind* mb = newMethodBind(vm, aic->method);
+              mb->instance = on;
+              value = VAR_OBJ(mb);
+              cache_hit = true;
+            }
+            break;
+
+          case VM_ATTRIB_IC_NONE:
+          default:
+            break;
+        }
+      }
+
+      if (!cache_hit) {
+        value = varGetAttrib(vm, on, name, false, false);
+        CHECK_ERROR();
+
+        aic->site = attrib_site;
+        aic->epoch = vm->inline_cache_epoch;
+        aic->kind = VM_ATTRIB_IC_NONE;
+        aic->name = name;
+        aic->receiver_cls = NULL;
+        aic->receiver_obj = NULL;
+        aic->slot_or_index = 0;
+        aic->method = NULL;
+
+        if (IS_OBJ_TYPE(on, OBJ_INST)) {
+          Instance* inst = (Instance*) AS_OBJ(on);
+          for (uint8_t i = 0; i < inst->inline_attrib_count; i++) {
+            String* slot_name = inst->inline_attrib_names[i];
+            if (slot_name == name) {
+              aic->kind = VM_ATTRIB_IC_INST_INLINE;
+              aic->receiver_cls = inst->cls;
+              aic->slot_or_index = i;
+              break;
+            }
+          }
+        }
+
+        if (IS_OBJ_TYPE(value, OBJ_METHOD_BIND)) {
+          MethodBind* mb = (MethodBind*) AS_OBJ(value);
+          if (mb->method != NULL && !IS_OBJ_TYPE(on, OBJ_CLASS)) {
+            aic->kind = VM_ATTRIB_IC_METHOD_BIND;
+            aic->receiver_cls = getClass(vm, on);
+            aic->receiver_obj = NULL;
+            aic->method = mb->method;
+          }
+        }
+      }
+
       DROP(); // on
       PUSH(value);
-
-      CHECK_ERROR();
       DISPATCH();
     }
 
     OPCODE(GET_ATTRIB_KEEP) : {
+      const uint8_t* attrib_site = ip - 1;
       Var on = PEEK(-1);
       String* name = moduleGetStringAt(module, READ_SHORT());
       ASSERT(name != NULL, OOPS);
-      PUSH(varGetAttrib(vm, on, name, false, false));
-      CHECK_ERROR();
+
+      VMAttribInlineCacheEntry* aic = vmAttribInlineCacheAt(vm, attrib_site);
+      Var value = VAR_UNDEFINED;
+      bool cache_hit = false;
+
+      if (aic->site == attrib_site
+          && aic->epoch == vm->inline_cache_epoch
+          && aic->name == name) {
+        switch (aic->kind) {
+          case VM_ATTRIB_IC_INST_INLINE:
+            if (IS_OBJ_TYPE(on, OBJ_INST)) {
+              Instance* inst = (Instance*) AS_OBJ(on);
+              uint32_t slot = aic->slot_or_index;
+              if (inst->cls == aic->receiver_cls
+                  && slot < inst->inline_attrib_count) {
+                String* slot_name = inst->inline_attrib_names[slot];
+                if (slot_name == name) {
+                  value = inst->inline_attrib_values[slot];
+                  cache_hit = true;
+                }
+              }
+            }
+            break;
+
+          case VM_ATTRIB_IC_METHOD_BIND:
+            if (aic->method != NULL
+                && getClass(vm, on) == aic->receiver_cls
+                && (aic->receiver_obj == NULL
+                    || (IS_OBJ(on) && AS_OBJ(on) == aic->receiver_obj))) {
+              MethodBind* mb = newMethodBind(vm, aic->method);
+              mb->instance = on;
+              value = VAR_OBJ(mb);
+              cache_hit = true;
+            }
+            break;
+
+          case VM_ATTRIB_IC_NONE:
+          default:
+            break;
+        }
+      }
+
+      if (!cache_hit) {
+        value = varGetAttrib(vm, on, name, false, false);
+        CHECK_ERROR();
+
+        aic->site = attrib_site;
+        aic->epoch = vm->inline_cache_epoch;
+        aic->kind = VM_ATTRIB_IC_NONE;
+        aic->name = name;
+        aic->receiver_cls = NULL;
+        aic->receiver_obj = NULL;
+        aic->slot_or_index = 0;
+        aic->method = NULL;
+
+        if (IS_OBJ_TYPE(on, OBJ_INST)) {
+          Instance* inst = (Instance*) AS_OBJ(on);
+          for (uint8_t i = 0; i < inst->inline_attrib_count; i++) {
+            String* slot_name = inst->inline_attrib_names[i];
+            if (slot_name == name) {
+              aic->kind = VM_ATTRIB_IC_INST_INLINE;
+              aic->receiver_cls = inst->cls;
+              aic->slot_or_index = i;
+              break;
+            }
+          }
+        }
+
+        if (IS_OBJ_TYPE(value, OBJ_METHOD_BIND)) {
+          MethodBind* mb = (MethodBind*) AS_OBJ(value);
+          if (mb->method != NULL && !IS_OBJ_TYPE(on, OBJ_CLASS)) {
+            aic->kind = VM_ATTRIB_IC_METHOD_BIND;
+            aic->receiver_cls = getClass(vm, on);
+            aic->receiver_obj = NULL;
+            aic->method = mb->method;
+          }
+        }
+      }
+
+      PUSH(value);
       DISPATCH();
     }
 

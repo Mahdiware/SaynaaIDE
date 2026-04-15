@@ -22,6 +22,10 @@
 // but take more memory.
 #define MAP_LOAD_PERCENT 75
 
+// Keep medium-size map allocations across clear() to reduce allocator churn
+// in hot paths (e.g. module global index rebuilds).
+#define MAP_CLEAR_RETAIN_CAPACITY 1024
+
 // The factor a collection would grow by when it's exceeds the current
 // capacity. The new capacity will be calculated by multiplying it's old
 // capacity by the GROW_FACTOR.
@@ -313,8 +317,17 @@ static void popMarkedObjectsInternal(Object* obj, VM* vm) {
     case OBJ_INST:
       {
         Instance* inst = (Instance*) obj;
-        markObject(vm, &inst->attribs->_super);
         markObject(vm, &inst->cls->_super);
+
+        for (uint8_t i = 0; i < inst->inline_attrib_count; i++) {
+          if (inst->inline_attrib_names[i] != NULL)
+            markObject(vm, &inst->inline_attrib_names[i]->_super);
+          markValue(vm, inst->inline_attrib_values[i]);
+        }
+
+        if (inst->attribs != NULL)
+          markObject(vm, &inst->attribs->_super);
+
         vm->bytes_allocated += sizeof(Instance);
       }
       break;
@@ -449,6 +462,8 @@ Module* newModule(VM* vm) {
 
   module->global_indices = newMap(vm);
   module->global_indices_dirty = true;
+  module->global_lookup_name_cache = NULL;
+  module->global_lookup_index_cache = -1;
 
   vmPopTempRef(vm); // module.
 
@@ -731,7 +746,8 @@ Instance* newInstance(VM* vm, Class* cls) {
     cls = cls->super_class;
   }
 
-  inst->attribs = newMap(vm);
+  inst->inline_attrib_count = 0;
+  inst->attribs = NULL;
 
   vmPopTempRef(vm); // inst.
   return inst;
@@ -1118,6 +1134,10 @@ String* replaceSubstring(VM* vm, uint32_t index, String* str, String* replace) {
 }
 
 void listInsert(VM* vm, List* thiz, uint32_t index, Var value) {
+  ASSERT(index <= thiz->elements.count, OOPS);
+
+  uint32_t old_count = thiz->elements.count;
+
   // Add an empty slot at the end of the buffer.
   if (IS_OBJ(value))
     vmPushTempRef(vm, AS_OBJ(value));
@@ -1126,8 +1146,9 @@ void listInsert(VM* vm, List* thiz, uint32_t index, Var value) {
     vmPopTempRef(vm);
 
   // Shift the existing elements down.
-  for (uint32_t i = thiz->elements.count - 1; i > index; i--) {
-    thiz->elements.data[i] = thiz->elements.data[i - 1];
+  if (index < old_count) {
+    memmove(&thiz->elements.data[index + 1], &thiz->elements.data[index],
+            (old_count - index) * sizeof(Var));
   }
 
   // Insert the new element.
@@ -1135,12 +1156,21 @@ void listInsert(VM* vm, List* thiz, uint32_t index, Var value) {
 }
 
 void listShrink(VM* vm, List* thiz) {
-  if (thiz->elements.capacity / GROW_FACTOR >= thiz->elements.count) {
-    thiz->elements.data = (Var*) vmRealloc(
-        vm, thiz->elements.data, sizeof(Var) * thiz->elements.capacity,
-        sizeof(Var) * thiz->elements.capacity / GROW_FACTOR);
-    thiz->elements.capacity /= GROW_FACTOR;
-  }
+  if (thiz->elements.capacity <= MIN_CAPACITY)
+    return;
+
+  // Shrink when list is <= 1/4 full to avoid growth/shrink thrashing.
+  if (thiz->elements.count * (GROW_FACTOR * GROW_FACTOR) > thiz->elements.capacity)
+    return;
+
+  uint32_t new_capacity = thiz->elements.capacity / GROW_FACTOR;
+  if (new_capacity < MIN_CAPACITY)
+    new_capacity = MIN_CAPACITY;
+
+  thiz->elements.data = (Var*) vmRealloc(vm, thiz->elements.data,
+                                         sizeof(Var) * thiz->elements.capacity,
+                                         sizeof(Var) * new_capacity);
+  thiz->elements.capacity = new_capacity;
 }
 
 Var listRemoveAt(VM* vm, List* thiz, uint32_t index) {
@@ -1151,16 +1181,18 @@ Var listRemoveAt(VM* vm, List* thiz, uint32_t index) {
     vmPushTempRef(vm, AS_OBJ(removed));
 
   // Shift the rest of the elements up.
-  for (uint32_t i = index; i < thiz->elements.count - 1; i++) {
-    thiz->elements.data[i] = thiz->elements.data[i + 1];
+  uint32_t last = thiz->elements.count - 1;
+  if (index < last) {
+    memmove(&thiz->elements.data[index], &thiz->elements.data[index + 1],
+            (last - index) * sizeof(Var));
   }
 
+  thiz->elements.count--;
   listShrink(vm, thiz);
 
   if (IS_OBJ(removed))
     vmPopTempRef(vm);
 
-  thiz->elements.count--;
   return removed;
 }
 
@@ -1250,9 +1282,12 @@ static bool _mapFindEntry(Map* thiz, Var key, MapEntry** result) {
   if (thiz->capacity == 0)
     return false;
 
+  ASSERT((thiz->capacity & (thiz->capacity - 1)) == 0, OOPS);
+
   // The [start_index] is where the entry supposed to be if there wasn't any
   // collision occurred. It'll be the start index for the linear probing.
-  uint32_t start_index = varHashValue(key) % thiz->capacity;
+  uint32_t mask = thiz->capacity - 1;
+  uint32_t start_index = varHashValue(key) & mask;
   uint32_t index = start_index;
 
   // Keep track of the first tombstone after the [start_index] if we don't
@@ -1287,12 +1322,63 @@ static bool _mapFindEntry(Map* thiz, Var key, MapEntry** result) {
       return true;
     }
 
-    index = (index + 1) % thiz->capacity;
+    index = (index + 1) & mask;
 
   } while (index != start_index);
 
   // If we reach here means the map is filled with tombstone. Set the first
   // tombstone as result for the next insertion and return false.
+  ASSERT(tombstone != NULL, OOPS);
+  *result = tombstone;
+  return false;
+}
+
+// String-key specialization for hot-path attribute/name lookups.
+static bool _mapFindStringEntry(Map* thiz, String* key, MapEntry** result) {
+  if (thiz->capacity == 0)
+    return false;
+
+  ASSERT((thiz->capacity & (thiz->capacity - 1)) == 0, OOPS);
+
+  uint32_t mask = thiz->capacity - 1;
+  uint32_t start_index = key->hash & mask;
+  uint32_t index = start_index;
+  MapEntry* tombstone = NULL;
+
+  do {
+    MapEntry* entry = &thiz->entries[index];
+
+    if (IS_UNDEF(entry->key)) {
+      ASSERT(IS_BOOL(entry->value), OOPS);
+
+      if (IS_TRUE(entry->value)) {
+        if (tombstone == NULL)
+          tombstone = entry;
+
+      } else {
+        *result = (tombstone != NULL) ? tombstone : entry;
+        return false;
+      }
+
+    } else if (IS_OBJ_TYPE(entry->key, OBJ_STRING)) {
+      String* entry_key = (String*) AS_OBJ(entry->key);
+      if (entry_key == key
+          || (entry_key->hash == key->hash
+              && entry_key->length == key->length
+              && memcmp(entry_key->data, key->data, key->length) == 0)) {
+        *result = entry;
+        return true;
+      }
+
+    } else if (isValuesEqual(entry->key, VAR_OBJ(key))) {
+      *result = entry;
+      return true;
+    }
+
+    index = (index + 1) & mask;
+
+  } while (index != start_index);
+
   ASSERT(tombstone != NULL, OOPS);
   *result = tombstone;
   return false;
@@ -1335,6 +1421,12 @@ static bool _mapInsertEntry(Map* thiz, Var key, Var value) {
 
 // Resize the map's size to the given [capacity].
 static void _mapResize(VM* vm, Map* thiz, uint32_t capacity) {
+  if ((capacity & (capacity - 1)) != 0)
+    capacity = (uint32_t) utilPowerOf2Ceil((int) capacity);
+
+  if (capacity < MIN_CAPACITY)
+    capacity = MIN_CAPACITY;
+
   MapEntry* old_entries = thiz->entries;
   uint32_t old_capacity = thiz->capacity;
 
@@ -1358,13 +1450,38 @@ static void _mapResize(VM* vm, Map* thiz, uint32_t capacity) {
 }
 
 Var mapGet(Map* thiz, Var key) {
+  if (IS_OBJ_TYPE(key, OBJ_STRING)) {
+    return mapGetStringKey(thiz, (String*) AS_OBJ(key));
+  }
+
+  if (thiz->capacity == 0)
+    return VAR_UNDEFINED;
+
   MapEntry* entry;
   if (_mapFindEntry(thiz, key, &entry))
     return entry->value;
   return VAR_UNDEFINED;
 }
 
+Var mapGetStringKey(Map* thiz, String* key) {
+  ASSERT(key != NULL, OOPS);
+
+  if (thiz->capacity == 0)
+    return VAR_UNDEFINED;
+
+  MapEntry* entry;
+  if (_mapFindStringEntry(thiz, key, &entry))
+    return entry->value;
+
+  return VAR_UNDEFINED;
+}
+
 void mapSet(VM* vm, Map* thiz, Var key, Var value) {
+  if (IS_OBJ_TYPE(key, OBJ_STRING)) {
+    mapSetStringKey(vm, thiz, (String*) AS_OBJ(key), value);
+    return;
+  }
+
   // If map is about to fill, resize it first.
   if (thiz->count + 1 > thiz->capacity * MAP_LOAD_PERCENT / 100) {
     uint32_t capacity = thiz->capacity * GROW_FACTOR;
@@ -1384,12 +1501,48 @@ void mapSet(VM* vm, Map* thiz, Var key, Var value) {
   }
 }
 
+void mapSetStringKey(VM* vm, Map* thiz, String* key, Var value) {
+  ASSERT(key != NULL, OOPS);
+
+  if (thiz->count + 1 > thiz->capacity * MAP_LOAD_PERCENT / 100) {
+    uint32_t capacity = thiz->capacity * GROW_FACTOR;
+    if (capacity < MIN_CAPACITY)
+      capacity = MIN_CAPACITY;
+    _mapResize(vm, thiz, capacity);
+  }
+
+  MapEntry* entry;
+  if (_mapFindStringEntry(thiz, key, &entry)) {
+    entry->value = value;
+    return;
+  }
+
+  entry->key = VAR_OBJ(key);
+  entry->value = value;
+  thiz->count++;
+  VarBufferWrite(&thiz->order_keys, vm, VAR_OBJ(key));
+}
+
 void mapClear(VM* vm, Map* thiz) {
-  DEALLOCATE_ARRAY(vm, thiz->entries, MapEntry, thiz->capacity);
-  thiz->entries = NULL;
-  thiz->capacity = 0;
+  if (thiz->capacity > MAP_CLEAR_RETAIN_CAPACITY) {
+    DEALLOCATE_ARRAY(vm, thiz->entries, MapEntry, thiz->capacity);
+    thiz->entries = NULL;
+    thiz->capacity = 0;
+  } else {
+    for (uint32_t i = 0; i < thiz->capacity; i++) {
+      thiz->entries[i].key = VAR_UNDEFINED;
+      thiz->entries[i].value = VAR_FALSE;
+    }
+  }
+
   thiz->count = 0;
-  VarBufferClear(&thiz->order_keys, vm);
+
+  if (thiz->order_keys.capacity > MAP_CLEAR_RETAIN_CAPACITY) {
+    VarBufferClear(&thiz->order_keys, vm);
+  } else {
+    thiz->order_keys.count = 0;
+  }
+
   thiz->next_index = 0;
 }
 
@@ -1635,15 +1788,25 @@ static void _moduleRebuildGlobalIndices(VM* vm, Module* module) {
     uint32_t name_index = module->global_names.data[i];
     String* g_name = moduleGetStringAt(module, (int) name_index);
     if (g_name != NULL) {
-      mapSet(vm, module->global_indices, VAR_OBJ(g_name), VAR_INT((int32_t) i));
+      mapSetStringKey(vm, module->global_indices, g_name, VAR_INT((int32_t) i));
     }
   }
 
   module->global_indices_dirty = false;
+  module->global_lookup_name_cache = NULL;
+  module->global_lookup_index_cache = -1;
 }
 
 int moduleGetGlobalIndexByName(VM* vm, Module* module, String* name) {
   ASSERT(vm != NULL && module != NULL && name != NULL, OOPS);
+
+  if (!module->global_indices_dirty
+      && module->global_lookup_name_cache == name) {
+    int32_t g_index = module->global_lookup_index_cache;
+    if (g_index >= 0 && (uint32_t) g_index < module->globals.count) {
+      return g_index;
+    }
+  }
 
   if (module->global_indices == NULL) {
     module->global_indices = newMap(vm);
@@ -1654,13 +1817,18 @@ int moduleGetGlobalIndexByName(VM* vm, Module* module, String* name) {
     _moduleRebuildGlobalIndices(vm, module);
   }
 
-  Var index = mapGet(module->global_indices, VAR_OBJ(name));
+  Var index = mapGetStringKey(module->global_indices, name);
   if (IS_INT(index)) {
     int32_t g_index = AS_INT(index);
     if (g_index >= 0 && (uint32_t) g_index < module->globals.count) {
+      module->global_lookup_name_cache = name;
+      module->global_lookup_index_cache = g_index;
       return g_index;
     }
   }
+
+  module->global_lookup_name_cache = name;
+  module->global_lookup_index_cache = -1;
 
   return -1;
 }
@@ -1677,6 +1845,9 @@ uint32_t moduleSetGlobal(VM* vm, Module* module, const char* name, uint32_t leng
   if (g_index != -1) {
     ASSERT(g_index < (int) module->globals.count, OOPS);
     module->globals.data[g_index] = value;
+    module->global_lookup_name_cache = moduleGetStringAt(module,
+                                                          (int) module->global_names.data[g_index]);
+    module->global_lookup_index_cache = g_index;
     if (IS_OBJ(value))
       vmPopTempRef(vm);
     return g_index;
@@ -1689,6 +1860,8 @@ uint32_t moduleSetGlobal(VM* vm, Module* module, const char* name, uint32_t leng
   UintBufferWrite(&module->global_names, vm, name_index);
   VarBufferWrite(&module->globals, vm, value);
   module->global_indices_dirty = true;
+  module->global_lookup_name_cache = NULL;
+  module->global_lookup_index_cache = -1;
 
   if (IS_OBJ(value))
     vmPopTempRef(vm);
@@ -1731,6 +1904,8 @@ bool moduleDeleteGlobal(VM* vm, Module* module, const char* name, uint32_t lengt
     module->global_names.count--;
 
   module->global_indices_dirty = true;
+  module->global_lookup_name_cache = NULL;
+  module->global_lookup_index_cache = -1;
 
   return true;
 }

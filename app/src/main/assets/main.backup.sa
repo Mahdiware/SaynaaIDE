@@ -1,0 +1,196 @@
+import "android.widget.*"
+import "android.view.*"
+import "android.text.*"
+import "android.os.*"
+import "com.android.saynaa.*"
+
+function toast(msg)
+	Toast.makeText(activity, msg, Toast.LENGTH_SHORT).show()
+end
+
+loadDex("hello.dex")
+import "com.saynaa.dextest.Hello"
+
+msg = Hello.hello()
+toast(msg)
+
+
+DemoLayout = {
+  LinearLayout,
+  orientation: 'vertical',
+  padding: '16dp',
+  backgroundColor: '#EEF0F4',
+  layout_width: 'match_parent',
+  layout_height: 'match_parent',
+
+  # HEADER CARD
+  {
+    LinearLayout,
+    orientation: 'vertical',
+    padding: '18dp',
+    backgroundColor: '#FFFFFF',
+    layout_width: 'match_parent',
+    layout_height: 'wrap_content',
+    layout_marginBottom: '16dp',
+    elevation: '4dp',
+
+    {
+      TextView,
+      id: 'Title',
+      text: 'Saynaa Demo UI',
+      textSize: '24sp',
+      textStyle: 'bold',
+      textColor: '#111111',
+      layout_marginBottom: '6dp'
+    },
+
+    {
+      TextView,
+      id: 'Description',
+      text: 'Modern IDE-style layout demo for Saynaa DSL',
+      textSize: '14sp',
+      textColor: '#666666'
+    }
+  },
+
+  # INPUT CARD
+  {
+    LinearLayout,
+    orientation: 'vertical',
+    padding: '16dp',
+    backgroundColor: '#FFFFFF',
+    layout_width: 'match_parent',
+    layout_height: 'wrap_content',
+    layout_marginBottom: '16dp',
+    elevation: '3dp',
+
+    {
+      EditText,
+      id: 'NameInput',
+      hint: 'Enter your name',
+      layout_width: 'match_parent',
+      layout_height: 'wrap_content',
+      backgroundColor: '#F3F3F3',
+      padding: '12dp',
+      layout_marginBottom: '12dp'
+    },
+
+    {
+      Switch,
+      id: 'EnableSwitch',
+      text: 'Enable notifications',
+      layout_marginBottom: '12dp'
+    },
+
+    {
+      CodeEditor,
+      id: 'Editor',
+      layout_width: 'match_parent',
+      layout_height: '200dp',
+      layout_marginBottom: '12dp'
+    }
+  },
+
+  # BUTTON ROW
+  {
+    LinearLayout,
+    orientation: 'horizontal',
+    layout_width: 'match_parent',
+    layout_height: 'wrap_content',
+    layout_weight: 2,
+
+    {
+      Button,
+      id: 'SubmitButton',
+      text: 'Run',
+      layout_width: '0dp',
+      layout_weight: 1,
+      layout_marginEnd: '8dp',
+      backgroundColor: '#6200EE',
+      textColor: '#FFFFFF',
+      padding: '12dp',
+
+      onClick: function(v)
+        name = NameInput.getText()
+        enabled = EnableSwitch.isChecked()
+
+        Title.setText('Hello ' + name)
+
+        Description.setText(
+          enabled and 'Notifications enabled' or 'Notifications disabled'
+        )
+      end
+    },
+
+    {
+      Button,
+      id: 'nextpage',
+      text: 'Next Page',
+      layout_width: '0dp',
+      layout_weight: 1,
+      layout_marginStart: '8dp',
+      backgroundColor: '#03DAC5',
+      textColor: '#000000',
+      padding: '12dp'
+    }
+  }, 
+  {
+    # testing
+    LinearLayout,
+    orientation: 'vertical',
+    layout_width: 'match_parent',
+    layout_height: 'wrap_content',
+    {
+      SeekBar,
+      id: 'Seekbar',
+      layout_width: 'match_parent',
+      layout_height: 'wrap_content'
+    }
+  }
+}
+
+assert(activity != null, 'activity is null')
+
+root = loadlayout.loadlayout(_module, DemoLayout)
+assert(root != null, 'loadlayout returned null')
+
+function runfunc_test(arg1, arg2, arg3, arg4)
+	return arg1 + arg2 + arg3 + arg4
+end
+
+# fix it, this bug
+assert(activity.runFunc("runfunc_test", 1, 2, 3, 40) == 46, "activity.runFunc return mismatch")
+
+function onCreate(arg1)
+  activity.setContentView(root)
+end
+
+assert(Title != null, 'Title view missing')
+assert(Description != null, 'Description view missing')
+assert(NameInput != null, 'NameInput view missing')
+assert(EnableSwitch != null, 'EnableSwitch view missing')
+assert(SubmitButton != null, 'SubmitButton view missing')
+assert(nextpage != null, 'nextpage view missing')
+assert(Editor != null, 'Editor view missing')
+
+Editor.setText('print("Hello from CodeEditor")\n')
+
+nextpage.setOnClickListener(View.OnClickListener({
+  onClick: function(v)
+    print('next page button clicked')
+    activity.newActivity('main1')
+  end
+}))
+
+Seekbar.setOnSeekBarChangeListener({
+  onProgressChanged: function(seekBar, progress, fromUser)
+    # why progress is null
+    Description.setText("SeekBar progress: " + tostring(progress))
+  end,
+  onStartTrackingTouch: function(seekBar)
+    Description.setText('SeekBar tracking started')
+  end,
+  onStopTrackingTouch: function(seekBar)
+    Description.setText('SeekBar tracking stopped')
+  end
+})

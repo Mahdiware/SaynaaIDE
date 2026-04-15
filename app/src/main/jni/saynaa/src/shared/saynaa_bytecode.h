@@ -15,10 +15,12 @@
 #define SAYNAA_BYTECODE_FLAG_ENCRYPTED 0x02
 #define SAYNAA_BYTECODE_FLAG_DEBUG 0x04
 
-// Payload format magic and version. Bump version when payload layout changes.
+// Payload format magic and version. Bump current version when payload layout
+// changes; keep MIN when maintaining backward compatibility.
 #define SAYNAA_BYTECODE_PAYLOAD_MAGIC "SBC1"
 #define SAYNAA_BYTECODE_PAYLOAD_MAGIC_SIZE 4
-#define SAYNAA_BYTECODE_PAYLOAD_VERSION 2
+#define SAYNAA_BYTECODE_PAYLOAD_VERSION 3
+#define SAYNAA_BYTECODE_PAYLOAD_MIN_VERSION 2
 
 typedef struct SaynaaBytecodeHeader {
   uint8_t magic[SAYNAA_BYTECODE_MAGIC_SIZE];

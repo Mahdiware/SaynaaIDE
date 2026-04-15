@@ -32,6 +32,15 @@
     RET(VAR_NULL); \
   } while (false)
 
+static Var _instanceRemoveAttribFast(VM* vm, Instance* inst, String* attrib);
+
+static inline Closure* _resolveMagicMethod(Class* cls, MagicMethod method) {
+  Closure* closure = cls->magic_methods[method];
+  if (closure == (Closure*) -1)
+    closure = getMagicMethod(cls, method);
+  return closure;
+}
+
 /*****************************************************************************/
 /* VALIDATORS                                                                */
 /*****************************************************************************/
@@ -427,7 +436,7 @@ static void varDelAttrib(VM* vm, Var on, String* attrib, bool skipDelattr) {
           }
         }
 
-        Var removed = mapRemoveKey(vm, inst->attribs, VAR_OBJ(attrib));
+        Var removed = _instanceRemoveAttribFast(vm, inst, attrib);
         if (IS_UNDEF(removed))
           ERR_NO_ATTRIB(vm, on, attrib);
       }
@@ -605,11 +614,18 @@ saynaa_function(coreDir, "dir(v:Var) -> List[String]",
         Instance* inst = (Instance*) AS_OBJ(v);
         List* list = newList(vm, 8);
         vmPushTempRef(vm, &list->_super); // list.
-        for (uint32_t i = 0; i < inst->attribs->capacity; i++) {
-          Var key = (inst->attribs->entries + i)->key;
-          if (!IS_UNDEF(key)) {
-            ASSERT(IS_OBJ_TYPE(key, OBJ_STRING), OOPS);
-            listAppend(vm, list, key);
+        for (uint8_t i = 0; i < inst->inline_attrib_count; i++) {
+          if (inst->inline_attrib_names[i] != NULL) {
+            listAppend(vm, list, VAR_OBJ(inst->inline_attrib_names[i]));
+          }
+        }
+        if (inst->attribs != NULL) {
+          for (uint32_t i = 0; i < inst->attribs->capacity; i++) {
+            Var key = (inst->attribs->entries + i)->key;
+            if (!IS_UNDEF(key)) {
+              ASSERT(IS_OBJ_TYPE(key, OBJ_STRING), OOPS);
+              listAppend(vm, list, key);
+            }
           }
         }
         _collectMethods(vm, list, inst->cls);
@@ -2399,6 +2415,8 @@ Var preConstructThis(VM* vm, Class* cls) {
 void bindMethod(VM* vm, Class* cls, Closure* method) {
   ASSERT(vm != NULL && cls != NULL && method != NULL, OOPS);
 
+  vmInvalidateInlineCaches(vm);
+
   if (vm->method_cache_class == cls) {
     vm->method_cache_class = NULL;
     vm->method_cache_name = NULL;
@@ -2440,9 +2458,8 @@ void bindMethod(VM* vm, Class* cls, Closure* method) {
     String* method_name = newInternedString(vm, method->fn->name);
     vmPushTempRef(vm, &method_name->_super); // method_name
 
-    Var key = VAR_OBJ(method_name);
-    if (IS_UNDEF(mapGet(cls->method_lookup, key))) {
-      mapSet(vm, cls->method_lookup, key, VAR_OBJ(method));
+    if (IS_UNDEF(mapGetStringKey(cls->method_lookup, method_name))) {
+      mapSetStringKey(vm, cls->method_lookup, method_name, VAR_OBJ(method));
     }
 
     vmPopTempRef(vm); // method_name
@@ -2489,7 +2506,7 @@ static inline Closure* clsGetMethod(VM* vm, Class* cls, String* name) {
   Class* cls_ = cls;
   do {
     if (cls_->method_lookup != NULL) {
-      Var method = mapGet(cls_->method_lookup, VAR_OBJ(name));
+      Var method = mapGetStringKey(cls_->method_lookup, name);
       if (IS_OBJ_TYPE(method, OBJ_CLOSURE)) {
         Closure* closure = (Closure*) AS_OBJ(method);
         ASSERT(closure->fn->is_method, OOPS);
@@ -2506,7 +2523,7 @@ static inline Closure* clsGetMethod(VM* vm, Class* cls, String* name) {
         if (cls_->method_lookup != NULL) {
           String* cached_name = newInternedString(vm, method_name);
           vmPushTempRef(vm, &cached_name->_super); // cached_name
-          mapSet(vm, cls_->method_lookup, VAR_OBJ(cached_name), VAR_OBJ(method_));
+          mapSetStringKey(vm, cls_->method_lookup, cached_name, VAR_OBJ(method_));
           vmPopTempRef(vm); // cached_name
         }
         return method_;
@@ -3001,6 +3018,110 @@ bool varIsType(VM* vm, Var inst, Var type) {
   return false;
 }
 
+static int _instanceInlineAttribIndex(const Instance* inst, const String* attrib) {
+  for (uint8_t i = 0; i < inst->inline_attrib_count; i++) {
+    String* name = inst->inline_attrib_names[i];
+    if (name == attrib)
+      return (int) i;
+    if (name != NULL
+        && name->hash == attrib->hash
+        && name->length == attrib->length
+        && memcmp(name->data, attrib->data, attrib->length) == 0) {
+      return (int) i;
+    }
+  }
+  return -1;
+}
+
+static Var _instanceGetAttribFast(Instance* inst, String* attrib) {
+  int index = _instanceInlineAttribIndex(inst, attrib);
+  if (index >= 0)
+    return inst->inline_attrib_values[index];
+
+  if (inst->attribs != NULL)
+    return mapGetStringKey(inst->attribs, attrib);
+
+  return VAR_UNDEFINED;
+}
+
+static void _instanceSetAttribFast(VM* vm, Instance* inst, String* attrib, Var value) {
+  int index = _instanceInlineAttribIndex(inst, attrib);
+  if (index >= 0) {
+    inst->inline_attrib_values[index] = value;
+    return;
+  }
+
+  if (inst->attribs != NULL) {
+    Var existing = mapGetStringKey(inst->attribs, attrib);
+    if (!IS_UNDEF(existing)) {
+      mapSetStringKey(vm, inst->attribs, attrib, value);
+      return;
+    }
+  }
+
+  if (inst->inline_attrib_count < INSTANCE_INLINE_ATTR_CAPACITY) {
+    uint8_t i = inst->inline_attrib_count++;
+    inst->inline_attrib_names[i] = attrib;
+    inst->inline_attrib_values[i] = value;
+    return;
+  }
+
+  if (inst->attribs == NULL)
+    inst->attribs = newMap(vm);
+  mapSetStringKey(vm, inst->attribs, attrib, value);
+}
+
+static Var _instanceRemoveAttribFast(VM* vm, Instance* inst, String* attrib) {
+  int index = _instanceInlineAttribIndex(inst, attrib);
+  if (index >= 0) {
+    uint8_t i = (uint8_t) index;
+    Var removed = inst->inline_attrib_values[i];
+
+    if (i + 1 < inst->inline_attrib_count) {
+      memmove(&inst->inline_attrib_names[i], &inst->inline_attrib_names[i + 1],
+              (inst->inline_attrib_count - i - 1) * sizeof(String*));
+      memmove(&inst->inline_attrib_values[i], &inst->inline_attrib_values[i + 1],
+              (inst->inline_attrib_count - i - 1) * sizeof(Var));
+    }
+
+    inst->inline_attrib_count--;
+    return removed;
+  }
+
+  if (inst->attribs != NULL)
+    return mapRemoveKey(vm, inst->attribs, VAR_OBJ(attrib));
+
+  return VAR_UNDEFINED;
+}
+
+static Var _newBoundMethod(VM* vm, Var instance, Closure* method) {
+  MethodBind* mb = newMethodBind(vm, method);
+  vmPushTempRef(vm, &mb->_super); // mb.
+  mb->instance = instance;
+  vmPopTempRef(vm); // mb.
+  return VAR_OBJ(mb);
+}
+
+static bool _lookupAndBindMethod(VM* vm, Var instance, String* name, Var* out) {
+  bool pushed_instance = false;
+  if (IS_OBJ(instance)) {
+    vmPushTempRef(vm, AS_OBJ(instance)); // instance.
+    pushed_instance = true;
+  }
+
+  Closure* method = NULL;
+  bool found = hasMethod(vm, instance, name, &method);
+  if (found) {
+    *out = _newBoundMethod(vm, instance, method);
+  }
+
+  if (pushed_instance) {
+    vmPopTempRef(vm); // instance.
+  }
+
+  return found;
+}
+
 Var varGetAttrib(VM* vm, Var on, String* attrib, bool skipGetter, bool callable) {
 #define ERR_NO_ATTRIB(vm, on, attrib) \
   VM_SET_ERROR(vm, stringFormat(vm, "'$' object has no attribute named '$'.", \
@@ -3017,7 +3138,7 @@ Var varGetAttrib(VM* vm, Var on, String* attrib, bool skipGetter, bool callable)
 
   if (IS_OBJ_TYPE(on, OBJ_INST) && !skipGetter) {
     Instance* inst = (Instance*) AS_OBJ(on);
-    Closure* getattribute = getMagicMethod(inst->cls, METHOD_GETATTRIBUTE);
+    Closure* getattribute = _resolveMagicMethod(inst->cls, METHOD_GETATTRIBUTE);
     if (getattribute != NULL) {
       Var attrib_name = VAR_OBJ(attrib);
       Var value = VAR_NULL;
@@ -3080,7 +3201,7 @@ Var varGetAttrib(VM* vm, Var on, String* attrib, bool skipGetter, bool callable)
 
         } // switch
 
-        Var value = mapGet(map, VAR_OBJ(attrib));
+        Var value = mapGetStringKey(map, attrib);
         if (!IS_UNDEF(value))
           return value;
       }
@@ -3113,12 +3234,13 @@ Var varGetAttrib(VM* vm, Var on, String* attrib, bool skipGetter, bool callable)
       {
         Module* module = (Module*) obj;
 
-        // Prefer module methods over globals.
-        Closure* method = NULL;
-        if (hasMethod(vm, on, attrib, &method)) {
-          MethodBind* mb = newMethodBind(vm, method);
-          mb->instance = on;
-          return VAR_OBJ(mb);
+        // For generic attribute access, prefer module methods over globals.
+        // Callable path already resolved methods in getMethod().
+        if (!callable) {
+          Var bound = VAR_UNDEFINED;
+          if (_lookupAndBindMethod(vm, on, attrib, &bound)) {
+            return bound;
+          }
         }
 
         // Search in globals.
@@ -3219,18 +3341,26 @@ Var varGetAttrib(VM* vm, Var on, String* attrib, bool skipGetter, bool callable)
             }
         }
 
-        Var value = mapGet(cls->static_attribs, VAR_OBJ(attrib));
+        Var value = mapGetStringKey(cls->static_attribs, attrib);
         if (!IS_UNDEF(value))
           return value;
 
+        bool pushed_on = false;
+        if (IS_OBJ(on)) {
+          vmPushTempRef(vm, AS_OBJ(on)); // on.
+          pushed_on = true;
+        }
+
         Closure* method_ = clsGetMethod(vm, cls, attrib);
         if (method_ != NULL) {
-          MethodBind* mb = newMethodBind(vm, method_);
-          vmPushTempRef(vm, &mb->_super);
-          mb->instance = on;
-          vmPopTempRef(vm);
-          return VAR_OBJ(mb);
+          Var bound = _newBoundMethod(vm, on, method_);
+          if (pushed_on)
+            vmPopTempRef(vm); // on.
+          return bound;
         }
+
+        if (pushed_on)
+          vmPopTempRef(vm); // on.
       }
       break;
 
@@ -3240,27 +3370,23 @@ Var varGetAttrib(VM* vm, Var on, String* attrib, bool skipGetter, bool callable)
     case OBJ_INST:
       {
         Instance* inst = (Instance*) obj;
-        Var value = VAR_NULL;
-
-        value = mapGet(inst->attribs, VAR_OBJ(attrib));
+        Var value = _instanceGetAttribFast(inst, attrib);
         if (!IS_UNDEF(value))
           return value;
       }
       break;
   }
 
-  {
-    Closure* method;
-    if (hasMethod(vm, on, attrib, &method)) {
-      MethodBind* mb = newMethodBind(vm, method);
-      mb->instance = on;
-      return VAR_OBJ(mb);
+  if (!callable) {
+    Var bound = VAR_UNDEFINED;
+    if (_lookupAndBindMethod(vm, on, attrib, &bound)) {
+      return bound;
     }
   }
 
   if (IS_OBJ_TYPE(on, OBJ_INST) && !skipGetter) {
     Instance* inst = (Instance*) AS_OBJ(on);
-    Closure* getattr = getMagicMethod(inst->cls, METHOD_GETATTR);
+    Closure* getattr = _resolveMagicMethod(inst->cls, METHOD_GETATTR);
     if (getattr != NULL) {
       Var attrib_name = VAR_OBJ(attrib);
       Var value = VAR_NULL;
@@ -3268,7 +3394,7 @@ Var varGetAttrib(VM* vm, Var on, String* attrib, bool skipGetter, bool callable)
       return value;
     }
 
-    Closure* getter = getMagicMethod(inst->cls, METHOD_GETTER);
+    Closure* getter = _resolveMagicMethod(inst->cls, METHOD_GETTER);
     if (getter != NULL) {
       Var attrib_name = VAR_OBJ(attrib);
       Var value = VAR_NULL;
@@ -3310,14 +3436,14 @@ void varSetAttrib(VM* vm, Var on, String* attrib, Var value, bool skipSetter) {
     case OBJ_CLASS:
       {
         Class* cls = (Class*) obj;
-        mapSet(vm, cls->static_attribs, VAR_OBJ(attrib), value);
+        mapSetStringKey(vm, cls->static_attribs, attrib, value);
         return;
       }
 
     case OBJ_MAP:
       {
         Map* map = (Map*) obj;
-        mapSet(vm, map, VAR_OBJ(attrib), value);
+        mapSetStringKey(vm, map, attrib, value);
         return;
       }
 
@@ -3326,14 +3452,14 @@ void varSetAttrib(VM* vm, Var on, String* attrib, Var value, bool skipSetter) {
         Instance* inst = (Instance*) obj;
 
         if (!skipSetter) {
-          Closure* setattr = getMagicMethod(inst->cls, METHOD_SETATTR);
+          Closure* setattr = _resolveMagicMethod(inst->cls, METHOD_SETATTR);
           if (setattr != NULL) {
             Var args[2] = {VAR_OBJ(attrib), value};
             vmCallMethod(vm, VAR_OBJ(inst), setattr, 2, args, NULL);
             return; // If any error occure, it was already set.
           }
 
-          Closure* setter = getMagicMethod(inst->cls, METHOD_SETTER);
+          Closure* setter = _resolveMagicMethod(inst->cls, METHOD_SETTER);
           if (setter != NULL) {
             // FIXME: Optimize argument passing to `_setter`.
             // Once values can be retrieved directly from the stack, pass a
@@ -3345,7 +3471,7 @@ void varSetAttrib(VM* vm, Var on, String* attrib, Var value, bool skipSetter) {
           }
         }
 
-        mapSet(vm, inst->attribs, VAR_OBJ(attrib), value);
+        _instanceSetAttribFast(vm, inst, attrib, value);
         return;
       }
       break;
