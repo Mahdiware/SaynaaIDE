@@ -22,6 +22,8 @@ Saynaa Android is an Android application runtime for the Saynaa programming lang
 - [app](app) — Android application module.
 - [app/src/main/assets](app/src/main/assets) — bundled Saynaa scripts and examples.
 - [app/src/main/jni/saynaajava](app/src/main/jni/saynaajava) — JNI bridge between Saynaa and Android/Java.
+- [app/src/main/jni/saynaajava/src](app/src/main/jni/saynaajava/src) — native source tree, split into `api`, `bridge`, `internal`, `wrappers`, and `main.c`.
+- [app/src/main/jni/saynaajava/include](app/src/main/jni/saynaajava/include) — public/native headers used by the JNI bridge.
 
 ## Requirements
 
@@ -81,7 +83,7 @@ The app executes Saynaa source and exposes Android integration through built-in 
 
 Typical script flow:
 
-- get the current activity with `getActivity()`
+- use the injected `activity` global directly
 - import the `java` module
 - bind Java classes with `java.bindClass(...)`
 - create Android objects
@@ -94,7 +96,6 @@ See the main example in [app/src/main/assets/main.sa](app/src/main/assets/main.s
 ```sa
 import java
 
-activity = getActivity()
 TextView = java.bindClass("android.widget.TextView")
 
 view = TextView(activity)
@@ -107,7 +108,6 @@ Callback example:
 ```sa
 import java
 
-activity = getActivity()
 Button = java.bindClass("android.widget.Button")
 LinearLayout = java.bindClass("android.widget.LinearLayout")
 View = java.bindClass("android.view.View")
@@ -135,10 +135,23 @@ activity.setContentView(layout)
 - [app/src/main/assets/main.sa](app/src/main/assets/main.sa) — main Saynaa demo.
 - [app/src/main/assets/proxy_test.sa](app/src/main/assets/proxy_test.sa) — proxy feature verification script.
 - [app/src/main/assets/hello.sa](app/src/main/assets/hello.sa) — simple imported module example.
-- [app/src/main/jni/saynaajava/main.c](app/src/main/jni/saynaajava/main.c) — JNI bridge APIs and conversions.
-- [app/src/main/jni/saynaajava/wrappers.c](app/src/main/jni/saynaajava/wrappers.c) — `JavaClass`/`JavaObject`/`JavaMethod` wrapper behavior.
-- [app/src/main/jni/saynaajava/exports.c](app/src/main/jni/saynaajava/exports.c) — JNI exports for `Saynaa` native methods.
+- [app/src/main/assets/hello.dex](app/src/main/assets/hello.dex) — sample DEX used by the demo scripts.
+- [app/src/main/assets/init.sa](app/src/main/assets/init.sa) — startup initialization script.
+- [app/src/main/assets/init.backup.sa](app/src/main/assets/init.backup.sa) — fallback startup initialization script.
+- [app/src/main/assets/main.backup.sa](app/src/main/assets/main.backup.sa) — fallback main demo script.
+- [app/src/main/assets/main1.sa](app/src/main/assets/main1.sa) — additional demo entry script.
+- [app/src/main/assets/main2.sa](app/src/main/assets/main2.sa) — additional demo entry script.
+- [app/src/main/assets/mainbackup.sa](app/src/main/assets/mainbackup.sa) — legacy backup main script.
+- [app/src/main/assets/loadlayout.sa](app/src/main/assets/loadlayout.sa) — layout helper used by demo UI scripts.
+- [app/src/main/jni/saynaajava/src/main.c](app/src/main/jni/saynaajava/src/main.c) — native entry point and VM bootstrap.
+- [app/src/main/jni/saynaajava/src/api/saynaa_module.c](app/src/main/jni/saynaajava/src/api/saynaa_module.c) — module startup and bytecode/script execution.
+- [app/src/main/jni/saynaajava/src/bridge/jni_exports.c](app/src/main/jni/saynaajava/src/bridge/jni_exports.c) — JNI exports for `Saynaa` native methods.
+- [app/src/main/jni/saynaajava/src/bridge/jni_loader.c](app/src/main/jni/saynaajava/src/bridge/jni_loader.c) — JNI library loading and registration.
+- [app/src/main/jni/saynaajava/src/bridge/jni_utils.c](app/src/main/jni/saynaajava/src/bridge/jni_utils.c) — JNI helper utilities.
+- [app/src/main/jni/saynaajava/src/internal/saynaa_bridge.c](app/src/main/jni/saynaajava/src/internal/saynaa_bridge.c) — native bridge helpers and conversions.
+- [app/src/main/jni/saynaajava/src/wrappers/java_wrappers.c](app/src/main/jni/saynaajava/src/wrappers/java_wrappers.c) — `JavaClass`/`JavaObject`/`JavaMethod` wrapper behavior.
 - [app/src/main/java/com/android/saynaa/saynaajava/JavaBridge.java](app/src/main/java/com/android/saynaa/saynaajava/JavaBridge.java) — Java reflection and proxy bridge.
+- [app/src/main/java/com/android/saynaa/saynaajava/vm/SaynaaState.java](app/src/main/java/com/android/saynaa/saynaajava/vm/SaynaaState.java) — VM-backed scripting state used by the app runtime.
 
 ## Architecture summary
 
@@ -150,7 +163,7 @@ activity.setContentView(layout)
 ## Notes
 
 - The public scripting surface is the `java` module.
-- The JNI source file and Java package still use `saynaajava` naming internally because they are part of the Android implementation layer.
+- The JNI source tree now lives under `app/src/main/jni/saynaajava/src`, while the Java runtime classes live under `app/src/main/java/com/android/saynaa/saynaajava`.
 - The project includes reference folders used during development; the active runtime for users is Saynaa.
 
 ## Status
