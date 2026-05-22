@@ -10,16 +10,22 @@ import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
+import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Enumeration;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
 public class JavaBridge {
   private static final String TAG = "JavaBridge";
+  private static final int MAX_BRIDGE_RECURSION_DEPTH = 64;
+  private static final long MAX_SAFE_INTEGER_LONG = 9007199254740991L;
+  private static final long MIN_SAFE_INTEGER_LONG = -9007199254740991L;
 
   private static Saynaa unwrapState(SaynaaState state) {
     return state == null ? null : state.getSaynaa();
@@ -30,8 +36,40 @@ public class JavaBridge {
   }
 
   public static Object slotToJava(Saynaa saynaa, int slot) {
+    return slotToJavaInternal(saynaa, slot, 0);
+  }
+
+  private static boolean isFiniteDouble(double value) {
+    return !Double.isNaN(value) && !Double.isInfinite(value);
+  }
+
+  private static Object decodeSlotNumber(double value) {
+    if (!isFiniteDouble(value)) {
+      return Double.valueOf(value);
+    }
+
+    double rounded = Math.rint(value);
+    if (rounded == value) {
+      if (value >= Integer.MIN_VALUE && value <= Integer.MAX_VALUE) {
+        return Integer.valueOf((int) value);
+      }
+
+      if (value >= MIN_SAFE_INTEGER_LONG && value <= MAX_SAFE_INTEGER_LONG) {
+        return Long.valueOf((long) value);
+      }
+    }
+
+    return Double.valueOf(value);
+  }
+
+  private static Object slotToJavaInternal(Saynaa saynaa, int slot, int depth) {
     if (saynaa == null || saynaa.isClosed())
       return null;
+
+    if (depth >= MAX_BRIDGE_RECURSION_DEPTH) {
+      Log.w(TAG, "slotToJava depth limit reached at slot " + slot);
+      return null;
+    }
 
     int type = saynaa.getSlotType(slot);
     switch (type) {
@@ -40,7 +78,7 @@ public class JavaBridge {
     case Saynaa.SLOT_TYPE_BOOL:
       return Boolean.valueOf(saynaa.getSlotBool(slot));
     case Saynaa.SLOT_TYPE_NUMBER:
-      return Double.valueOf(saynaa.getSlotNumber(slot));
+      return decodeSlotNumber(saynaa.getSlotNumber(slot));
     case Saynaa.SLOT_TYPE_STRING:
       return saynaa.getSlotString(slot);
     case Saynaa.SLOT_TYPE_POINTER:
@@ -53,7 +91,7 @@ public class JavaBridge {
       saynaa.reserveSlots(valueSlot + 1);
       for (int i = 0; i < size; i++) {
         if (saynaa.listGetToSlot(slot, i, valueSlot)) {
-          out.add(slotToJava(saynaa, valueSlot));
+          out.add(slotToJavaInternal(saynaa, valueSlot, depth + 1));
         } else {
           out.add(null);
         }
@@ -68,8 +106,8 @@ public class JavaBridge {
       saynaa.reserveSlots(valueSlot + 1);
       for (int i = 0; i < size; i++) {
         if (saynaa.mapEntryToSlots(slot, i, keySlot, valueSlot)) {
-          Object key = slotToJava(saynaa, keySlot);
-          Object value = slotToJava(saynaa, valueSlot);
+          Object key = slotToJavaInternal(saynaa, keySlot, depth + 1);
+          Object value = slotToJavaInternal(saynaa, valueSlot, depth + 1);
           out.put(key, value);
         }
       }
@@ -123,12 +161,13 @@ public class JavaBridge {
 
     int elemSlot = listSlot + 1;
     saynaa.reserveSlots(elemSlot + 1);
+    IdentityHashMap<Object, Boolean> visiting = new IdentityHashMap<>();
 
     if (value.getClass().isArray()) {
       int len = Array.getLength(value);
       for (int i = 0; i < len; i++) {
         Object item = Array.get(value, i);
-        if (!pushToSlot(saynaa, elemSlot, item))
+        if (!pushToSlotAsSaynaaInternal(saynaa, elemSlot, item, visiting, 0))
           return false;
         if (!saynaa.listInsert(listSlot, -1, elemSlot))
           return false;
@@ -138,7 +177,7 @@ public class JavaBridge {
 
     if (value instanceof Iterable) {
       for (Object item : (Iterable<?>) value) {
-        if (!pushToSlot(saynaa, elemSlot, item))
+        if (!pushToSlotAsSaynaaInternal(saynaa, elemSlot, item, visiting, 0))
           return false;
         if (!saynaa.listInsert(listSlot, -1, elemSlot))
           return false;
@@ -150,7 +189,7 @@ public class JavaBridge {
       Iterator<?> it = (Iterator<?>) value;
       while (it.hasNext()) {
         Object item = it.next();
-        if (!pushToSlot(saynaa, elemSlot, item))
+        if (!pushToSlotAsSaynaaInternal(saynaa, elemSlot, item, visiting, 0))
           return false;
         if (!saynaa.listInsert(listSlot, -1, elemSlot))
           return false;
@@ -162,7 +201,7 @@ public class JavaBridge {
       Enumeration<?> en = (Enumeration<?>) value;
       while (en.hasMoreElements()) {
         Object item = en.nextElement();
-        if (!pushToSlot(saynaa, elemSlot, item))
+        if (!pushToSlotAsSaynaaInternal(saynaa, elemSlot, item, visiting, 0))
           return false;
         if (!saynaa.listInsert(listSlot, -1, elemSlot))
           return false;
@@ -1116,13 +1155,33 @@ public class JavaBridge {
     return value;
   }
 
-  public static boolean pushToSlot(Saynaa saynaa, int slot, Object value) {
-    if (saynaa == null || saynaa.isClosed())
+  private static boolean pushNumberToSlot(Saynaa saynaa, int slot, Number numberValue) {
+    if (numberValue == null)
       return false;
 
-    Object normalized = normalizeReturn(value);
-    saynaa.reserveSlots(slot + 3);
+    if (numberValue instanceof BigInteger || numberValue instanceof BigDecimal) {
+      return saynaa.wrapJavaObject(slot, numberValue);
+    }
 
+    if (numberValue instanceof Long) {
+      long longValue = numberValue.longValue();
+      if (longValue < MIN_SAFE_INTEGER_LONG || longValue > MAX_SAFE_INTEGER_LONG) {
+        return saynaa.wrapJavaObject(slot, numberValue);
+      }
+      saynaa.setSlotNumber(slot, (double) longValue);
+      return true;
+    }
+
+    double numeric = numberValue.doubleValue();
+    if (!isFiniteDouble(numeric)) {
+      return saynaa.wrapJavaObject(slot, numberValue);
+    }
+
+    saynaa.setSlotNumber(slot, numeric);
+    return true;
+  }
+
+  private static boolean pushScalarToSlot(Saynaa saynaa, int slot, Object normalized) {
     if (normalized == null) {
       saynaa.setSlotNull(slot);
       return true;
@@ -1134,12 +1193,25 @@ public class JavaBridge {
     }
 
     if (normalized instanceof Number) {
-      saynaa.setSlotNumber(slot, ((Number) normalized).doubleValue());
-      return true;
+      return pushNumberToSlot(saynaa, slot, (Number) normalized);
     }
 
     if (normalized instanceof CharSequence) {
       saynaa.setSlotString(slot, normalized.toString());
+      return true;
+    }
+
+    return false;
+  }
+
+  public static boolean pushToSlot(Saynaa saynaa, int slot, Object value) {
+    if (saynaa == null || saynaa.isClosed())
+      return false;
+
+    Object normalized = normalizeReturn(value);
+    saynaa.reserveSlots(slot + 3);
+
+    if (pushScalarToSlot(saynaa, slot, normalized)) {
       return true;
     }
 
@@ -1151,72 +1223,103 @@ public class JavaBridge {
   }
 
   public static boolean pushToSlotAsSaynaa(Saynaa saynaa, int slot, Object value) {
+    return pushToSlotAsSaynaaInternal(saynaa, slot, value, null, 0);
+  }
+
+  private static IdentityHashMap<Object, Boolean> ensureVisitingMap(
+      IdentityHashMap<Object, Boolean> visiting) {
+    return visiting != null ? visiting : new IdentityHashMap<Object, Boolean>();
+  }
+
+  private static boolean pushToSlotAsSaynaaInternal(
+      Saynaa saynaa, int slot, Object value, IdentityHashMap<Object, Boolean> visiting, int depth) {
     if (saynaa == null || saynaa.isClosed())
       return false;
 
     Object normalized = normalizeReturn(value);
     saynaa.reserveSlots(slot + 3);
 
-    if (normalized == null) {
-      saynaa.setSlotNull(slot);
+    if (pushScalarToSlot(saynaa, slot, normalized))
       return true;
-    }
 
-    if (normalized instanceof Boolean) {
-      saynaa.setSlotBool(slot, (Boolean) normalized);
-      return true;
-    }
-
-    if (normalized instanceof Number) {
-      saynaa.setSlotNumber(slot, ((Number) normalized).doubleValue());
-      return true;
-    }
-
-    if (normalized instanceof CharSequence) {
-      saynaa.setSlotString(slot, normalized.toString());
-      return true;
+    if (depth >= MAX_BRIDGE_RECURSION_DEPTH) {
+      Log.w(TAG, "pushToSlotAsSaynaa depth limit reached; wrapping Java object.");
+      return saynaa.wrapJavaObject(slot, normalized);
     }
 
     if (normalized instanceof Map) {
-      saynaa.newMap(slot);
-      int keySlot = slot + 1;
-      int valueSlot = slot + 2;
-      for (Map.Entry<?, ?> entry : ((Map<?, ?>) normalized).entrySet()) {
-        if (!pushToSlotAsSaynaa(saynaa, keySlot, entry.getKey()))
-          return false;
-        if (!pushToSlotAsSaynaa(saynaa, valueSlot, entry.getValue()))
-          return false;
-        if (!saynaa.mapSet(slot, keySlot, valueSlot))
-          return false;
+      visiting = ensureVisitingMap(visiting);
+      if (visiting.containsKey(normalized)) {
+        Log.w(TAG, "pushToSlotAsSaynaa cycle detected in Map; wrapping Java object.");
+        return saynaa.wrapJavaObject(slot, normalized);
       }
-      return true;
+
+      visiting.put(normalized, Boolean.TRUE);
+      try {
+        saynaa.newMap(slot);
+        int keySlot = slot + 1;
+        int valueSlot = slot + 2;
+        for (Map.Entry<?, ?> entry : ((Map<?, ?>) normalized).entrySet()) {
+          if (!pushToSlotAsSaynaaInternal(saynaa, keySlot, entry.getKey(), visiting, depth + 1))
+            return false;
+          if (!pushToSlotAsSaynaaInternal(saynaa, valueSlot, entry.getValue(), visiting, depth + 1))
+            return false;
+          if (!saynaa.mapSet(slot, keySlot, valueSlot))
+            return false;
+        }
+        return true;
+      } finally {
+        visiting.remove(normalized);
+      }
     }
 
     if (normalized instanceof Iterable) {
-      saynaa.newList(slot);
-      int elemSlot = slot + 1;
-      for (Object elem : (Iterable<?>) normalized) {
-        if (!pushToSlotAsSaynaa(saynaa, elemSlot, elem))
-          return false;
-        if (!saynaa.listInsert(slot, -1, elemSlot))
-          return false;
+      visiting = ensureVisitingMap(visiting);
+      if (visiting.containsKey(normalized)) {
+        Log.w(TAG, "pushToSlotAsSaynaa cycle detected in Iterable; wrapping Java object.");
+        return saynaa.wrapJavaObject(slot, normalized);
       }
-      return true;
+
+      visiting.put(normalized, Boolean.TRUE);
+      try {
+        saynaa.newList(slot);
+        int elemSlot = slot + 1;
+        for (Object elem : (Iterable<?>) normalized) {
+          if (!pushToSlotAsSaynaaInternal(saynaa, elemSlot, elem, visiting, depth + 1))
+            return false;
+          if (!saynaa.listInsert(slot, -1, elemSlot))
+            return false;
+        }
+        return true;
+      } finally {
+        visiting.remove(normalized);
+      }
     }
 
     Class<?> cls = normalized.getClass();
     if (cls.isArray()) {
-      saynaa.newList(slot);
-      int elemSlot = slot + 1;
-      int len = Array.getLength(normalized);
-      for (int i = 0; i < len; i++) {
-        Object elem = Array.get(normalized, i);
-        if (!pushToSlotAsSaynaa(saynaa, elemSlot, elem))
-          return false;
-        if (!saynaa.listInsert(slot, -1, elemSlot))
-          return false;
+      visiting = ensureVisitingMap(visiting);
+      if (visiting.containsKey(normalized)) {
+        Log.w(TAG, "pushToSlotAsSaynaa cycle detected in array; wrapping Java object.");
+        return saynaa.wrapJavaObject(slot, normalized);
       }
-      return true;
+
+      visiting.put(normalized, Boolean.TRUE);
+      try {
+        saynaa.newList(slot);
+        int elemSlot = slot + 1;
+        int len = Array.getLength(normalized);
+        for (int i = 0; i < len; i++) {
+          Object elem = Array.get(normalized, i);
+          if (!pushToSlotAsSaynaaInternal(saynaa, elemSlot, elem, visiting, depth + 1))
+            return false;
+          if (!saynaa.listInsert(slot, -1, elemSlot))
+            return false;
+        }
+        return true;
+      } finally {
+        visiting.remove(normalized);
+      }
     }
 
     return saynaa.wrapJavaObject(slot, normalized);

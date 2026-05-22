@@ -15,7 +15,7 @@ import java.io.OutputStream;
 public class FileUtil {
   public final static String SDCARD_PATH = "/sdcard/saynaa/";
   private static final String ASSETS_VERSION_MARKER = "saynaa_assets_version";
-  private static final int ASSETS_COPY_VERSION = 12;
+  private static final int ASSETS_COPY_VERSION = 13;
 
   /**
    * Copy all assets to internal storage.
@@ -64,7 +64,8 @@ public class FileUtil {
     if (!marker.exists())
       return -1;
 
-    try (FileInputStream input = new FileInputStream(marker); ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+    try (FileInputStream input = new FileInputStream(marker);
+        ByteArrayOutputStream output = new ByteArrayOutputStream()) {
       byte[] buffer = new byte[64];
       int read;
       while ((read = input.read(buffer)) != -1) {

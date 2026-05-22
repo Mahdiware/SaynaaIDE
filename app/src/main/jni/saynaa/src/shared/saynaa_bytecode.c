@@ -12,8 +12,7 @@
 #include <stdio.h>
 
 static const uint8_t kSaynaaMagic[SAYNAA_BYTECODE_MAGIC_SIZE] = {
-  'S', 'A', 'Y', 'N', 'A', 'A', '1', 0
-};
+    'S', 'A', 'Y', 'N', 'A', 'A', '1', 0};
 
 void saynaa_bytecode_init(SaynaaBytecode* bytecode) {
   if (bytecode == NULL)
@@ -35,10 +34,8 @@ void saynaa_bytecode_clear(VM* vm, SaynaaBytecode* bytecode) {
 }
 
 Result saynaa_bytecode_set_payload(VM* vm, SaynaaBytecode* bytecode,
-                                   const uint8_t* payload,
-                                   size_t payload_size,
-                                   uint8_t flags,
-                                   uint64_t timestamp) {
+                                   const uint8_t* payload, size_t payload_size,
+                                   uint8_t flags, uint64_t timestamp) {
   if (bytecode == NULL || payload == NULL || payload_size == 0)
     return RESULT_BYTECODE_INVALID_ARGUMENT;
 
@@ -54,17 +51,60 @@ Result saynaa_bytecode_set_payload(VM* vm, SaynaaBytecode* bytecode,
   return RESULT_SUCCESS;
 }
 
-Result saynaa_bytecode_save(const SaynaaBytecode* bytecode,
-                            const char* path) {
+static Result saynaa_bytecode_write_file_with_checksum(const char* path,
+                                                       const uint8_t* bytecode,
+                                                       size_t bytecode_size,
+                                                       uint8_t flags, uint64_t timestamp,
+                                                       uint32_t checksum) {
+  if (path == NULL || bytecode == NULL)
+    return RESULT_BYTECODE_INVALID_ARGUMENT;
+
+  SaynaaBytecodeHeader header;
+  saynaa_bytecode_init_header(&header, flags, (uint32_t) bytecode_size, checksum, timestamp);
+
+  uint8_t header_buf[SAYNAA_BYTECODE_HEADER_SIZE];
+  Result status = saynaa_bytecode_encode_header(&header, header_buf, sizeof(header_buf));
+  if (status != RESULT_SUCCESS)
+    return status;
+
+  FILE* file = fopen(path, "wb");
+  if (file == NULL)
+    return RESULT_BYTECODE_IO_ERROR;
+
+  size_t written = fwrite(header_buf, 1, sizeof(header_buf), file);
+  if (written != sizeof(header_buf)) {
+    fclose(file);
+    return RESULT_BYTECODE_IO_ERROR;
+  }
+
+  if (bytecode_size > 0) {
+    written = fwrite(bytecode, 1, bytecode_size, file);
+    if (written != bytecode_size) {
+      fclose(file);
+      return RESULT_BYTECODE_IO_ERROR;
+    }
+  }
+
+  fclose(file);
+  return RESULT_SUCCESS;
+}
+
+Result saynaa_bytecode_save(const SaynaaBytecode* bytecode, const char* path) {
   if (bytecode == NULL || path == NULL || bytecode->data == NULL)
     return RESULT_BYTECODE_INVALID_ARGUMENT;
-  return saynaa_bytecode_write_file(path, bytecode->data, bytecode->size,
-                                    bytecode->flags, bytecode->timestamp);
+
+  uint32_t checksum = bytecode->checksum;
+  if (checksum == 0 && bytecode->size > 0) {
+    checksum = saynaa_bytecode_crc32(bytecode->data, bytecode->size);
+  }
+
+  return saynaa_bytecode_write_file_with_checksum(path, bytecode->data,
+                                                  bytecode->size, bytecode->flags,
+                                                  bytecode->timestamp, checksum);
 }
 
 Result saynaa_bytecode_run(VM* vm, const SaynaaBytecode* bytecode) {
-  if (vm == NULL || bytecode == NULL || bytecode->data == NULL
-      || bytecode->size == 0) {
+  if (vm == NULL || bytecode == NULL || bytecode->data == NULL || bytecode->size == 0) {
     return RESULT_RUNTIME_ERROR;
   }
 
@@ -72,13 +112,12 @@ Result saynaa_bytecode_run(VM* vm, const SaynaaBytecode* bytecode) {
   vmPushTempRef(vm, &module->_super); // module.
 
   module->path = newString(vm, "@(Bytecode)");
-  Result status = saynaa_bytecode_deserialize_module(
-      vm, module, bytecode->data, bytecode->size);
+  Result status = saynaa_bytecode_deserialize_module(vm, module, bytecode->data,
+                                                     bytecode->size);
   if (status != RESULT_SUCCESS) {
     if (!VM_HAS_ERROR(vm)) {
-      VM_SET_ERROR(vm,
-                   stringFormat(vm, "Bytecode deserialize failed: $",
-                                saynaa_status_message(status), false));
+      VM_SET_ERROR(vm, stringFormat(vm, "Bytecode deserialize failed: $",
+                                    saynaa_status_message(status), false));
     }
     vmPopTempRef(vm); // module.
     return RESULT_COMPILE_ERROR;
@@ -130,8 +169,7 @@ char* saynaa_bytecode_build_path(VM* vm, const char* input_path) {
            strlen(SAYNAA_BYTECODE_EXT) + 1);
   } else {
     memcpy(out_path, input_path, input_len);
-    memcpy(out_path + input_len, SAYNAA_BYTECODE_EXT,
-           strlen(SAYNAA_BYTECODE_EXT) + 1);
+    memcpy(out_path + input_len, SAYNAA_BYTECODE_EXT, strlen(SAYNAA_BYTECODE_EXT) + 1);
   }
 
   return out_path;
@@ -160,21 +198,15 @@ static void write_u64_le(uint8_t* out, uint64_t value) {
 }
 
 static uint32_t read_u32_le(const uint8_t* data) {
-  return (uint32_t) data[0]
-         | ((uint32_t) data[1] << 8)
-         | ((uint32_t) data[2] << 16)
-         | ((uint32_t) data[3] << 24);
+  return (uint32_t) data[0] | ((uint32_t) data[1] << 8)
+         | ((uint32_t) data[2] << 16) | ((uint32_t) data[3] << 24);
 }
 
 static uint64_t read_u64_le(const uint8_t* data) {
-  return (uint64_t) data[0]
-         | ((uint64_t) data[1] << 8)
-         | ((uint64_t) data[2] << 16)
-         | ((uint64_t) data[3] << 24)
-         | ((uint64_t) data[4] << 32)
-         | ((uint64_t) data[5] << 40)
-         | ((uint64_t) data[6] << 48)
-         | ((uint64_t) data[7] << 56);
+  return (uint64_t) data[0] | ((uint64_t) data[1] << 8)
+         | ((uint64_t) data[2] << 16) | ((uint64_t) data[3] << 24)
+         | ((uint64_t) data[4] << 32) | ((uint64_t) data[5] << 40)
+         | ((uint64_t) data[6] << 48) | ((uint64_t) data[7] << 56);
 }
 
 void saynaa_bytecode_init_header(SaynaaBytecodeHeader* header, uint8_t flags,
@@ -231,8 +263,7 @@ Result saynaa_bytecode_decode_header(const uint8_t* data, size_t data_size,
   return RESULT_SUCCESS;
 }
 
-Result saynaa_bytecode_validate_header(const SaynaaBytecodeHeader* header,
-                                       size_t total_size) {
+Result saynaa_bytecode_validate_header(const SaynaaBytecodeHeader* header, size_t total_size) {
   if (header == NULL)
     return RESULT_BYTECODE_INVALID_ARGUMENT;
 
@@ -280,8 +311,7 @@ uint32_t saynaa_bytecode_crc32(const uint8_t* data, size_t size) {
 }
 
 Result saynaa_bytecode_validate_checksum(const SaynaaBytecodeHeader* header,
-                                         const uint8_t* bytecode,
-                                         size_t bytecode_size) {
+                                         const uint8_t* bytecode, size_t bytecode_size) {
   if (header == NULL || bytecode == NULL)
     return RESULT_BYTECODE_INVALID_ARGUMENT;
 
@@ -295,63 +325,29 @@ Result saynaa_bytecode_validate_checksum(const SaynaaBytecodeHeader* header,
   return RESULT_SUCCESS;
 }
 
-Result saynaa_bytecode_validate_payload(const uint8_t* payload,
-                                        size_t payload_size) {
+Result saynaa_bytecode_validate_payload(const uint8_t* payload, size_t payload_size) {
   if (payload == NULL)
     return RESULT_BYTECODE_INVALID_ARGUMENT;
   if (payload_size < SAYNAA_BYTECODE_PAYLOAD_MAGIC_SIZE + 1)
     return RESULT_BYTECODE_TRUNCATED;
-  if (memcmp(payload, SAYNAA_BYTECODE_PAYLOAD_MAGIC,
-             SAYNAA_BYTECODE_PAYLOAD_MAGIC_SIZE) != 0) {
+  if (memcmp(payload, SAYNAA_BYTECODE_PAYLOAD_MAGIC, SAYNAA_BYTECODE_PAYLOAD_MAGIC_SIZE) != 0) {
     return RESULT_BYTECODE_INVALID_FORMAT;
   }
   uint8_t version = payload[SAYNAA_BYTECODE_PAYLOAD_MAGIC_SIZE];
-  if (version < SAYNAA_BYTECODE_PAYLOAD_MIN_VERSION
-      || version > SAYNAA_BYTECODE_PAYLOAD_VERSION) {
+  if (version < SAYNAA_BYTECODE_PAYLOAD_MIN_VERSION || version > SAYNAA_BYTECODE_PAYLOAD_VERSION) {
     return RESULT_BYTECODE_VERSION_MISMATCH;
   }
   return RESULT_SUCCESS;
 }
 
-Result saynaa_bytecode_write_file(const char* path,
-                                  const uint8_t* bytecode,
-                                  size_t bytecode_size,
-                                  uint8_t flags,
-                                  uint64_t timestamp) {
+Result saynaa_bytecode_write_file(const char* path, const uint8_t* bytecode,
+                                  size_t bytecode_size, uint8_t flags, uint64_t timestamp) {
   if (path == NULL || bytecode == NULL)
     return RESULT_BYTECODE_INVALID_ARGUMENT;
 
   uint32_t checksum = saynaa_bytecode_crc32(bytecode, bytecode_size);
-
-  SaynaaBytecodeHeader header;
-  saynaa_bytecode_init_header(&header, flags, (uint32_t) bytecode_size, checksum,
-                              timestamp);
-
-  uint8_t header_buf[SAYNAA_BYTECODE_HEADER_SIZE];
-  Result status = saynaa_bytecode_encode_header(&header, header_buf, sizeof(header_buf));
-  if (status != RESULT_SUCCESS)
-    return status;
-
-  FILE* file = fopen(path, "wb");
-  if (file == NULL)
-    return RESULT_BYTECODE_IO_ERROR;
-
-  size_t written = fwrite(header_buf, 1, sizeof(header_buf), file);
-  if (written != sizeof(header_buf)) {
-    fclose(file);
-    return RESULT_BYTECODE_IO_ERROR;
-  }
-
-  if (bytecode_size > 0) {
-    written = fwrite(bytecode, 1, bytecode_size, file);
-    if (written != bytecode_size) {
-      fclose(file);
-      return RESULT_BYTECODE_IO_ERROR;
-    }
-  }
-
-  fclose(file);
-  return RESULT_SUCCESS;
+  return saynaa_bytecode_write_file_with_checksum(path, bytecode, bytecode_size,
+                                                  flags, timestamp, checksum);
 }
 
 /*****************************************************************************/
@@ -381,13 +377,10 @@ static void bc_write_varu(ByteBuffer* out, VM* vm, uint64_t value) {
 
   buff[SAYNAA_BC_VARINT_MAX_BYTES - 1] = (uint8_t) (value & 0x7fu);
   while ((value >>= 7) != 0) {
-    buff[SAYNAA_BC_VARINT_MAX_BYTES - (++n)] =
-        (uint8_t) ((value & 0x7fu) | 0x80u);
+    buff[SAYNAA_BC_VARINT_MAX_BYTES - (++n)] = (uint8_t) ((value & 0x7fu) | 0x80u);
   }
 
-  ByteBufferAddString(out, vm,
-                      (const char*) (buff + SAYNAA_BC_VARINT_MAX_BYTES - n),
-                      n);
+  ByteBufferAddString(out, vm, (const char*) (buff + SAYNAA_BC_VARINT_MAX_BYTES - n), n);
 }
 
 static void bc_write_vari32(ByteBuffer* out, VM* vm, int32_t value) {
@@ -490,8 +483,8 @@ static int find_constant_index(Module* module, Var value) {
   return -1;
 }
 
-static void bc_write_string_nullable(ByteBuffer* out, VM* vm,
-                                     const char* text, uint32_t length) {
+static void bc_write_string_nullable(ByteBuffer* out, VM* vm, const char* text,
+                                     uint32_t length) {
   if (text == NULL) {
     bc_write_varu(out, vm, 0);
     return;
@@ -512,15 +505,13 @@ static void bc_write_string_obj_nullable(ByteBuffer* out, VM* vm, String* value)
   bc_write_string_nullable(out, vm, value->data, value->length);
 }
 
-Result saynaa_bytecode_serialize_module(VM* vm, Module* module,
-                                        ByteBuffer* out) {
+Result saynaa_bytecode_serialize_module(VM* vm, Module* module, ByteBuffer* out) {
   if (vm == NULL || module == NULL || out == NULL)
     return RESULT_BYTECODE_INVALID_ARGUMENT;
   if (module->body == NULL || module->body->fn == NULL)
     return RESULT_BYTECODE_INVALID_ARGUMENT;
 
-  ByteBufferAddString(out, vm, SAYNAA_BYTECODE_PAYLOAD_MAGIC,
-                      SAYNAA_BYTECODE_PAYLOAD_MAGIC_SIZE);
+  ByteBufferAddString(out, vm, SAYNAA_BYTECODE_PAYLOAD_MAGIC, SAYNAA_BYTECODE_PAYLOAD_MAGIC_SIZE);
   bc_write_u8(out, vm, SAYNAA_BYTECODE_PAYLOAD_VERSION);
 
   bc_write_varu(out, vm, module->constants.count);
@@ -573,8 +564,7 @@ Result saynaa_bytecode_serialize_module(VM* vm, Module* module,
             return RESULT_BYTECODE_INVALID_FORMAT;
 
           bc_write_u8(out, vm, SAYNAA_BC_CONST_FUNCTION);
-          bc_write_string_nullable(out, vm, fn->name,
-                                   (uint32_t) strlen(fn->name));
+          bc_write_string_nullable(out, vm, fn->name, (uint32_t) strlen(fn->name));
           if (fn->docstring != NULL) {
             bc_write_string_nullable(out, vm, fn->docstring,
                                      (uint32_t) strlen(fn->docstring));
@@ -688,16 +678,13 @@ static Result bc_read_module_string(BytecodeReader* reader, VM* vm,
     return RESULT_BYTECODE_TRUNCATED;
 
   uint32_t len = (uint32_t) len64;
-  *out = newInternedStringLength(vm,
-                                 (const char*) (reader->data + reader->offset),
-                                 len);
+  *out = newInternedStringLength(vm, (const char*) (reader->data + reader->offset), len);
   reader->offset += len;
   return RESULT_SUCCESS;
 }
 
 static Result saynaa_bytecode_deserialize_module_v3(VM* vm, Module* module,
-                                                    const uint8_t* data,
-                                                    size_t data_size) {
+                                                    const uint8_t* data, size_t data_size) {
   if (vm == NULL || module == NULL || data == NULL)
     return RESULT_BYTECODE_INVALID_ARGUMENT;
 
@@ -767,9 +754,8 @@ static Result saynaa_bytecode_deserialize_module_v3(VM* vm, Module* module,
             return RESULT_BYTECODE_TRUNCATED;
 
           uint32_t length = (uint32_t) length64;
-          String* str = newInternedStringLength(vm,
-                                                (const char*) (reader.data + reader.offset),
-                                                length);
+          String* str = newInternedStringLength(
+              vm, (const char*) (reader.data + reader.offset), length);
           vmPushTempRef(vm, &str->_super); // str.
           module->constants.data[i] = VAR_OBJ(str);
           vmPopTempRef(vm); // str.
@@ -811,8 +797,7 @@ static Result saynaa_bytecode_deserialize_module_v3(VM* vm, Module* module,
           status = bc_read_vari32(&reader, &stack_size);
           if (status != RESULT_SUCCESS)
             return status;
-          if (stack_size < 0
-              || (size_t) stack_size >= (MAX_STACK_SIZE / sizeof(Var))) {
+          if (stack_size < 0 || (size_t) stack_size >= (MAX_STACK_SIZE / sizeof(Var))) {
             return RESULT_BYTECODE_INVALID_FORMAT;
           }
 
@@ -825,17 +810,15 @@ static Result saynaa_bytecode_deserialize_module_v3(VM* vm, Module* module,
 
           uint32_t opcodes_count = (uint32_t) opcodes_count64;
           uint32_t oplines_count = 0;
-          Function* fn = newFunctionRaw(vm, module, name, doc,
-                                        arity, is_method != 0,
-                                        (int) upvalue_count64);
+          Function* fn = newFunctionRaw(vm, module, name, doc, arity,
+                                        is_method != 0, (int) upvalue_count64);
           vmPushTempRef(vm, &fn->_super); // fn.
 
           fn->fn->stack_size = stack_size;
 
           if (opcodes_count > 0) {
             ByteBufferReserve(&fn->fn->opcodes, vm, opcodes_count);
-            memcpy(fn->fn->opcodes.data, reader.data + reader.offset,
-                   opcodes_count);
+            memcpy(fn->fn->opcodes.data, reader.data + reader.offset, opcodes_count);
             fn->fn->opcodes.count = opcodes_count;
             reader.offset += opcodes_count;
           }
@@ -930,8 +913,7 @@ static Result saynaa_bytecode_deserialize_module_v3(VM* vm, Module* module,
 }
 
 Result saynaa_bytecode_deserialize_module(VM* vm, Module* module,
-                                          const uint8_t* data,
-                                          size_t data_size) {
+                                          const uint8_t* data, size_t data_size) {
   Result status = RESULT_SUCCESS;
   if (vm == NULL || module == NULL || data == NULL)
     return RESULT_BYTECODE_INVALID_ARGUMENT;
@@ -1024,9 +1006,8 @@ Result saynaa_bytecode_deserialize_module(VM* vm, Module* module,
             status = RESULT_BYTECODE_TRUNCATED;
             goto cleanup;
           }
-          String* str = newInternedStringLength(vm,
-                                                (const char*) (reader.data + reader.offset),
-                                                length);
+          String* str = newInternedStringLength(
+              vm, (const char*) (reader.data + reader.offset), length);
           vmPushTempRef(vm, &str->_super); // str.
           VarBufferWrite(&module->constants, vm, VAR_OBJ(str));
           vmPopTempRef(vm); // str.
@@ -1153,7 +1134,7 @@ Result saynaa_bytecode_deserialize_module(VM* vm, Module* module,
         break;
 
       default:
-          status = RESULT_BYTECODE_UNSUPPORTED_CONST;
+        status = RESULT_BYTECODE_UNSUPPORTED_CONST;
         goto cleanup;
     }
   }
@@ -1186,8 +1167,7 @@ Result saynaa_bytecode_deserialize_module(VM* vm, Module* module,
     }
 
     Function* fn = newFunctionRaw(vm, module, name, doc, pending->arity,
-                                  pending->is_method != 0,
-                                  (int) pending->upvalue_count);
+                                  pending->is_method != 0, (int) pending->upvalue_count);
     vmPushTempRef(vm, &fn->_super); // fn.
 
     fn->fn->stack_size = pending->stack_size;
