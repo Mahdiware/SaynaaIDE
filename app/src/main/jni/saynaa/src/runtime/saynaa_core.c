@@ -5,6 +5,7 @@
 
 #include "saynaa_core.h"
 
+#include "../shared/saynaa_bytecode.h"
 #include "../utils/saynaa_debug.h"
 #include "../utils/saynaa_utils.h"
 #include "saynaa_vm.h"
@@ -919,7 +920,8 @@ saynaa_function(coreEval, "eval(expression:String) -> Var",
     }
 
     if (frame == NULL) {
-      VM_SET_ERROR(vm, newString(vm, "Cannot eval without an active module context."));
+      VM_SET_ERROR(
+          vm, newString(vm, "Cannot eval without an active module context."));
       vmPopTempRef(vm); // code.
       RET(VAR_NULL);
     }
@@ -949,8 +951,95 @@ saynaa_function(coreEval, "eval(expression:String) -> Var",
   vmPopTempRef(vm); // code.
 }
 
+saynaa_function(
+    coreLoad, "load([module:Module], path:String) -> Var",
+    "Loads and executes a script at the given [path]. "
+    "If [module] is provided, it'll be used as the module context for the "
+    "loaded script, otherwise it'll use the current module context. The return "
+    "value would be the return value of the loaded script's body.") {
+  int argc = ARGC;
+  if (argc > 2) {
+    RET_ERR(newString(vm, "Invalid argument count."));
+  }
+
+  String* path;
+  Module* current_module;
+  if (argc == 1) {
+    if (!validateArgString(vm, 1, &path))
+      return;
+
+    CallFrame* frame = &vm->fiber->frames[vm->fiber->frame_count - 1];
+    current_module = frame->closure->fn->owner;
+  } else if (argc == 2) {
+    if (!validateArgModule(vm, 1, &current_module))
+      return;
+    if (!validateArgString(vm, 2, &path))
+      return;
+  }
+  Module* new_module = newModule(vm);
+  vmPushTempRef(vm, &new_module->_super); // new_module.
+  {
+    // let global variables become available
+    VarBufferConcat(&new_module->constants, vm, &current_module->constants);
+    VarBufferConcat(&new_module->globals, vm, &current_module->globals);
+    UintBufferConcat(&new_module->global_names, vm, &current_module->global_names);
+
+    Result result = RESULT_SUCCESS;
+    const char* _path = path->data;
+    LoadScriptResult load_result = vm->config.load_script_fn(vm, _path);
+    char* source = load_result.content;
+    if (source == NULL) {
+      result = RESULT_COMPILE_ERROR;
+      if (vm->config.stderr_write != NULL) {
+        if (vm->config.use_ansi_escape) {
+          vm->config.stderr_write(vm,
+                                  "\x1b[31mError\x1b[0m loading script at \"");
+        } else {
+          vm->config.stderr_write(vm, "Error loading script at \"");
+        }
+        vm->config.stderr_write(vm, _path);
+        if (load_result.status != RESULT_SUCCESS) {
+          vm->config.stderr_write(vm, "\" (bytecode: ");
+          vm->config.stderr_write(vm, saynaa_status_message(load_result.status));
+          vm->config.stderr_write(vm, ")\n");
+        } else {
+          vm->config.stderr_write(vm, "\"\n");
+        }
+      }
+    } else {
+      if (load_result.is_bytecode) {
+        SaynaaBytecodeHeader header;
+        Result status = saynaa_bytecode_decode_header(
+            (const uint8_t*) source, SAYNAA_BYTECODE_HEADER_SIZE, &header);
+        if (status == RESULT_SUCCESS) {
+          const uint8_t* payload = (const uint8_t*) source + SAYNAA_BYTECODE_HEADER_SIZE;
+          status = saynaa_bytecode_deserialize_module(vm, new_module, payload,
+                                                      header.bytecode_size);
+        }
+
+        if (status != RESULT_SUCCESS) {
+          result = RESULT_COMPILE_ERROR;
+          if (!VM_HAS_ERROR(vm)) {
+            VM_SET_ERROR(vm, stringFormat(vm, "Bytecode deserialize failed: $",
+                                          saynaa_status_message(status), false));
+          }
+        }
+      } else {
+        CompileOptions options = newCompilerOptions();
+        options.runtime = true;
+        result = compile(vm, new_module, source, &options);
+      }
+    }
+    if (result == RESULT_SUCCESS) {
+      Var ret = VAR_NULL;
+      vmCallFunction(vm, new_module->body, 0, NULL, &ret);
+      ARG(0) = ret;
+    }
+  }
+  vmPopTempRef(vm); // new_module.
+}
+
 saynaa_function(coreDefine, "define(variable:String, value:Var) -> Null",
-                ""
                 "Define a global variable with the name [variable] and value "
                 "[value] in the current module.") {
   String* variable;
@@ -967,10 +1056,10 @@ saynaa_function(coreDefine, "define(variable:String, value:Var) -> Null",
   RET(VAR_NULL);
 }
 
-saynaa_function(coreDelete, "delete(variable:String|instance:Var) -> Null",
-                ""
-                "If [variable] is a String, delete the global variable with that name. "
-                "If it's an instance, call _del() when defined.") {
+saynaa_function(
+    coreDelete, "delete(variable:String|instance:Var) -> Null",
+    "If [variable] is a String, delete the global variable with that name. "
+    "If it's an instance, call _del() when defined.") {
   Var target = ARG(1);
   if (IS_OBJ_TYPE(target, OBJ_STRING)) {
     String* variable = (String*) AS_OBJ(target);
@@ -996,10 +1085,9 @@ saynaa_function(coreDelete, "delete(variable:String|instance:Var) -> Null",
   RET_ERR(newString(vm, "delete() expects a String or an instance."));
 }
 
-saynaa_function(
-    corePcall, "pcall(fn:Closure, ...args) -> List",
-    ""
-    "Calls function in protected mode. Returns [success, result/error].") {
+saynaa_function(corePcall, "pcall(fn:Closure, ...args) -> List",
+                "Calls function in protected mode."
+                " Returns [success, result/error].") {
   int arg_count = ARGC;
   if (arg_count < 1) {
     RET_ERR(newString(vm, "Expected at least 1 argument (the function)."));
@@ -1148,6 +1236,7 @@ static void initializeBuiltinFunctions(VM* vm) {
   INITIALIZE_BUILTIN_FN("input", coreInput, -1);
   INITIALIZE_BUILTIN_FN("exit", coreExit, -1);
   INITIALIZE_BUILTIN_FN("eval", coreEval, 1);
+  INITIALIZE_BUILTIN_FN("load", coreLoad, -1);
   INITIALIZE_BUILTIN_FN("define", coreDefine, 2);
   INITIALIZE_BUILTIN_FN("delete", coreDelete, 1);
   INITIALIZE_BUILTIN_FN("pcall", corePcall, -1);
@@ -1480,7 +1569,8 @@ saynaa_function(_objSetattr, "Object.setattr(name:String, value:Var[, skipSetter
 }
 
 saynaa_function(_objNew, "Object._new([cls:Class]) -> Var",
-                "Allocate an instance of [cls] (or this class) without calling _new/_init.") {
+                "Allocate an instance of [cls] (or this class)"
+                " without calling _new/_init.") {
   Class* cls = NULL;
   if (!CheckArgcRange(vm, ARGC, 0, 1))
     return;
@@ -1636,8 +1726,9 @@ saynaa_function(_stringRFind, "String.rfind(sub:String[, start:Number=0]) -> Num
   RET(VAR_NUM((double) (match - thiz->data)));
 }
 
-saynaa_function(_stringSub, "String.sub(start:Number[, end:Number]) -> String",
-                "Returns the substring from [start] (inclusive) to [end] (exclusive).") {
+saynaa_function(
+    _stringSub, "String.sub(start:Number[, end:Number]) -> String",
+    "Returns the substring from [start] (inclusive) to [end] (exclusive).") {
   if (!CheckArgcRange(vm, ARGC, 1, 2))
     return;
 
@@ -1771,9 +1862,8 @@ saynaa_function(_stringMatch, "String.match(sub:String[, start:Number=0]) -> Str
   RET(VAR_OBJ(newStringLength(vm, match, sub->length)));
 }
 
-saynaa_function(
-    _stringGSub, "String.gsub(old:String, new:String[, count:Number=-1]) -> String",
-    "Replace occurrences of [old] with [new].") {
+saynaa_function(_stringGSub, "String.gsub(old:String, new:String[, count:Number=-1]) -> String",
+                "Replace occurrences of [old] with [new].") {
   if (!CheckArgcRange(vm, ARGC, 2, 3))
     return;
 
@@ -1812,8 +1902,7 @@ saynaa_function(_stringGMatch, "String.gmatch(sub:String) -> List",
   const char* cursor = thiz->data;
   size_t remaining = thiz->length;
   while (remaining >= sub->length) {
-    const char* match = (const char*) utilMemMem(cursor, remaining,
-                                                 sub->data, sub->length);
+    const char* match = (const char*) utilMemMem(cursor, remaining, sub->data, sub->length);
     if (match == NULL)
       break;
     String* m = newStringLength(vm, match, sub->length);
@@ -2301,7 +2390,8 @@ static void initializePrimitiveClasses(VM* vm) {
     } \
     String* method_name = newInternedString(vm, name); \
     vmPushTempRef(vm, &method_name->_super); /* method_name. */ \
-    mapSet(vm, vm->builtin_classes[type]->method_lookup, VAR_OBJ(method_name), VAR_OBJ(method)); \
+    mapSet(vm, vm->builtin_classes[type]->method_lookup, VAR_OBJ(method_name), \
+           VAR_OBJ(method)); \
     vmPopTempRef(vm); /* method_name. */ \
     vmPopTempRef(vm); /* method. */ \
     vmPopTempRef(vm); /* fn. */ \
@@ -2539,8 +2629,7 @@ bool hasMethod(VM* vm, Var thiz, String* name, Closure** _method) {
   Class* cls = getClass(vm, thiz);
   ASSERT(cls != NULL, OOPS);
 
-  if (vm->method_cache_class == cls
-      && vm->method_cache_name == name
+  if (vm->method_cache_class == cls && vm->method_cache_name == name
       && vm->method_cache_closure != NULL) {
     *_method = vm->method_cache_closure;
     return true;
@@ -3023,9 +3112,7 @@ static int _instanceInlineAttribIndex(const Instance* inst, const String* attrib
     String* name = inst->inline_attrib_names[i];
     if (name == attrib)
       return (int) i;
-    if (name != NULL
-        && name->hash == attrib->hash
-        && name->length == attrib->length
+    if (name != NULL && name->hash == attrib->hash && name->length == attrib->length
         && memcmp(name->data, attrib->data, attrib->length) == 0) {
       return (int) i;
     }

@@ -5,11 +5,10 @@
 
 #include "saynaa.h"
 
+#include "../shared/saynaa_bytecode.h"
 #include "../shared/saynaa_common.h"
 #include "../utils/saynaa_utils.h"
 #include "argparse.h"
-
-#include "../shared/saynaa_bytecode.h"
 
 #include <stdio.h>
 
@@ -62,21 +61,19 @@ static void addScriptDirToSearchPath(VM* vm, const char* file_path) {
 }
 
 static Result prepareBytecodeInput(VM* vm, const char* file_path,
-                                   const char* output_path, bool bytecode,
-                                   bool quiet, const char** run_path,
-                                   char** bytecode_path) {
+                                   const char* output_path, bool bytecode, bool quiet,
+                                   const char** run_path, char** bytecode_path) {
   *run_path = file_path;
   *bytecode_path = NULL;
 
   if (!bytecode)
     return RESULT_SUCCESS;
 
-  bool is_bytecode = false;
-  char* loaded = LoadScriptAutoDetect(vm, file_path, &is_bytecode, NULL);
-  if (loaded != NULL)
-    Realloc(vm, loaded, 0);
+  LoadScriptResult load_result = LoadScript(vm, file_path);
+  if (load_result.content != NULL)
+    Realloc(vm, load_result.content, 0);
 
-  if (is_bytecode) {
+  if (load_result.is_bytecode) {
     if (!quiet) {
       fprintf(stderr, "Input is already bytecode.\n");
     }
@@ -148,10 +145,8 @@ int main(int argc, const char** argv) {
   ap_add_bool(parser, "ms", 'm', &millisecond, "Prints runtime millisecond.");
   ap_add_bool(parser, "bytecode", 'b', &bytecode,
               "Compile source to bytecode (no execution unless -x is set).");
-  ap_add_bool(parser, "execute", 'x', &execute,
-              "Execute the script (or bytecode if -b is set).");
-  ap_add_str(parser, "output", 'o', &output_path,
-             "Output path for bytecode when using -b.");
+  ap_add_bool(parser, "execute", 'x', &execute, "Execute the script (or bytecode if -b is set).");
+  ap_add_str(parser, "output", 'o', &output_path, "Output path for bytecode when using -b.");
 
   // Parse arguments
   int script_idx = ap_parse(parser, argc, argv);

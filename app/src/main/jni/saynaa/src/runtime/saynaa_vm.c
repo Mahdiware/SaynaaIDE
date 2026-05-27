@@ -16,8 +16,7 @@
 
 static uint32_t vmStringPoolTargetCapacity(uint32_t live_count) {
   uint32_t capacity = INTERN_POOL_INITIAL_CAPACITY;
-  while (capacity < UINT32_MAX / 2
-         && live_count * 100 > capacity * INTERN_POOL_LOAD_PERCENT) {
+  while (capacity < UINT32_MAX / 2 && live_count * 100 > capacity * INTERN_POOL_LOAD_PERCENT) {
     capacity *= 2;
   }
   return capacity;
@@ -108,8 +107,7 @@ static void vmSweepStringPool(VM* vm) {
   vm->interned_strings_count = live_count;
 }
 
-String* vmFindInternedString(VM* vm, const char* text, uint32_t length,
-                             uint32_t hash) {
+String* vmFindInternedString(VM* vm, const char* text, uint32_t length, uint32_t hash) {
   ASSERT(vm != NULL, OOPS);
   ASSERT(length == 0 || text != NULL, OOPS);
 
@@ -173,18 +171,14 @@ typedef struct {
 #define VM_METHOD_INLINE_CACHE_MASK (VM_METHOD_INLINE_CACHE_SIZE - 1u)
 #define VM_ATTRIB_INLINE_CACHE_MASK (VM_ATTRIB_INLINE_CACHE_SIZE - 1u)
 
-static inline VMMethodInlineCacheEntry* vmMethodInlineCacheAt(VM* vm,
-                                                               const uint8_t* site) {
+static inline VMMethodInlineCacheEntry* vmMethodInlineCacheAt(VM* vm, const uint8_t* site) {
   uintptr_t key = (uintptr_t) site;
-  return &vm->method_inline_cache[((key >> 2) ^ (key >> 9))
-                                  & VM_METHOD_INLINE_CACHE_MASK];
+  return &vm->method_inline_cache[((key >> 2) ^ (key >> 9)) & VM_METHOD_INLINE_CACHE_MASK];
 }
 
-static inline VMAttribInlineCacheEntry* vmAttribInlineCacheAt(VM* vm,
-                                                               const uint8_t* site) {
+static inline VMAttribInlineCacheEntry* vmAttribInlineCacheAt(VM* vm, const uint8_t* site) {
   uintptr_t key = (uintptr_t) site;
-  return &vm->attrib_inline_cache[((key >> 2) ^ (key >> 10))
-                                  & VM_ATTRIB_INLINE_CACHE_MASK];
+  return &vm->attrib_inline_cache[((key >> 2) ^ (key >> 10)) & VM_ATTRIB_INLINE_CACHE_MASK];
 }
 
 /*****************************************************************************/
@@ -325,9 +319,7 @@ void* vmRealloc(VM* vm, void* memory, size_t old_size, size_t new_size) {
       vm->bytes_allocated += new_size - old_size;
     } else {
       size_t released = old_size - new_size;
-      vm->bytes_allocated = (released >= vm->bytes_allocated)
-                                ? 0
-                                : vm->bytes_allocated - released;
+      vm->bytes_allocated = (released >= vm->bytes_allocated) ? 0 : vm->bytes_allocated - released;
     }
   }
 
@@ -695,7 +687,8 @@ static void _dlCacheFree(VM* vm, void* ptr) {
 }
 
 static NativeLibCacheEntry* _dlCacheFind(VM* vm, const char* resolved_path) {
-  for (NativeLibCacheEntry* entry = vm->native_dl_cache; entry != NULL; entry = entry->next) {
+  for (NativeLibCacheEntry* entry = vm->native_dl_cache; entry != NULL;
+       entry = entry->next) {
     if (strcmp(entry->path, resolved_path) == 0) {
       return entry;
     }
@@ -848,9 +841,12 @@ void vmUnloadDlHandle(VM* vm, void* handle) {
 /*****************************************************************************/
 
 static Module* _importScript(VM* vm, String* resolved, String* name) {
-  char* source = vm->config.load_script_fn(vm, resolved->data);
-  if (source == NULL) {
+  LoadScriptResult load_result = vm->config.load_script_fn(vm, resolved->data);
+  char* source = load_result.content;
+  if (source == NULL || load_result.status != RESULT_SUCCESS) {
     VM_SET_ERROR(vm, stringFormat(vm, "Error loading module at \"@\"", resolved));
+    if (source != NULL)
+      Realloc(vm, source, 0);
     return NULL;
   }
 
@@ -861,44 +857,26 @@ static Module* _importScript(VM* vm, String* resolved, String* name) {
 
   vmPushTempRef(vm, &module->_super); // module.
   {
-    bool is_bytecode = false;
-    bool header_seen = false;
-    SaynaaBytecodeHeader header;
-    Result status = saynaa_bytecode_decode_header(
-        (const uint8_t*) source, SAYNAA_BYTECODE_HEADER_SIZE, &header);
-    if (status == RESULT_SUCCESS) {
-      status = saynaa_bytecode_validate_header(&header, 0);
-      if (status == RESULT_BYTECODE_INVALID_MAGIC) {
-        header_seen = false;
-      } else if (status == RESULT_SUCCESS) {
-        header_seen = true;
-        const uint8_t* payload = (const uint8_t*) source
-                                 + SAYNAA_BYTECODE_HEADER_SIZE;
-        status = saynaa_bytecode_validate_checksum(&header, payload,
-                                                   header.bytecode_size);
-        if (status == RESULT_SUCCESS) {
-          status = saynaa_bytecode_validate_payload(payload, header.bytecode_size);
-          if (status == RESULT_SUCCESS) {
-            status = saynaa_bytecode_deserialize_module(vm, module, payload,
-                                                        header.bytecode_size);
-          }
-          if (status == RESULT_SUCCESS) {
-            is_bytecode = true;
-          }
-        }
-      } else {
-        header_seen = true;
-      }
-    }
-
+    bool is_bytecode = load_result.is_bytecode;
     Result result = RESULT_SUCCESS;
-    if (header_seen && !is_bytecode) {
-      result = RESULT_COMPILE_ERROR;
-    } else if (!is_bytecode) {
-      initializeModule(vm, module, false);
-      result = compile(vm, module, source, NULL);
+    if (is_bytecode) {
+      SaynaaBytecodeHeader header;
+      Result status = saynaa_bytecode_decode_header(
+          (const uint8_t*) source, SAYNAA_BYTECODE_HEADER_SIZE, &header);
+      if (status == RESULT_SUCCESS) {
+        const uint8_t* payload = (const uint8_t*) source + SAYNAA_BYTECODE_HEADER_SIZE;
+        status = saynaa_bytecode_deserialize_module(vm, module, payload, header.bytecode_size);
+      }
+
+      if (status != RESULT_SUCCESS) {
+        result = RESULT_COMPILE_ERROR;
+        VM_SET_ERROR(vm, stringFormat(vm, "Error compiling module at \"@\"", resolved));
+      } else {
+        initializeModule(vm, module, false);
+      }
     } else {
       initializeModule(vm, module, false);
+      result = compile(vm, module, source, NULL);
     }
 
     Realloc(vm, source, 0);
@@ -906,7 +884,9 @@ static Module* _importScript(VM* vm, String* resolved, String* name) {
     if (result == RESULT_SUCCESS) {
       vmRegisterModule(vm, module, resolved);
     } else {
-      VM_SET_ERROR(vm, stringFormat(vm, "Error compiling module at \"@\"", resolved));
+      if (!VM_HAS_ERROR(vm)) {
+        VM_SET_ERROR(vm, stringFormat(vm, "Error compiling module at \"@\"", resolved));
+      }
       module = NULL; //< set to null to indicate error.
     }
   }
@@ -1005,8 +985,7 @@ static Map* _getImportResolveBucket(VM* vm, Var from_key, bool create) {
   return bucket;
 }
 
-static bool _resolvePathCacheGet(VM* vm, Var from_key, String* path,
-                                 String** resolved) {
+static bool _resolvePathCacheGet(VM* vm, Var from_key, String* path, String** resolved) {
   Map* bucket = _getImportResolveBucket(vm, from_key, false);
   if (bucket == NULL)
     return false;
@@ -1025,8 +1004,7 @@ static bool _resolvePathCacheGet(VM* vm, Var from_key, String* path,
   return true;
 }
 
-static void _resolvePathCacheSet(VM* vm, Var from_key, String* path,
-                                 String* resolved) {
+static void _resolvePathCacheSet(VM* vm, Var from_key, String* path, String* resolved) {
   if (vm->import_resolve_cache_entries >= vm->import_resolve_cache_limit) {
     ClearImportResolveCache(vm);
   }
@@ -1046,8 +1024,8 @@ static void _resolvePathCacheSet(VM* vm, Var from_key, String* path,
     vm->import_resolve_cache_entries++;
 }
 
-static String* _resolvePathWithCache(VM* vm, Var from_key, const char* from_path,
-                                     String* path) {
+static String* _resolvePathWithCache(VM* vm, Var from_key,
+                                     const char* from_path, String* path) {
   String* resolved = NULL;
   if (_resolvePathCacheGet(vm, from_key, path, &resolved)) {
     return resolved;
@@ -1519,9 +1497,9 @@ Result vmRunFiber(VM* vm, Fiber* fiber_) {
 #endif
 
 #if (defined(__GNUC__) || defined(__clang__)) && !defined(NO_COMPUTED_GOTO)
-    #define USE_COMPUTED_GOTO 1
+#define USE_COMPUTED_GOTO 1
 #else
-    #define USE_COMPUTED_GOTO 0
+#define USE_COMPUTED_GOTO 0
 #endif
 
   Opcode instruction;
@@ -1531,7 +1509,7 @@ Result vmRunFiber(VM* vm, Fiber* fiber_) {
 #define DISPATCH() \
   do { \
     instruction = (Opcode) READ_BYTE(); \
-    goto *dispatch_table[instruction]; \
+    goto* dispatch_table[instruction]; \
   } while (false)
 #else
 #define OPCODE(CODE) case OP_##CODE
@@ -1572,625 +1550,584 @@ L_vm_main_loop:
 #else
   switch (instruction = (Opcode) READ_BYTE()) {
 #endif
-    OPCODE(PUSH_CONSTANT) : {
-      uint16_t index = READ_SHORT();
-      ASSERT_INDEX(index, module->constants.count);
-      PUSH(module->constants.data[index]);
-      DISPATCH();
-    }
-
-    OPCODE(PUSH_NULL) : PUSH(VAR_NULL);
+  OPCODE(PUSH_CONSTANT) : {
+    uint16_t index = READ_SHORT();
+    ASSERT_INDEX(index, module->constants.count);
+    PUSH(module->constants.data[index]);
     DISPATCH();
+  }
 
-    OPCODE(PUSH_0) : PUSH(VAR_NUM(0));
+  OPCODE(PUSH_NULL) : PUSH(VAR_NULL);
+  DISPATCH();
+
+  OPCODE(PUSH_0) : PUSH(VAR_NUM(0));
+  DISPATCH();
+
+  OPCODE(PUSH_TRUE) : PUSH(VAR_TRUE);
+  DISPATCH();
+
+  OPCODE(PUSH_FALSE) : PUSH(VAR_FALSE);
+  DISPATCH();
+
+  OPCODE(SWAP) : {
+    Var tmp = *(fiber->sp - 1);
+    *(fiber->sp - 1) = *(fiber->sp - 2);
+    *(fiber->sp - 2) = tmp;
     DISPATCH();
+  }
 
-    OPCODE(PUSH_TRUE) : PUSH(VAR_TRUE);
+  OPCODE(DUP) : {
+    PUSH(*(fiber->sp - 1));
     DISPATCH();
+  }
 
-    OPCODE(PUSH_FALSE) : PUSH(VAR_FALSE);
+  OPCODE(PUSH_LIST) : {
+    List* list = newList(vm, (uint32_t) READ_SHORT());
+    PUSH(VAR_OBJ(list));
     DISPATCH();
+  }
 
-    OPCODE(SWAP) : {
-      Var tmp = *(fiber->sp - 1);
-      *(fiber->sp - 1) = *(fiber->sp - 2);
-      *(fiber->sp - 2) = tmp;
-      DISPATCH();
+  OPCODE(PUSH_MAP) : {
+    Map* map = newMap(vm);
+    PUSH(VAR_OBJ(map));
+    DISPATCH();
+  }
+
+  OPCODE(PUSH_THIS) : {
+    PUSH(*thiz);
+    DISPATCH();
+  }
+
+  OPCODE(LIST_APPEND) : {
+    Var elem = PEEK(-1); // Don't pop yet, we need the reference for gc.
+    Var list = PEEK(-2);
+    ASSERT(IS_OBJ_TYPE(list, OBJ_LIST), OOPS);
+    VarBufferWrite(&((List*) AS_OBJ(list))->elements, vm, elem);
+    DROP(); // elem
+    DISPATCH();
+  }
+
+  OPCODE(MAP_INSERT) : {
+    Var value = PEEK(-1); // Don't pop yet, we need the reference for gc.
+    Var key = PEEK(-2);   // Don't pop yet, we need the reference for gc.
+    Var on = PEEK(-3);
+
+    ASSERT(IS_OBJ_TYPE(on, OBJ_MAP), OOPS);
+
+    if (IS_OBJ(key) && !isObjectHashable(AS_OBJ(key)->type)) {
+      RUNTIME_ERROR(stringFormat(vm, "$ type is not hashable.", varTypeName(key)));
+    }
+    mapSet(vm, (Map*) AS_OBJ(on), key, value);
+
+    DROP(); // value
+    DROP(); // key
+
+    DISPATCH();
+  }
+
+  OPCODE(MAP_APPEND) : {
+    Var value = PEEK(-1); // Don't pop yet, we need the reference for gc.
+    Var on = PEEK(-2);
+
+    ASSERT(IS_OBJ_TYPE(on, OBJ_MAP), OOPS);
+
+    Map* map = (Map*) AS_OBJ(on);
+    Var key = VAR_NUM((double) map->next_index);
+    mapSet(vm, map, key, value);
+
+    DROP(); // value
+
+    DISPATCH();
+  }
+
+  OPCODE(PUSH_LOCAL_0) :
+      OPCODE(PUSH_LOCAL_1) :
+      OPCODE(PUSH_LOCAL_2) :
+      OPCODE(PUSH_LOCAL_3) :
+      OPCODE(PUSH_LOCAL_4) :
+      OPCODE(PUSH_LOCAL_5) :
+      OPCODE(PUSH_LOCAL_6) : OPCODE(PUSH_LOCAL_7) : OPCODE(PUSH_LOCAL_8) : {
+    int index = (int) (instruction - OP_PUSH_LOCAL_0);
+    PUSH(rbp[index + 1]); // +1: rbp[0] is return value.
+    DISPATCH();
+  }
+  OPCODE(PUSH_LOCAL_N) : {
+    uint16_t index = READ_SHORT();
+    PUSH(rbp[index + 1]); // +1: rbp[0] is return value.
+    DISPATCH();
+  }
+
+  OPCODE(STORE_LOCAL_0) :
+      OPCODE(STORE_LOCAL_1) :
+      OPCODE(STORE_LOCAL_2) :
+      OPCODE(STORE_LOCAL_3) :
+      OPCODE(STORE_LOCAL_4) :
+      OPCODE(STORE_LOCAL_5) :
+      OPCODE(STORE_LOCAL_6) : OPCODE(STORE_LOCAL_7) : OPCODE(STORE_LOCAL_8) : {
+    int index = (int) (instruction - OP_STORE_LOCAL_0);
+    rbp[index + 1] = PEEK(-1); // +1: rbp[0] is return value.
+    DISPATCH();
+  }
+  OPCODE(STORE_LOCAL_N) : {
+    uint16_t index = READ_SHORT();
+    rbp[index + 1] = PEEK(-1); // +1: rbp[0] is return value.
+    DISPATCH();
+  }
+
+  OPCODE(PUSH_GLOBAL) : {
+    uint16_t index = READ_SHORT();
+    ASSERT_INDEX(index, module->globals.count);
+    PUSH(module->globals.data[index]);
+    DISPATCH();
+  }
+
+  OPCODE(PUSH_GLOBAL_NAME) : {
+    uint16_t name_index = READ_SHORT();
+    String* name = moduleGetStringAt(module, (int) name_index);
+    if (name == NULL) {
+      RUNTIME_ERROR(stringFormat(vm, "Invalid global name in module data."));
     }
 
-    OPCODE(DUP) : {
-      PUSH(*(fiber->sp - 1));
-      DISPATCH();
-    }
-
-    OPCODE(PUSH_LIST) : {
-      List* list = newList(vm, (uint32_t) READ_SHORT());
-      PUSH(VAR_OBJ(list));
-      DISPATCH();
-    }
-
-    OPCODE(PUSH_MAP) : {
-      Map* map = newMap(vm);
-      PUSH(VAR_OBJ(map));
-      DISPATCH();
-    }
-
-    OPCODE(PUSH_THIS) : {
-      PUSH(*thiz);
-      DISPATCH();
-    }
-
-    OPCODE(LIST_APPEND) : {
-      Var elem = PEEK(-1); // Don't pop yet, we need the reference for gc.
-      Var list = PEEK(-2);
-      ASSERT(IS_OBJ_TYPE(list, OBJ_LIST), OOPS);
-      VarBufferWrite(&((List*) AS_OBJ(list))->elements, vm, elem);
-      DROP(); // elem
-      DISPATCH();
-    }
-
-    OPCODE(MAP_INSERT) : {
-      Var value = PEEK(-1); // Don't pop yet, we need the reference for gc.
-      Var key = PEEK(-2);   // Don't pop yet, we need the reference for gc.
-      Var on = PEEK(-3);
-
-      ASSERT(IS_OBJ_TYPE(on, OBJ_MAP), OOPS);
-
-      if (IS_OBJ(key) && !isObjectHashable(AS_OBJ(key)->type)) {
-        RUNTIME_ERROR(stringFormat(vm, "$ type is not hashable.", varTypeName(key)));
-      }
-      mapSet(vm, (Map*) AS_OBJ(on), key, value);
-
-      DROP(); // value
-      DROP(); // key
-
-      DISPATCH();
-    }
-
-    OPCODE(MAP_APPEND) : {
-      Var value = PEEK(-1); // Don't pop yet, we need the reference for gc.
-      Var on = PEEK(-2);
-
-      ASSERT(IS_OBJ_TYPE(on, OBJ_MAP), OOPS);
-
-      Map* map = (Map*) AS_OBJ(on);
-      Var key = VAR_NUM((double) map->next_index);
-      mapSet(vm, map, key, value);
-
-      DROP(); // value
-
-      DISPATCH();
-    }
-
-    OPCODE(PUSH_LOCAL_0) :
-        OPCODE(PUSH_LOCAL_1) :
-        OPCODE(PUSH_LOCAL_2) :
-        OPCODE(PUSH_LOCAL_3) :
-        OPCODE(PUSH_LOCAL_4) :
-        OPCODE(PUSH_LOCAL_5) :
-        OPCODE(PUSH_LOCAL_6) : OPCODE(PUSH_LOCAL_7) : OPCODE(PUSH_LOCAL_8) : {
-      int index = (int) (instruction - OP_PUSH_LOCAL_0);
-      PUSH(rbp[index + 1]); // +1: rbp[0] is return value.
-      DISPATCH();
-    }
-    OPCODE(PUSH_LOCAL_N) : {
-      uint16_t index = READ_SHORT();
-      PUSH(rbp[index + 1]); // +1: rbp[0] is return value.
-      DISPATCH();
-    }
-
-    OPCODE(STORE_LOCAL_0) :
-        OPCODE(STORE_LOCAL_1) :
-        OPCODE(STORE_LOCAL_2) :
-        OPCODE(STORE_LOCAL_3) :
-        OPCODE(STORE_LOCAL_4) :
-        OPCODE(STORE_LOCAL_5) :
-        OPCODE(STORE_LOCAL_6) :
-        OPCODE(STORE_LOCAL_7) : OPCODE(STORE_LOCAL_8) : {
-      int index = (int) (instruction - OP_STORE_LOCAL_0);
-      rbp[index + 1] = PEEK(-1); // +1: rbp[0] is return value.
-      DISPATCH();
-    }
-    OPCODE(STORE_LOCAL_N) : {
-      uint16_t index = READ_SHORT();
-      rbp[index + 1] = PEEK(-1); // +1: rbp[0] is return value.
-      DISPATCH();
-    }
-
-    OPCODE(PUSH_GLOBAL) : {
-      uint16_t index = READ_SHORT();
-      ASSERT_INDEX(index, module->globals.count);
-      PUSH(module->globals.data[index]);
-      DISPATCH();
-    }
-
-    OPCODE(PUSH_GLOBAL_NAME) : {
-      uint16_t name_index = READ_SHORT();
-      String* name = moduleGetStringAt(module, (int) name_index);
-      if (name == NULL) {
-        RUNTIME_ERROR(stringFormat(vm, "Invalid global name in module data."));
-      }
-
-      int g_index = moduleGetGlobalIndexByName(vm, module, name);
-      if (g_index == -1) {
-        int missing_index = moduleGetGlobalIndex(module, LITS__missing,
-                                                 (uint32_t) strlen(LITS__missing));
-        if (missing_index != -1) {
-          Var missing = module->globals.data[missing_index];
-          if (IS_OBJ_TYPE(missing, OBJ_CLOSURE)) {
-            Var args[1] = { VAR_OBJ(name) };
-            Var result = VAR_NULL;
-            Result call_result = vmCallFunction(vm, (Closure*) AS_OBJ(missing),
-                                                1, args, &result);
-            if (call_result != RESULT_SUCCESS) {
-              CHECK_ERROR();
-            }
-            if (!IS_NULL(result) && !IS_UNDEF(result)) {
-              PUSH(result);
-              DISPATCH();
-            }
+    int g_index = moduleGetGlobalIndexByName(vm, module, name);
+    if (g_index == -1) {
+      int missing_index = moduleGetGlobalIndex(module, LITS__missing,
+                                               (uint32_t) strlen(LITS__missing));
+      if (missing_index != -1) {
+        Var missing = module->globals.data[missing_index];
+        if (IS_OBJ_TYPE(missing, OBJ_CLOSURE)) {
+          Var args[1] = {VAR_OBJ(name)};
+          Var result = VAR_NULL;
+          Result call_result = vmCallFunction(vm, (Closure*) AS_OBJ(missing), 1,
+                                              args, &result);
+          if (call_result != RESULT_SUCCESS) {
+            CHECK_ERROR();
+          }
+          if (!IS_NULL(result) && !IS_UNDEF(result)) {
+            PUSH(result);
+            DISPATCH();
           }
         }
-
-        RUNTIME_ERROR(stringFormat(vm, "Name '@' is not defined.", name));
       }
 
-      PUSH(module->globals.data[g_index]);
-      DISPATCH();
+      RUNTIME_ERROR(stringFormat(vm, "Name '@' is not defined.", name));
     }
 
-    OPCODE(STORE_GLOBAL) : {
-      uint16_t index = READ_SHORT();
-      ASSERT_INDEX(index, module->globals.count);
-      module->globals.data[index] = PEEK(-1);
-      DISPATCH();
-    }
-
-    OPCODE(STORE_GLOBAL_NAME) : {
-      uint16_t name_index = READ_SHORT();
-      String* name = moduleGetStringAt(module, (int) name_index);
-      if (name == NULL) {
-        RUNTIME_ERROR(stringFormat(vm, "Invalid global name in module data."));
-      }
-      moduleSetGlobal(vm, module, name->data, name->length, PEEK(-1));
-      DISPATCH();
-    }
-
-    OPCODE(PUSH_BUILTIN_FN) : {
-      uint8_t index = READ_BYTE();
-      ASSERT_INDEX(index, vm->builtins_count);
-      Closure* closure = vm->builtins_funcs[index];
-      PUSH(VAR_OBJ(closure));
-      DISPATCH();
-    }
-
-    OPCODE(PUSH_BUILTIN_TY) : {
-      uint8_t index = READ_BYTE();
-      ASSERT_INDEX(index, vINSTANCE);
-      Class* cls = vm->builtin_classes[index];
-      PUSH(VAR_OBJ(cls));
-      DISPATCH();
-    }
-
-    OPCODE(PUSH_UPVALUE) : {
-      uint16_t index = READ_SHORT();
-      PUSH(*(frame->closure->upvalues[index]->ptr));
-      DISPATCH();
-    }
-
-    OPCODE(STORE_UPVALUE) : {
-      uint16_t index = READ_SHORT();
-      *(frame->closure->upvalues[index]->ptr) = PEEK(-1);
-      DISPATCH();
-    }
-
-    OPCODE(PUSH_CLOSURE) : {
-      uint16_t index = READ_SHORT();
-      ASSERT_INDEX(index, module->constants.count);
-      ASSERT(IS_OBJ_TYPE(module->constants.data[index], OBJ_FUNC), OOPS);
-      Function* fn = (Function*) AS_OBJ(module->constants.data[index]);
-
-      Closure* closure = newClosure(vm, fn);
-      vmPushTempRef(vm, &closure->_super); // closure.
-
-      // Capture the vaupes.
-      for (int i = 0; i < fn->upvalue_count; i++) {
-        uint8_t is_immediate = READ_BYTE();
-        uint16_t idx = READ_SHORT();
-
-        if (is_immediate) {
-          // rbp[0] is the return value, rbp + 1 is the first local and so on.
-          closure->upvalues[i] = captureUpvalue(vm, fiber, (rbp + 1 + idx));
-        } else {
-          // The upvalue is already captured by the current function, reuse it.
-          closure->upvalues[i] = frame->closure->upvalues[idx];
-        }
-      }
-
-      PUSH(VAR_OBJ(closure));
-      vmPopTempRef(vm); // closure.
-
-      DISPATCH();
-    }
-
-    OPCODE(CREATE_CLASS) : {
-      Var cls = POP();
-      if (!IS_OBJ_TYPE(cls, OBJ_CLASS)) {
-        RUNTIME_ERROR(newString(vm, "Cannot inherit a non class object."));
-      }
-
-      Class* base = (Class*) AS_OBJ(cls);
-
-      // All Builtin type class except for Object are "final" ie. cannot
-      // be inherited from.
-      if (base->class_of != vINSTANCE && base->class_of != vOBJECT) {
-        RUNTIME_ERROR(stringFormat(vm, "$ type cannot be inherited.",
-                                   getVarTypeName(base->class_of)));
-      }
-
-      uint16_t index = READ_SHORT();
-      ASSERT_INDEX(index, module->constants.count);
-      ASSERT(IS_OBJ_TYPE(module->constants.data[index], OBJ_CLASS), OOPS);
-
-      Class* drived = (Class*) AS_OBJ(module->constants.data[index]);
-      drived->super_class = base;
-
-      PUSH(VAR_OBJ(drived));
-      DISPATCH();
-    }
-
-    OPCODE(BIND_METHOD) : {
-      ASSERT(IS_OBJ_TYPE(PEEK(-1), OBJ_CLOSURE), OOPS);
-      ASSERT(IS_OBJ_TYPE(PEEK(-2), OBJ_CLASS), OOPS);
-
-      Closure* method = (Closure*) AS_OBJ(PEEK(-1));
-      Class* cls = (Class*) AS_OBJ(PEEK(-2));
-
-      bindMethod(vm, cls, method);
-
-      DROP();
-      DISPATCH();
-    }
-
-    OPCODE(CLOSE_UPVALUE) : {
-      closeUpvalues(fiber, fiber->sp - 1);
-      DROP();
-      DISPATCH();
-    }
-
-    OPCODE(POP) : DROP();
+    PUSH(module->globals.data[g_index]);
     DISPATCH();
+  }
 
-    OPCODE(IMPORT_WILDCARD) : {
-      uint16_t index = READ_SHORT();
-      String* import_path = moduleGetStringAt(module, (int) index);
-      ASSERT(import_path != NULL, OOPS);
+  OPCODE(STORE_GLOBAL) : {
+    uint16_t index = READ_SHORT();
+    ASSERT_INDEX(index, module->globals.count);
+    module->globals.data[index] = PEEK(-1);
+    DISPATCH();
+  }
 
-      String* current_path = module->path;
-      // In REPL or some contexts, current_path might be NULL.
-      // Default to "." if NULL.
-      const char* base_path = (current_path != NULL) ? current_path->data : ".";
+  OPCODE(STORE_GLOBAL_NAME) : {
+    uint16_t name_index = READ_SHORT();
+    String* name = moduleGetStringAt(module, (int) name_index);
+    if (name == NULL) {
+      RUNTIME_ERROR(stringFormat(vm, "Invalid global name in module data."));
+    }
+    moduleSetGlobal(vm, module, name->data, name->length, PEEK(-1));
+    DISPATCH();
+  }
 
-      char search_path[MAX_PATH_LEN];
+  OPCODE(PUSH_BUILTIN_FN) : {
+    uint8_t index = READ_BYTE();
+    ASSERT_INDEX(index, vm->builtins_count);
+    Closure* closure = vm->builtins_funcs[index];
+    PUSH(VAR_OBJ(closure));
+    DISPATCH();
+  }
 
-      // Convert import path to a filesystem path for directory walking only.
-      // Keep `import_path` unchanged so custom searchers still receive
-      // the original dotted module path.
-      char import_path_fs[MAX_PATH_LEN];
-      wildcardImportToFsPath(import_path, import_path_fs, sizeof(import_path_fs));
+  OPCODE(PUSH_BUILTIN_TY) : {
+    uint8_t index = READ_BYTE();
+    ASSERT_INDEX(index, vINSTANCE);
+    Class* cls = vm->builtin_classes[index];
+    PUSH(VAR_OBJ(cls));
+    DISPATCH();
+  }
 
-      utilResolvePath(search_path, MAX_PATH_LEN, base_path, import_path_fs);
+  OPCODE(PUSH_UPVALUE) : {
+    uint16_t index = READ_SHORT();
+    PUSH(*(frame->closure->upvalues[index]->ptr));
+    DISPATCH();
+  }
 
-      VarBuffer modules;
-      VarBufferInit(&modules);
+  OPCODE(STORE_UPVALUE) : {
+    uint16_t index = READ_SHORT();
+    *(frame->closure->upvalues[index]->ptr) = PEEK(-1);
+    DISPATCH();
+  }
 
-      WildcardImportRuntimeData data;
-      data.vm = vm;
-      data.base_ptr = import_path;
-      data.current_ptr = current_path; // Keep as is, vmImportModule handles NULL?
-      data.modules = &modules;
-      data.target_module = module;
+  OPCODE(PUSH_CLOSURE) : {
+    uint16_t index = READ_SHORT();
+    ASSERT_INDEX(index, module->constants.count);
+    ASSERT(IS_OBJ_TYPE(module->constants.data[index], OBJ_FUNC), OOPS);
+    Function* fn = (Function*) AS_OBJ(module->constants.data[index]);
 
-      // Update frame before external call to ensure IP is saved (for GC safety).
-      UPDATE_FRAME();
+    Closure* closure = newClosure(vm, fn);
+    vmPushTempRef(vm, &closure->_super); // closure.
 
-      bool success = utilWalkDirectory(search_path, SAYNAA_FILE_EXT,
-                                       wildcardRuntimeCallback, &data);
-      if (!success) {
-        // Not a directory? Try single module import.
-        // Pass the ORIGINAL import path (e.g. "path.to.module"), NOT proper path.
-        Var imported = vmImportModule(vm, current_path, import_path);
-        if (IS_OBJ_TYPE(imported, OBJ_MODULE)) {
-          VarBufferWrite(&modules, vm, imported);
-        } else {
-          // If failed, an error is already set by vmImportModule.
-          // We should bail out to report it.
-          CHECK_ERROR();
-        }
+    // Capture the vaupes.
+    for (int i = 0; i < fn->upvalue_count; i++) {
+      uint8_t is_immediate = READ_BYTE();
+      uint16_t idx = READ_SHORT();
+
+      if (is_immediate) {
+        // rbp[0] is the return value, rbp + 1 is the first local and so on.
+        closure->upvalues[i] = captureUpvalue(vm, fiber, (rbp + 1 + idx));
+      } else {
+        // The upvalue is already captured by the current function, reuse it.
+        closure->upvalues[i] = frame->closure->upvalues[idx];
       }
-
-      // 1. Check for uninitialized modules and run them ONE BY ONE.
-      // This uses a "rewind and retry" strategy to handle recursion and stack safely.
-      for (int i = 0; i < modules.count; i++) {
-        Module* imported = (Module*) AS_OBJ(modules.data[i]);
-        if (!imported->initialized) {
-          imported->initialized = true;
-          ASSERT(imported->body != NULL, OOPS);
-
-          // Push the module to reserve a slot for the return value.
-          PUSH(VAR_OBJ(imported));
-          fiber->ret = fiber->sp - 1;
-
-          pushCallFrame(vm, imported->body);
-
-          // Rewind IP of the current frame so we execute this IMPORT_WILDCARD instruction
-          // again when the module returns.
-          // 3 bytes = 1 (OP_IMPORT_WILDCARD) + 2 (SHORT index)
-          frame->ip -= 3;
-
-          // Load the new frame and run it.
-          LOAD_FRAME();
-          CHECK_ERROR();
-
-          VarBufferClear(&modules, vm);
-          DISPATCH();
-          // The VM will now execute the imported module.
-          // When it returns, it will resume THIS frame at the rewound IP.
-        }
-      }
-
-      // 2. If we reach here, all modules are initialized. Now import their symbols.
-      for (int i = 0; i < modules.count; i++) {
-        Module* imported = (Module*) AS_OBJ(modules.data[i]);
-
-        // Copy public globals from imported module to current module
-        for (uint32_t j = 0; j < imported->global_names.count; j++) {
-          uint32_t name_idx = imported->global_names.data[j];
-          ASSERT(name_idx < imported->constants.count, OOPS);
-
-          String* name = moduleGetStringAt(imported, (int) name_idx);
-          if (name == NULL) {
-            continue;
-          }
-
-          // Skip internal/private names (starting with @ or _)
-          if (name->length > 0 && (name->data[0] == '@' || name->data[0] == '_')) {
-            continue;
-          }
-
-          // Re-fetch the global value from the module's globals buffer
-          // Note: The index in 'globals' matches the index in 'global_names' (j)
-          Var value = imported->globals.data[j];
-          moduleSetGlobal(vm, module, name->data, name->length, value);
-        }
-      }
-
-      // Reload frame (just in case)
-      LOAD_FRAME();
-
-      VarBufferClear(&modules, vm);
-      DISPATCH();
     }
 
-    OPCODE(IMPORT) : {
-      uint16_t index = READ_SHORT();
-      String* name = moduleGetStringAt(module, (int) index);
-      if (name == NULL) {
-        RUNTIME_ERROR(stringFormat(vm, "Invalid import name in module data."));
+    PUSH(VAR_OBJ(closure));
+    vmPopTempRef(vm); // closure.
+
+    DISPATCH();
+  }
+
+  OPCODE(CREATE_CLASS) : {
+    Var cls = POP();
+    if (!IS_OBJ_TYPE(cls, OBJ_CLASS)) {
+      RUNTIME_ERROR(newString(vm, "Cannot inherit a non class object."));
+    }
+
+    Class* base = (Class*) AS_OBJ(cls);
+
+    // All Builtin type class except for Object are "final" ie. cannot
+    // be inherited from.
+    if (base->class_of != vINSTANCE && base->class_of != vOBJECT) {
+      RUNTIME_ERROR(stringFormat(vm, "$ type cannot be inherited.",
+                                 getVarTypeName(base->class_of)));
+    }
+
+    uint16_t index = READ_SHORT();
+    ASSERT_INDEX(index, module->constants.count);
+    ASSERT(IS_OBJ_TYPE(module->constants.data[index], OBJ_CLASS), OOPS);
+
+    Class* drived = (Class*) AS_OBJ(module->constants.data[index]);
+    drived->super_class = base;
+
+    PUSH(VAR_OBJ(drived));
+    DISPATCH();
+  }
+
+  OPCODE(BIND_METHOD) : {
+    ASSERT(IS_OBJ_TYPE(PEEK(-1), OBJ_CLOSURE), OOPS);
+    ASSERT(IS_OBJ_TYPE(PEEK(-2), OBJ_CLASS), OOPS);
+
+    Closure* method = (Closure*) AS_OBJ(PEEK(-1));
+    Class* cls = (Class*) AS_OBJ(PEEK(-2));
+
+    bindMethod(vm, cls, method);
+
+    DROP();
+    DISPATCH();
+  }
+
+  OPCODE(CLOSE_UPVALUE) : {
+    closeUpvalues(fiber, fiber->sp - 1);
+    DROP();
+    DISPATCH();
+  }
+
+  OPCODE(POP) : DROP();
+  DISPATCH();
+
+  OPCODE(IMPORT_WILDCARD) : {
+    uint16_t index = READ_SHORT();
+    String* import_path = moduleGetStringAt(module, (int) index);
+    ASSERT(import_path != NULL, OOPS);
+
+    String* current_path = module->path;
+    // In REPL or some contexts, current_path might be NULL.
+    // Default to "." if NULL.
+    const char* base_path = (current_path != NULL) ? current_path->data : ".";
+
+    char search_path[MAX_PATH_LEN];
+
+    // Convert import path to a filesystem path for directory walking only.
+    // Keep `import_path` unchanged so custom searchers still receive
+    // the original dotted module path.
+    char import_path_fs[MAX_PATH_LEN];
+    wildcardImportToFsPath(import_path, import_path_fs, sizeof(import_path_fs));
+
+    utilResolvePath(search_path, MAX_PATH_LEN, base_path, import_path_fs);
+
+    VarBuffer modules;
+    VarBufferInit(&modules);
+
+    WildcardImportRuntimeData data;
+    data.vm = vm;
+    data.base_ptr = import_path;
+    data.current_ptr = current_path; // Keep as is, vmImportModule handles NULL?
+    data.modules = &modules;
+    data.target_module = module;
+
+    // Update frame before external call to ensure IP is saved (for GC safety).
+    UPDATE_FRAME();
+
+    bool success = utilWalkDirectory(search_path, SAYNAA_FILE_EXT,
+                                     wildcardRuntimeCallback, &data);
+    if (!success) {
+      // Not a directory? Try single module import.
+      // Pass the ORIGINAL import path (e.g. "path.to.module"), NOT proper path.
+      Var imported = vmImportModule(vm, current_path, import_path);
+      if (IS_OBJ_TYPE(imported, OBJ_MODULE)) {
+        VarBufferWrite(&modules, vm, imported);
+      } else {
+        // If failed, an error is already set by vmImportModule.
+        // We should bail out to report it.
+        CHECK_ERROR();
+      }
+    }
+
+    // 1. Check for uninitialized modules and run them ONE BY ONE.
+    // This uses a "rewind and retry" strategy to handle recursion and stack safely.
+    for (int i = 0; i < modules.count; i++) {
+      Module* imported = (Module*) AS_OBJ(modules.data[i]);
+      if (!imported->initialized) {
+        imported->initialized = true;
+        ASSERT(imported->body != NULL, OOPS);
+
+        // Push the module to reserve a slot for the return value.
+        PUSH(VAR_OBJ(imported));
+        fiber->ret = fiber->sp - 1;
+
+        pushCallFrame(vm, imported->body);
+
+        // Rewind IP of the current frame so we execute this IMPORT_WILDCARD instruction
+        // again when the module returns.
+        // 3 bytes = 1 (OP_IMPORT_WILDCARD) + 2 (SHORT index)
+        frame->ip -= 3;
+
+        // Load the new frame and run it.
+        LOAD_FRAME();
+        CHECK_ERROR();
+
+        VarBufferClear(&modules, vm);
+        DISPATCH();
+        // The VM will now execute the imported module.
+        // When it returns, it will resume THIS frame at the rewound IP.
+      }
+    }
+
+    // 2. If we reach here, all modules are initialized. Now import their symbols.
+    for (int i = 0; i < modules.count; i++) {
+      Module* imported = (Module*) AS_OBJ(modules.data[i]);
+
+      // Copy public globals from imported module to current module
+      for (uint32_t j = 0; j < imported->global_names.count; j++) {
+        uint32_t name_idx = imported->global_names.data[j];
+        ASSERT(name_idx < imported->constants.count, OOPS);
+
+        String* name = moduleGetStringAt(imported, (int) name_idx);
+        if (name == NULL) {
+          continue;
+        }
+
+        // Skip internal/private names (starting with @ or _)
+        if (name->length > 0 && (name->data[0] == '@' || name->data[0] == '_')) {
+          continue;
+        }
+
+        // Re-fetch the global value from the module's globals buffer
+        // Note: The index in 'globals' matches the index in 'global_names' (j)
+        Var value = imported->globals.data[j];
+        moduleSetGlobal(vm, module, name->data, name->length, value);
+      }
+    }
+
+    // Reload frame (just in case)
+    LOAD_FRAME();
+
+    VarBufferClear(&modules, vm);
+    DISPATCH();
+  }
+
+  OPCODE(IMPORT) : {
+    uint16_t index = READ_SHORT();
+    String* name = moduleGetStringAt(module, (int) index);
+    if (name == NULL) {
+      RUNTIME_ERROR(stringFormat(vm, "Invalid import name in module data."));
+    }
+
+    // Regular import bytecode is followed by STORE_GLOBAL for the imported
+    // symbol. For handled imports (true), we bind from that target global slot.
+    bool has_target_global = false;
+    uint16_t target_global_index = 0;
+    if ((Opcode) (*ip) == OP_STORE_GLOBAL) {
+      target_global_index = (uint16_t) ((ip[1] << 8) | ip[2]);
+      ASSERT_INDEX(target_global_index, module->globals.count);
+      has_target_global = true;
+    }
+
+    Var _imported = vmImportModule(vm, module->path, name);
+    CHECK_ERROR();
+
+    // If a searcher returned true, it means "handled".
+    // In this mode, true is only a sentinel and import value is read from
+    // the target global slot (supports null values set by define()).
+    if (IS_BOOL(_imported) && AS_BOOL(_imported) == true) {
+      if (!has_target_global && (Opcode) (*ip) != OP_STORE_GLOBAL_NAME) {
+        RUNTIME_ERROR(stringFormat(vm,
+                                   "Invalid import instruction state for '@': "
+                                   "missing STORE_GLOBAL target.",
+                                   name));
       }
 
-      // Regular import bytecode is followed by STORE_GLOBAL for the imported symbol.
-      // For handled imports (true), we bind from that target global slot.
-      bool has_target_global = false;
-      uint16_t target_global_index = 0;
       if ((Opcode) (*ip) == OP_STORE_GLOBAL) {
-        target_global_index = (uint16_t) ((ip[1] << 8) | ip[2]);
-        ASSERT_INDEX(target_global_index, module->globals.count);
-        has_target_global = true;
-      }
+        _imported = module->globals.data[target_global_index];
 
-      Var _imported = vmImportModule(vm, module->path, name);
-      CHECK_ERROR();
-
-      // If a searcher returned true, it means "handled".
-      // In this mode, true is only a sentinel and import value is read from
-      // the target global slot (supports null values set by define()).
-      if (IS_BOOL(_imported) && AS_BOOL(_imported) == true) {
-        if (!has_target_global && (Opcode) (*ip) != OP_STORE_GLOBAL_NAME) {
-          RUNTIME_ERROR(stringFormat(vm,
-                                     "Invalid import instruction state for '@': "
-                                     "missing STORE_GLOBAL target.",
-                                     name));
+      } else if ((Opcode) (*ip) == OP_STORE_GLOBAL_NAME) {
+        uint16_t name_index = (uint16_t) ((ip[1] << 8) | ip[2]);
+        String* gname = moduleGetStringAt(module, (int) name_index);
+        if (gname == NULL) {
+          RUNTIME_ERROR(
+              stringFormat(vm, "Invalid import target name in module data."));
         }
 
-        if ((Opcode) (*ip) == OP_STORE_GLOBAL) {
-          _imported = module->globals.data[target_global_index];
-
-        } else if ((Opcode) (*ip) == OP_STORE_GLOBAL_NAME) {
-          uint16_t name_index = (uint16_t) ((ip[1] << 8) | ip[2]);
-          String* gname = moduleGetStringAt(module, (int) name_index);
-          if (gname == NULL) {
-            RUNTIME_ERROR(stringFormat(vm, "Invalid import target name in module data."));
-          }
-
-          int g_index = moduleGetGlobalIndexByName(vm, module, gname);
-          if (g_index == -1) {
-            _imported = VAR_NULL;
-          } else {
-            _imported = module->globals.data[g_index];
-          }
+        int g_index = moduleGetGlobalIndexByName(vm, module, gname);
+        if (g_index == -1) {
+          _imported = VAR_NULL;
+        } else {
+          _imported = module->globals.data[g_index];
         }
       }
-
-      // NOTE: _imported could be any value (module, class, function or just true).
-      // We only execute module body if it's a module.
-      // ASSERT(IS_OBJ_TYPE(_imported, OBJ_MODULE), OOPS);
-
-      PUSH(_imported);
-
-      if (IS_OBJ_TYPE(_imported, OBJ_MODULE)) {
-        Module* imported = (Module*) AS_OBJ(_imported);
-        if (!imported->initialized) {
-          imported->initialized = true;
-
-          ASSERT(imported->body != NULL, OOPS);
-
-          UPDATE_FRAME(); //< Update the current frame's ip.
-
-          // Note that we're setting the main function's return address to the
-          // module itself (for every other function we'll push a null at the
-          // rbp before calling them and it'll be returned without modified if
-          // the function doesn't returned anything). Also We can't return from
-          // the body of the module, so the main function will return what's at
-          // the rbp without modifying it. So at the end of the main function
-          // the stack top would be the module itself.
-          fiber->ret = fiber->sp - 1;
-          pushCallFrame(vm, imported->body);
-
-          LOAD_FRAME();  //< Load the top frame to vm's execution variables.
-          CHECK_ERROR(); //< Stack overflow.
-        }
-      }
-
-      DISPATCH();
     }
 
-    {
-      uint8_t argc;
-      Var callable;
-      const Closure* closure;
+    // NOTE: _imported could be any value (module, class, function or just true).
+    // We only execute module body if it's a module.
+    // ASSERT(IS_OBJ_TYPE(_imported, OBJ_MODULE), OOPS);
 
-      uint16_t index; //< To get the method name.
-      String* name;   //< The method name.
+    PUSH(_imported);
 
-      OPCODE(SUPER_CALL) : argc = READ_BYTE();
+    if (IS_OBJ_TYPE(_imported, OBJ_MODULE)) {
+      Module* imported = (Module*) AS_OBJ(_imported);
+      if (!imported->initialized) {
+        imported->initialized = true;
+
+        ASSERT(imported->body != NULL, OOPS);
+
+        UPDATE_FRAME(); //< Update the current frame's ip.
+
+        // Note that we're setting the main function's return address to the
+        // module itself (for every other function we'll push a null at the
+        // rbp before calling them and it'll be returned without modified if
+        // the function doesn't returned anything). Also We can't return from
+        // the body of the module, so the main function will return what's at
+        // the rbp without modifying it. So at the end of the main function
+        // the stack top would be the module itself.
+        fiber->ret = fiber->sp - 1;
+        pushCallFrame(vm, imported->body);
+
+        LOAD_FRAME();  //< Load the top frame to vm's execution variables.
+        CHECK_ERROR(); //< Stack overflow.
+      }
+    }
+
+    DISPATCH();
+  }
+
+  {
+    uint8_t argc;
+    Var callable;
+    const Closure* closure;
+
+    uint16_t index; //< To get the method name.
+    String* name;   //< The method name.
+
+    OPCODE(SUPER_CALL) : argc = READ_BYTE();
+    fiber->ret = (fiber->sp - argc - 1);
+    fiber->thiz = *fiber->ret; //< This for the next call.
+    index = READ_SHORT();
+    name = moduleGetStringAt(module, (int) index);
+    Closure* super_method = getSuperMethod(vm, fiber->thiz, name);
+    CHECK_ERROR(); // Will return if super_method is NULL.
+    callable = VAR_OBJ(super_method);
+    goto L_do_call;
+
+    OPCODE(METHOD_CALL) : {
+      const uint8_t* call_site = ip - 1;
+      argc = READ_BYTE();
       fiber->ret = (fiber->sp - argc - 1);
       fiber->thiz = *fiber->ret; //< This for the next call.
+
       index = READ_SHORT();
       name = moduleGetStringAt(module, (int) index);
-      Closure* super_method = getSuperMethod(vm, fiber->thiz, name);
-      CHECK_ERROR(); // Will return if super_method is NULL.
-      callable = VAR_OBJ(super_method);
-      goto L_do_call;
 
-      OPCODE(METHOD_CALL) : {
-        const uint8_t* call_site = ip - 1;
-        argc = READ_BYTE();
-        fiber->ret = (fiber->sp - argc - 1);
-        fiber->thiz = *fiber->ret; //< This for the next call.
-
-        index = READ_SHORT();
-        name = moduleGetStringAt(module, (int) index);
-
-        Class* recv_cls = getClass(vm, fiber->thiz);
-        VMMethodInlineCacheEntry* mic = vmMethodInlineCacheAt(vm, call_site);
-        if (mic->site == call_site
-            && mic->epoch == vm->inline_cache_epoch
-            && mic->cls == recv_cls
-            && mic->name == name
-            && mic->method != NULL) {
-          callable = VAR_OBJ(mic->method);
-          goto L_do_call;
-        }
-
-        Closure* resolved_method = NULL;
-        if (hasMethod(vm, fiber->thiz, name, &resolved_method)) {
-          callable = VAR_OBJ(resolved_method);
-
-          mic->site = call_site;
-          mic->epoch = vm->inline_cache_epoch;
-          mic->cls = recv_cls;
-          mic->name = name;
-          mic->method = resolved_method;
-          goto L_do_call;
-        }
-
-        callable = varGetAttrib(vm, fiber->thiz, name, false, true);
-        CHECK_ERROR();
+      Class* recv_cls = getClass(vm, fiber->thiz);
+      VMMethodInlineCacheEntry* mic = vmMethodInlineCacheAt(vm, call_site);
+      if (mic->site == call_site && mic->epoch == vm->inline_cache_epoch
+          && mic->cls == recv_cls && mic->name == name && mic->method != NULL) {
+        callable = VAR_OBJ(mic->method);
         goto L_do_call;
       }
 
-      OPCODE(CALL) : OPCODE(TAIL_CALL) : {
-        argc = READ_BYTE();
-        fiber->ret = fiber->sp - argc - 1;
-        callable = *fiber->ret;
+      Closure* resolved_method = NULL;
+      if (hasMethod(vm, fiber->thiz, name, &resolved_method)) {
+        callable = VAR_OBJ(resolved_method);
+
+        mic->site = call_site;
+        mic->epoch = vm->inline_cache_epoch;
+        mic->cls = recv_cls;
+        mic->name = name;
+        mic->method = resolved_method;
+        goto L_do_call;
       }
 
-    L_do_call:
-      // Raw functions cannot be on the stack, since they're not first
-      // class citizens.
-      ASSERT(!IS_OBJ_TYPE(callable, OBJ_FUNC), OOPS);
+      callable = varGetAttrib(vm, fiber->thiz, name, false, true);
+      CHECK_ERROR();
+      goto L_do_call;
+    }
 
-      *(fiber->ret) = VAR_NULL; //< Set the return value to null.
+    OPCODE(CALL) : OPCODE(TAIL_CALL) : {
+      argc = READ_BYTE();
+      fiber->ret = fiber->sp - argc - 1;
+      callable = *fiber->ret;
+    }
 
-      if (IS_OBJ_TYPE(callable, OBJ_CLOSURE)) {
-        closure = (const Closure*) AS_OBJ(callable);
+  L_do_call:
+    // Raw functions cannot be on the stack, since they're not first
+    // class citizens.
+    ASSERT(!IS_OBJ_TYPE(callable, OBJ_FUNC), OOPS);
 
-      } else if (IS_OBJ_TYPE(callable, OBJ_METHOD_BIND)) {
-        const MethodBind* mb = (const MethodBind*) AS_OBJ(callable);
-        /*if (IS_UNDEF(mb->instance)) {
-          RUNTIME_ERROR(newString(vm, "Cannot call an unbound
-        method.")); CHECK_ERROR();
-        }*/
-        fiber->thiz = mb->instance;
-        closure = mb->method;
+    *(fiber->ret) = VAR_NULL; //< Set the return value to null.
 
-      } else if (IS_OBJ_TYPE(callable, OBJ_CLASS)) {
-        Class* cls = (Class*) AS_OBJ(callable);
+    if (IS_OBJ_TYPE(callable, OBJ_CLOSURE)) {
+      closure = (const Closure*) AS_OBJ(callable);
 
-        Closure* new_method = getMagicMethod(cls, METHOD_NEW);
-        if (new_method != NULL) {
-          Var new_instance = VAR_NULL;
-          Result new_result = vmCallMethod(vm, VAR_OBJ(cls), new_method, argc,
-                                           fiber->ret + 1, &new_instance);
-          if (new_result != RESULT_SUCCESS) {
-            CHECK_ERROR();
-          }
+    } else if (IS_OBJ_TYPE(callable, OBJ_METHOD_BIND)) {
+      const MethodBind* mb = (const MethodBind*) AS_OBJ(callable);
+      /*if (IS_UNDEF(mb->instance)) {
+        RUNTIME_ERROR(newString(vm, "Cannot call an unbound
+      method.")); CHECK_ERROR();
+      }*/
+      fiber->thiz = mb->instance;
+      closure = mb->method;
 
-          if (IS_NULL(new_instance) || IS_UNDEF(new_instance)) {
-            // Fall back to default allocation and call _init.
-            fiber->thiz = preConstructThis(vm, cls);
-            CHECK_ERROR();
-            *fiber->ret = fiber->thiz;
-            closure = (const Closure*) getMagicMethod(cls, METHOD_INIT);
-            if (closure == NULL) {
-              if (argc != 0) {
-                String* msg = stringFormat(vm,
-                                           "Expected exactly 0 argument(s) "
-                                           "for constructor $.",
-                                           cls->name->data);
-                RUNTIME_ERROR(msg);
-              }
-              fiber->thiz = VAR_UNDEFINED;
-              DISPATCH();
-            }
+    } else if (IS_OBJ_TYPE(callable, OBJ_CLASS)) {
+      Class* cls = (Class*) AS_OBJ(callable);
 
-          } else {
-            *fiber->ret = new_instance;
-            fiber->thiz = new_instance;
+      Closure* new_method = getMagicMethod(cls, METHOD_NEW);
+      if (new_method != NULL) {
+        Var new_instance = VAR_NULL;
+        Result new_result = vmCallMethod(vm, VAR_OBJ(cls), new_method, argc,
+                                         fiber->ret + 1, &new_instance);
+        if (new_result != RESULT_SUCCESS) {
+          CHECK_ERROR();
+        }
 
-            closure = (const Closure*) getMagicMethod(cls, METHOD_INIT);
-            if (closure == NULL || !IS_OBJ_TYPE(new_instance, OBJ_INST)) {
-              fiber->sp = fiber->ret + 1; // Pop args, leave return value.
-              fiber->thiz = VAR_UNDEFINED;
-              DISPATCH();
-            }
-          }
-
-        } else {
-          // Allocate / create a new this before calling constructor on it.
+        if (IS_NULL(new_instance) || IS_UNDEF(new_instance)) {
+          // Fall back to default allocation and call _init.
           fiber->thiz = preConstructThis(vm, cls);
           CHECK_ERROR();
-
-          // Note:
-          // For instance the constructor will update this and return
-          // the instance (which might not be necessary since we're
-          // setting it here).
           *fiber->ret = fiber->thiz;
-
           closure = (const Closure*) getMagicMethod(cls, METHOD_INIT);
-
-          // No constructor is defined on the class. Just return thiz.
           if (closure == NULL) {
             if (argc != 0) {
               String* msg = stringFormat(vm,
@@ -2199,129 +2136,167 @@ L_vm_main_loop:
                                          cls->name->data);
               RUNTIME_ERROR(msg);
             }
+            fiber->thiz = VAR_UNDEFINED;
+            DISPATCH();
+          }
 
+        } else {
+          *fiber->ret = new_instance;
+          fiber->thiz = new_instance;
+
+          closure = (const Closure*) getMagicMethod(cls, METHOD_INIT);
+          if (closure == NULL || !IS_OBJ_TYPE(new_instance, OBJ_INST)) {
+            fiber->sp = fiber->ret + 1; // Pop args, leave return value.
             fiber->thiz = VAR_UNDEFINED;
             DISPATCH();
           }
         }
 
       } else {
-        closure = NULL;
-
-        // try to call a "callable instance" via "_call".
-        if (IS_OBJ_TYPE(callable, OBJ_INST)) {
-          Instance* inst = (Instance*) AS_OBJ(callable);
-          closure = getMagicMethod(inst->cls, METHOD_CALL);
-        }
-
-        if (closure == NULL) {
-          RUNTIME_ERROR(stringFormat(vm, "$ '$'.",
-                                     "Expected a callable to "
-                                     "call, instead got",
-                                     varTypeName(callable)));
-
-        } else {
-          fiber->thiz = callable;
-        }
-      }
-
-      // If we reached here it's a valid callable.
-      ASSERT(closure != NULL, OOPS);
-
-      // Current call semantics: extra arguments are dropped; missing ones become null.
-      if (closure->fn->arity != -1) {
-        if (argc > closure->fn->arity) { // adjust stack
-          fiber->sp -= argc - closure->fn->arity;
-        }
-        while (closure->fn->arity > argc) {
-          PUSH(VAR_NULL);
-          argc++;
-        }
-      }
-
-      if (closure->fn->is_native) {
-        if (closure->fn->native == NULL) {
-          RUNTIME_ERROR(stringFormat(vm, "Native function pointer of $ was NULL.",
-                                     closure->fn->name));
-        }
-
-        // Update the current frame's ip.
-        UPDATE_FRAME();
-
-        closure->fn->native(vm); //< Call the native function.
-
-        // Calling yield() will change vm->fiber to it's caller fiber, which
-        // would be null if we're not running the function with a fiber.
-        if (vm->fiber == NULL)
-          return RESULT_SUCCESS;
-
-        // Pop function arguments except for the return value.
-        // Note that calling fiber_new() and yield() would change the
-        // vm->fiber so we're using fiber.
-        fiber->sp = fiber->ret + 1;
-
-        // If the fiber has changed, Load the top frame to vm's
-        // execution variables.
-        if (vm->fiber != fiber) {
-          fiber = vm->fiber;
-
-          // A switched fiber must have at least one VM frame to resume.
-          // Native-only fibers (frame_count == 0) cannot be resumed here.
-          if (fiber == NULL || fiber->frame_count == 0) {
-            RUNTIME_ERROR(newString(
-                vm, "Cannot continue: switched fiber has no VM call frame. "
-                    "Start it with fiber_run() before resuming."));
-          }
-
-          LOAD_FRAME();
-        }
-
+        // Allocate / create a new this before calling constructor on it.
+        fiber->thiz = preConstructThis(vm, cls);
         CHECK_ERROR();
 
+        // Note:
+        // For instance the constructor will update this and return
+        // the instance (which might not be necessary since we're
+        // setting it here).
+        *fiber->ret = fiber->thiz;
+
+        closure = (const Closure*) getMagicMethod(cls, METHOD_INIT);
+
+        // No constructor is defined on the class. Just return thiz.
+        if (closure == NULL) {
+          if (argc != 0) {
+            String* msg = stringFormat(vm,
+                                       "Expected exactly 0 argument(s) "
+                                       "for constructor $.",
+                                       cls->name->data);
+            RUNTIME_ERROR(msg);
+          }
+
+          fiber->thiz = VAR_UNDEFINED;
+          DISPATCH();
+        }
+      }
+
+    } else {
+      closure = NULL;
+
+      // try to call a "callable instance" via "_call".
+      if (IS_OBJ_TYPE(callable, OBJ_INST)) {
+        Instance* inst = (Instance*) AS_OBJ(callable);
+        closure = getMagicMethod(inst->cls, METHOD_CALL);
+      }
+
+      if (closure == NULL) {
+        RUNTIME_ERROR(stringFormat(vm, "$ '$'.",
+                                   "Expected a callable to "
+                                   "call, instead got",
+                                   varTypeName(callable)));
+
       } else {
-        if (instruction == OP_TAIL_CALL) {
-          reuseCallFrame(vm, closure);
-          LOAD_FRAME(); //< Re-load the frame to vm's execution variables.
-
-        } else {
-          ASSERT((instruction == OP_CALL) || (instruction == OP_METHOD_CALL)
-                     || (instruction == OP_SUPER_CALL),
-                 OOPS);
-
-          UPDATE_FRAME(); //< Update the current frame's ip.
-          pushCallFrame(vm, closure);
-          LOAD_FRAME();  //< Load the top frame to vm's execution variables.
-          CHECK_ERROR(); //< Stack overflow.
-        }
+        fiber->thiz = callable;
       }
-
-      DISPATCH();
     }
 
-    OPCODE(ITER_TEST) : {
-      Var seq = PEEK(-3);
+    // If we reached here it's a valid callable.
+    ASSERT(closure != NULL, OOPS);
 
-      // Primitive types are not iterable.
-      if (!IS_OBJ(seq)) {
-        if (IS_NULL(seq)) {
-          RUNTIME_ERROR(newString(vm, "Null is not iterable."));
-        } else if (IS_BOOL(seq)) {
-          RUNTIME_ERROR(newString(vm, "Boolenan is not iterable."));
-        } else if (IS_NUM(seq)) {
-          RUNTIME_ERROR(newString(vm, "Number is not iterable."));
-        } else {
-          UNREACHABLE();
-        }
+    // Current call semantics: extra arguments are dropped; missing ones become null.
+    if (closure->fn->arity != -1) {
+      if (argc > closure->fn->arity) { // adjust stack
+        fiber->sp -= argc - closure->fn->arity;
       }
-
-      DISPATCH();
+      while (closure->fn->arity > argc) {
+        PUSH(VAR_NULL);
+        argc++;
+      }
     }
 
-    OPCODE(ITER) : {
-      Var* value = (fiber->sp - 1);
-      Var* iterator = (fiber->sp - 2);
-      Var seq = PEEK(-3);
-      uint16_t jump_offset = READ_SHORT();
+    if (closure->fn->is_native) {
+      if (closure->fn->native == NULL) {
+        RUNTIME_ERROR(stringFormat(vm, "Native function pointer of $ was NULL.",
+                                   closure->fn->name));
+      }
+
+      // Update the current frame's ip.
+      UPDATE_FRAME();
+
+      closure->fn->native(vm); //< Call the native function.
+
+      // Calling yield() will change vm->fiber to it's caller fiber, which
+      // would be null if we're not running the function with a fiber.
+      if (vm->fiber == NULL)
+        return RESULT_SUCCESS;
+
+      // Pop function arguments except for the return value.
+      // Note that calling fiber_new() and yield() would change the
+      // vm->fiber so we're using fiber.
+      fiber->sp = fiber->ret + 1;
+
+      // If the fiber has changed, Load the top frame to vm's
+      // execution variables.
+      if (vm->fiber != fiber) {
+        fiber = vm->fiber;
+
+        // A switched fiber must have at least one VM frame to resume.
+        // Native-only fibers (frame_count == 0) cannot be resumed here.
+        if (fiber == NULL || fiber->frame_count == 0) {
+          RUNTIME_ERROR(newString(
+              vm, "Cannot continue: switched fiber has no VM call frame. "
+                  "Start it with fiber_run() before resuming."));
+        }
+
+        LOAD_FRAME();
+      }
+
+      CHECK_ERROR();
+
+    } else {
+      if (instruction == OP_TAIL_CALL) {
+        reuseCallFrame(vm, closure);
+        LOAD_FRAME(); //< Re-load the frame to vm's execution variables.
+
+      } else {
+        ASSERT((instruction == OP_CALL) || (instruction == OP_METHOD_CALL)
+                   || (instruction == OP_SUPER_CALL),
+               OOPS);
+
+        UPDATE_FRAME(); //< Update the current frame's ip.
+        pushCallFrame(vm, closure);
+        LOAD_FRAME();  //< Load the top frame to vm's execution variables.
+        CHECK_ERROR(); //< Stack overflow.
+      }
+    }
+
+    DISPATCH();
+  }
+
+  OPCODE(ITER_TEST) : {
+    Var seq = PEEK(-3);
+
+    // Primitive types are not iterable.
+    if (!IS_OBJ(seq)) {
+      if (IS_NULL(seq)) {
+        RUNTIME_ERROR(newString(vm, "Null is not iterable."));
+      } else if (IS_BOOL(seq)) {
+        RUNTIME_ERROR(newString(vm, "Boolenan is not iterable."));
+      } else if (IS_NUM(seq)) {
+        RUNTIME_ERROR(newString(vm, "Number is not iterable."));
+      } else {
+        UNREACHABLE();
+      }
+    }
+
+    DISPATCH();
+  }
+
+  OPCODE(ITER) : {
+    Var* value = (fiber->sp - 1);
+    Var* iterator = (fiber->sp - 2);
+    Var seq = PEEK(-3);
+    uint16_t jump_offset = READ_SHORT();
 
 #define JUMP_ITER_EXIT() \
   do { \
@@ -2329,849 +2304,834 @@ L_vm_main_loop:
     DISPATCH(); \
   } while (false)
 
-      bool cont = varIterate(vm, seq, iterator, value);
-      CHECK_ERROR();
-      if (!cont)
-        JUMP_ITER_EXIT();
-      DISPATCH();
-    }
-
-    OPCODE(JUMP) : {
-      uint16_t offset = READ_SHORT();
-      ip += offset;
-      DISPATCH();
-    }
-
-    OPCODE(LOOP) : {
-      uint16_t offset = READ_SHORT();
-      ip -= offset;
-      DISPATCH();
-    }
-
-    OPCODE(JUMP_IF) : {
-      Var cond = POP();
-      uint16_t offset = READ_SHORT();
-      if (toBool(cond)) {
-        ip += offset;
-      }
-      DISPATCH();
-    }
-
-    OPCODE(JUMP_IF_NOT) : {
-      Var cond = POP();
-      uint16_t offset = READ_SHORT();
-      if (!toBool(cond)) {
-        ip += offset;
-      }
-      DISPATCH();
-    }
-
-    OPCODE(OR) : {
-      Var cond = PEEK(-1);
-      uint16_t offset = READ_SHORT();
-      if (toBool(cond)) {
-        ip += offset;
-      } else {
-        DROP();
-      }
-      DISPATCH();
-    }
-
-    OPCODE(AND) : {
-      Var cond = PEEK(-1);
-      uint16_t offset = READ_SHORT();
-      if (!toBool(cond)) {
-        ip += offset;
-      } else {
-        DROP();
-      }
-      DISPATCH();
-    }
-
-    OPCODE(RETURN) : {
-      // Close all the locals of the current frame.
-      closeUpvalues(fiber, rbp + 1);
-
-      // Set the return value.
-      Var ret_value = POP();
-
-      // Guard against corrupted return/base pointers to avoid native crashes.
-      if (fiber->ret == NULL || fiber->stack == NULL || fiber->ret < fiber->stack
-          || fiber->ret >= (fiber->stack + fiber->stack_size)) {
-        RUNTIME_ERROR(newString(vm, "Invalid fiber return pointer state."));
-      }
-
-      // Pop the last frame, and if no more call frames, we're done with
-      // the current fiber.
-      if (--fiber->frame_count == 0) {
-        // TODO: if we're evaluating an expression we need to set it's
-        // value on the stack.
-        // fiber->sp = fiber->stack; ??
-
-        if (fiber->caller == NULL) {
-          *fiber->ret = ret_value;
-          return RESULT_SUCCESS;
-
-        } else {
-          FIBER_SWITCH_BACK();
-          *fiber->ret = ret_value;
-        }
-
-      } else {
-        Var* return_slot = rbp;
-        if (return_slot == NULL || return_slot < fiber->stack
-            || return_slot >= (fiber->stack + fiber->stack_size)) {
-          // Fallback for rare stale frame-base states.
-          return_slot = fiber->ret;
-        }
-
-        if (return_slot == NULL || return_slot < fiber->stack
-            || return_slot >= (fiber->stack + fiber->stack_size)) {
-          RUNTIME_ERROR(newString(vm, "Invalid frame base pointer state."));
-        }
-
-        *return_slot = ret_value;
-        // Pop the params (locals should have popped at this point) and
-        // update stack pointer.
-        fiber->sp = return_slot + 1; // +1: return slot is returned value.
-      }
-
-      LOAD_FRAME();
-      DISPATCH();
-    }
-
-    OPCODE(GET_ATTRIB) : {
-      const uint8_t* attrib_site = ip - 1;
-      Var on = PEEK(-1); // Don't pop yet, we need the reference for gc.
-      String* name = moduleGetStringAt(module, READ_SHORT());
-      ASSERT(name != NULL, OOPS);
-
-      VMAttribInlineCacheEntry* aic = vmAttribInlineCacheAt(vm, attrib_site);
-      Var value = VAR_UNDEFINED;
-      bool cache_hit = false;
-
-      if (aic->site == attrib_site
-          && aic->epoch == vm->inline_cache_epoch
-          && aic->name == name) {
-        switch (aic->kind) {
-          case VM_ATTRIB_IC_INST_INLINE:
-            if (IS_OBJ_TYPE(on, OBJ_INST)) {
-              Instance* inst = (Instance*) AS_OBJ(on);
-              uint32_t slot = aic->slot_or_index;
-              if (inst->cls == aic->receiver_cls
-                  && slot < inst->inline_attrib_count) {
-                String* slot_name = inst->inline_attrib_names[slot];
-                if (slot_name == name) {
-                  value = inst->inline_attrib_values[slot];
-                  cache_hit = true;
-                }
-              }
-            }
-            break;
-
-          case VM_ATTRIB_IC_METHOD_BIND:
-            if (aic->method != NULL
-                && getClass(vm, on) == aic->receiver_cls
-                && (aic->receiver_obj == NULL
-                    || (IS_OBJ(on) && AS_OBJ(on) == aic->receiver_obj))) {
-              MethodBind* mb = newMethodBind(vm, aic->method);
-              vmPushTempRef(vm, &mb->_super); // mb.
-              mb->instance = on;
-              value = VAR_OBJ(mb);
-              vmPopTempRef(vm); // mb.
-              cache_hit = true;
-            }
-            break;
-
-          case VM_ATTRIB_IC_NONE:
-          default:
-            break;
-        }
-      }
-
-      if (!cache_hit) {
-        value = varGetAttrib(vm, on, name, false, false);
-        CHECK_ERROR();
-
-        aic->site = attrib_site;
-        aic->epoch = vm->inline_cache_epoch;
-        aic->kind = VM_ATTRIB_IC_NONE;
-        aic->name = name;
-        aic->receiver_cls = NULL;
-        aic->receiver_obj = NULL;
-        aic->slot_or_index = 0;
-        aic->method = NULL;
-
-        if (IS_OBJ_TYPE(on, OBJ_INST)) {
-          Instance* inst = (Instance*) AS_OBJ(on);
-          for (uint8_t i = 0; i < inst->inline_attrib_count; i++) {
-            String* slot_name = inst->inline_attrib_names[i];
-            if (slot_name == name) {
-              aic->kind = VM_ATTRIB_IC_INST_INLINE;
-              aic->receiver_cls = inst->cls;
-              aic->slot_or_index = i;
-              break;
-            }
-          }
-        }
-
-        if (IS_OBJ_TYPE(value, OBJ_METHOD_BIND)) {
-          MethodBind* mb = (MethodBind*) AS_OBJ(value);
-          if (mb->method != NULL && !IS_OBJ_TYPE(on, OBJ_CLASS)) {
-            aic->kind = VM_ATTRIB_IC_METHOD_BIND;
-            aic->receiver_cls = getClass(vm, on);
-            aic->receiver_obj = NULL;
-            aic->method = mb->method;
-          }
-        }
-      }
-
-      DROP(); // on
-      PUSH(value);
-      DISPATCH();
-    }
-
-    OPCODE(GET_ATTRIB_KEEP) : {
-      const uint8_t* attrib_site = ip - 1;
-      Var on = PEEK(-1);
-      String* name = moduleGetStringAt(module, READ_SHORT());
-      ASSERT(name != NULL, OOPS);
-
-      VMAttribInlineCacheEntry* aic = vmAttribInlineCacheAt(vm, attrib_site);
-      Var value = VAR_UNDEFINED;
-      bool cache_hit = false;
-
-      if (aic->site == attrib_site
-          && aic->epoch == vm->inline_cache_epoch
-          && aic->name == name) {
-        switch (aic->kind) {
-          case VM_ATTRIB_IC_INST_INLINE:
-            if (IS_OBJ_TYPE(on, OBJ_INST)) {
-              Instance* inst = (Instance*) AS_OBJ(on);
-              uint32_t slot = aic->slot_or_index;
-              if (inst->cls == aic->receiver_cls
-                  && slot < inst->inline_attrib_count) {
-                String* slot_name = inst->inline_attrib_names[slot];
-                if (slot_name == name) {
-                  value = inst->inline_attrib_values[slot];
-                  cache_hit = true;
-                }
-              }
-            }
-            break;
-
-          case VM_ATTRIB_IC_METHOD_BIND:
-            if (aic->method != NULL
-                && getClass(vm, on) == aic->receiver_cls
-                && (aic->receiver_obj == NULL
-                    || (IS_OBJ(on) && AS_OBJ(on) == aic->receiver_obj))) {
-              MethodBind* mb = newMethodBind(vm, aic->method);
-              vmPushTempRef(vm, &mb->_super); // mb.
-              mb->instance = on;
-              value = VAR_OBJ(mb);
-              vmPopTempRef(vm); // mb.
-              cache_hit = true;
-            }
-            break;
-
-          case VM_ATTRIB_IC_NONE:
-          default:
-            break;
-        }
-      }
-
-      if (!cache_hit) {
-        value = varGetAttrib(vm, on, name, false, false);
-        CHECK_ERROR();
-
-        aic->site = attrib_site;
-        aic->epoch = vm->inline_cache_epoch;
-        aic->kind = VM_ATTRIB_IC_NONE;
-        aic->name = name;
-        aic->receiver_cls = NULL;
-        aic->receiver_obj = NULL;
-        aic->slot_or_index = 0;
-        aic->method = NULL;
-
-        if (IS_OBJ_TYPE(on, OBJ_INST)) {
-          Instance* inst = (Instance*) AS_OBJ(on);
-          for (uint8_t i = 0; i < inst->inline_attrib_count; i++) {
-            String* slot_name = inst->inline_attrib_names[i];
-            if (slot_name == name) {
-              aic->kind = VM_ATTRIB_IC_INST_INLINE;
-              aic->receiver_cls = inst->cls;
-              aic->slot_or_index = i;
-              break;
-            }
-          }
-        }
-
-        if (IS_OBJ_TYPE(value, OBJ_METHOD_BIND)) {
-          MethodBind* mb = (MethodBind*) AS_OBJ(value);
-          if (mb->method != NULL && !IS_OBJ_TYPE(on, OBJ_CLASS)) {
-            aic->kind = VM_ATTRIB_IC_METHOD_BIND;
-            aic->receiver_cls = getClass(vm, on);
-            aic->receiver_obj = NULL;
-            aic->method = mb->method;
-          }
-        }
-      }
-
-      PUSH(value);
-      DISPATCH();
-    }
-
-    OPCODE(SET_ATTRIB) : {
-      Var value = PEEK(-1); // Don't pop yet, we need the reference for gc.
-      Var on = PEEK(-2);    // Don't pop yet, we need the reference for gc.
-      String* name = moduleGetStringAt(module, READ_SHORT());
-      ASSERT(name != NULL, OOPS);
-      varSetAttrib(vm, on, name, value, false);
-
-      DROP(); // value
-      DROP(); // on
-      PUSH(value);
-
-      CHECK_ERROR();
-      DISPATCH();
-    }
-
-    OPCODE(GET_SUBSCRIPT) : {
-      Var key = PEEK(-1); // Don't pop yet, we need the reference for gc.
-      Var on = PEEK(-2);  // Don't pop yet, we need the reference for gc.
-      Var value = varGetSubscript(vm, on, key);
-      DROP(); // key
-      DROP(); // on
-      PUSH(value);
-
-      CHECK_ERROR();
-      DISPATCH();
-    }
-
-    OPCODE(GET_SUBSCRIPT_KEEP) : {
-      Var key = PEEK(-1);
-      Var on = PEEK(-2);
-      PUSH(varGetSubscript(vm, on, key));
-      CHECK_ERROR();
-      DISPATCH();
-    }
-
-    OPCODE(SET_SUBSCRIPT) : {
-      Var value = PEEK(-1); // Don't pop yet, we need the reference for gc.
-      Var key = PEEK(-2);   // Don't pop yet, we need the reference for gc.
-      Var on = PEEK(-3);    // Don't pop yet, we need the reference for gc.
-      varsetSubscript(vm, on, key, value);
-      DROP(); // value
-      DROP(); // key
-      DROP(); // on
-      PUSH(value);
-
-      CHECK_ERROR();
-      DISPATCH();
-    }
-
-    OPCODE(POSITIVE) : {
-      // Don't pop yet, we need the reference for gc.
-      Var thiz_ = PEEK(-1);
-      Var result = varPositive(vm, thiz_);
-      DROP(); // this
-      PUSH(result);
-
-      CHECK_ERROR();
-      DISPATCH();
-    }
-
-    OPCODE(NEGATIVE) : {
-      // Don't pop yet, we need the reference for gc.
-      Var v = PEEK(-1);
-      Var result = varNegative(vm, v);
-      DROP(); // this
-      PUSH(result);
-
-      CHECK_ERROR();
-      DISPATCH();
-    }
-
-    OPCODE(NOT) : {
-      // Don't pop yet, we need the reference for gc.
-      Var v = PEEK(-1);
-      Var result = varNot(vm, v);
-      DROP(); // this
-      PUSH(result);
-
-      CHECK_ERROR();
-      DISPATCH();
-    }
-
-    OPCODE(BIT_NOT) : {
-      // Don't pop yet, we need the reference for gc.
-      Var v = PEEK(-1);
-      Var result = varBitNot(vm, v);
-      DROP(); // this
-      PUSH(result);
-
-      CHECK_ERROR();
-      DISPATCH();
-    }
-
-    // Do not ever use PUSH(binaryOp(vm, POP(), POP()));
-    // Function parameters are not evaluated in a defined order in C.
-
-    OPCODE(ADD) : {
-      // Don't pop yet, we need the reference for gc.
-      Var r = PEEK(-1), l = PEEK(-2);
-      uint8_t inplace = READ_BYTE();
-      ASSERT(inplace <= 1, OOPS);
-      double n1, n2;
-      if (vmIsNumeric(l, &n1) && vmIsNumeric(r, &n2)) {
-        Var result = VAR_NUM(n1 + n2);
-        DROP();
-        DROP(); // r, l
-        PUSH(result);
-        DISPATCH();
-      }
-      Var result = varAdd(vm, l, r, inplace);
-      DROP();
-      DROP(); // r, l
-      PUSH(result);
-
-      CHECK_ERROR();
-      DISPATCH();
-    }
-
-    OPCODE(SUBTRACT) : {
-      // Don't pop yet, we need the reference for gc.
-      Var r = PEEK(-1), l = PEEK(-2);
-      uint8_t inplace = READ_BYTE();
-      ASSERT(inplace <= 1, OOPS);
-      double n1, n2;
-      if (vmIsNumeric(l, &n1) && vmIsNumeric(r, &n2)) {
-        Var result = VAR_NUM(n1 - n2);
-        DROP();
-        DROP(); // r, l
-        PUSH(result);
-        DISPATCH();
-      }
-      Var result = varSubtract(vm, l, r, inplace);
-      DROP();
-      DROP(); // r, l
-      PUSH(result);
-
-      CHECK_ERROR();
-      DISPATCH();
-    }
-
-    OPCODE(MULTIPLY) : {
-      // Don't pop yet, we need the reference for gc.
-      Var r = PEEK(-1), l = PEEK(-2);
-      uint8_t inplace = READ_BYTE();
-      ASSERT(inplace <= 1, OOPS);
-      double n1, n2;
-      if (vmIsNumeric(l, &n1) && vmIsNumeric(r, &n2)) {
-        Var result = VAR_NUM(n1 * n2);
-        DROP();
-        DROP(); // r, l
-        PUSH(result);
-        DISPATCH();
-      }
-      Var result = varMultiply(vm, l, r, inplace);
-      DROP();
-      DROP(); // r, l
-      PUSH(result);
-
-      CHECK_ERROR();
-      DISPATCH();
-    }
-
-    OPCODE(DIVIDE) : {
-      // Don't pop yet, we need the reference for gc.
-      Var r = PEEK(-1), l = PEEK(-2);
-      uint8_t inplace = READ_BYTE();
-      ASSERT(inplace <= 1, OOPS);
-      double n1, n2;
-      if (vmIsNumeric(l, &n1) && vmIsNumeric(r, &n2)) {
-        if (n2 == 0) {
-          VM_SET_ERROR(vm, newString(vm, "Division by zero."));
-          CHECK_ERROR();
-        }
-        Var result = VAR_NUM(n1 / n2);
-        DROP();
-        DROP(); // r, l
-        PUSH(result);
-        DISPATCH();
-      }
-      Var result = varDivide(vm, l, r, inplace);
-      DROP();
-      DROP(); // r, l
-      PUSH(result);
-
-      CHECK_ERROR();
-      DISPATCH();
-    }
-
-    OPCODE(EXPONENT) : {
-      // Don't pop yet, we need the reference for gc.
-      Var r = PEEK(-1), l = PEEK(-2);
-      uint8_t inplace = READ_BYTE();
-      ASSERT(inplace <= 1, OOPS);
-      double n1, n2;
-      if (vmIsNumeric(l, &n1) && vmIsNumeric(r, &n2)) {
-        Var result = VAR_NUM(pow(n1, n2));
-        DROP();
-        DROP(); // r, l
-        PUSH(result);
-        DISPATCH();
-      }
-      Var result = varExponent(vm, l, r, inplace);
-      DROP();
-      DROP(); // r, l
-      PUSH(result);
-
-      CHECK_ERROR();
-      DISPATCH();
-    }
-
-    OPCODE(MOD) : {
-      // Don't pop yet, we need the reference for gc.
-      Var r = PEEK(-1), l = PEEK(-2);
-      uint8_t inplace = READ_BYTE();
-      ASSERT(inplace <= 1, OOPS);
-      double n1, n2;
-      if (vmIsNumeric(l, &n1) && vmIsNumeric(r, &n2)) {
-        if (n2 == 0) {
-          VM_SET_ERROR(vm, newString(vm, "Division by zero."));
-          CHECK_ERROR();
-        }
-        Var result = VAR_NUM(fmod(n1, n2));
-        DROP();
-        DROP(); // r, l
-        PUSH(result);
-        DISPATCH();
-      }
-      Var result = varModulo(vm, l, r, inplace);
-      DROP();
-      DROP(); // r, l
-      PUSH(result);
-
-      CHECK_ERROR();
-      DISPATCH();
-    }
-
-    OPCODE(BIT_AND) : {
-      // Don't pop yet, we need the reference for gc.
-      Var r = PEEK(-1), l = PEEK(-2);
-      uint8_t inplace = READ_BYTE();
-      ASSERT(inplace <= 1, OOPS);
-      double n1, n2;
-      if (vmIsNumeric(l, &n1) && vmIsNumeric(r, &n2)
-          && floor(n1) == n1 && floor(n2) == n2) {
-        Var result = VAR_NUM((double) (((int64_t) n1) & ((int64_t) n2)));
-        DROP();
-        DROP(); // r, l
-        PUSH(result);
-        DISPATCH();
-      }
-      Var result = varBitAnd(vm, l, r, inplace);
-      DROP();
-      DROP(); // r, l
-      PUSH(result);
-
-      CHECK_ERROR();
-      DISPATCH();
-    }
-
-    OPCODE(BIT_OR) : {
-      // Don't pop yet, we need the reference for gc.
-      Var r = PEEK(-1), l = PEEK(-2);
-      uint8_t inplace = READ_BYTE();
-      ASSERT(inplace <= 1, OOPS);
-      double n1, n2;
-      if (vmIsNumeric(l, &n1) && vmIsNumeric(r, &n2)
-          && floor(n1) == n1 && floor(n2) == n2) {
-        Var result = VAR_NUM((double) (((int64_t) n1) | ((int64_t) n2)));
-        DROP();
-        DROP(); // r, l
-        PUSH(result);
-        DISPATCH();
-      }
-      Var result = varBitOr(vm, l, r, inplace);
-      DROP();
-      DROP(); // r, l
-      PUSH(result);
-
-      CHECK_ERROR();
-      DISPATCH();
-    }
-
-    OPCODE(BIT_XOR) : {
-      // Don't pop yet, we need the reference for gc.
-      Var r = PEEK(-1), l = PEEK(-2);
-      uint8_t inplace = READ_BYTE();
-      ASSERT(inplace <= 1, OOPS);
-      double n1, n2;
-      if (vmIsNumeric(l, &n1) && vmIsNumeric(r, &n2)
-          && floor(n1) == n1 && floor(n2) == n2) {
-        Var result = VAR_NUM((double) (((int64_t) n1) ^ ((int64_t) n2)));
-        DROP();
-        DROP(); // r, l
-        PUSH(result);
-        DISPATCH();
-      }
-      Var result = varBitXor(vm, l, r, inplace);
-      DROP();
-      DROP(); // r, l
-      PUSH(result);
-
-      CHECK_ERROR();
-      DISPATCH();
-    }
-
-    OPCODE(BIT_LSHIFT) : {
-      // Don't pop yet, we need the reference for gc.
-      Var r = PEEK(-1), l = PEEK(-2);
-      uint8_t inplace = READ_BYTE();
-      ASSERT(inplace <= 1, OOPS);
-      double n1, n2;
-      if (vmIsNumeric(l, &n1) && vmIsNumeric(r, &n2)
-          && floor(n1) == n1 && floor(n2) == n2) {
-        Var result = VAR_NUM((double) (((int64_t) n1) << ((int64_t) n2)));
-        DROP();
-        DROP(); // r, l
-        PUSH(result);
-        DISPATCH();
-      }
-      Var result = varBitLshift(vm, l, r, inplace);
-      DROP();
-      DROP(); // r, l
-      PUSH(result);
-
-      CHECK_ERROR();
-      DISPATCH();
-    }
-
-    OPCODE(BIT_RSHIFT) : {
-      // Don't pop yet, we need the reference for gc.
-      Var r = PEEK(-1), l = PEEK(-2);
-      uint8_t inplace = READ_BYTE();
-      ASSERT(inplace <= 1, OOPS);
-      double n1, n2;
-      if (vmIsNumeric(l, &n1) && vmIsNumeric(r, &n2)
-          && floor(n1) == n1 && floor(n2) == n2) {
-        Var result = VAR_NUM((double) (((int64_t) n1) >> ((int64_t) n2)));
-        DROP();
-        DROP(); // r, l
-        PUSH(result);
-        DISPATCH();
-      }
-      Var result = varBitRshift(vm, l, r, inplace);
-      DROP();
-      DROP(); // r, l
-      PUSH(result);
-
-      CHECK_ERROR();
-      DISPATCH();
-    }
-
-    OPCODE(EQEQ) : {
-      // Don't pop yet, we need the reference for gc.
-      Var r = PEEK(-1), l = PEEK(-2);
-      double n1, n2;
-      if (vmIsNumeric(l, &n1) && vmIsNumeric(r, &n2)) {
-        Var result = VAR_BOOL(n1 == n2);
-        DROP();
-        DROP(); // r, l
-        PUSH(result);
-        DISPATCH();
-      }
-      if (IS_OBJ_TYPE(l, OBJ_STRING) && IS_OBJ_TYPE(r, OBJ_STRING)) {
-        String* ls = AS_STRING(l);
-        String* rs = AS_STRING(r);
-        Var result = VAR_BOOL(IS_STR_EQ(ls, rs));
-        DROP();
-        DROP(); // r, l
-        PUSH(result);
-        DISPATCH();
-      }
-      Var result = varEqals(vm, l, r);
-      DROP();
-      DROP(); // r, l
-      PUSH(result);
-      CHECK_ERROR();
-      DISPATCH();
-    }
-
-    OPCODE(NOTEQ) : {
-      // Don't pop yet, we need the reference for gc.
-      Var r = PEEK(-1), l = PEEK(-2);
-      double n1, n2;
-      if (vmIsNumeric(l, &n1) && vmIsNumeric(r, &n2)) {
-        Var result = VAR_BOOL(n1 != n2);
-        DROP();
-        DROP(); // r, l
-        PUSH(result);
-        DISPATCH();
-      }
-      if (IS_OBJ_TYPE(l, OBJ_STRING) && IS_OBJ_TYPE(r, OBJ_STRING)) {
-        String* ls = AS_STRING(l);
-        String* rs = AS_STRING(r);
-        Var result = VAR_BOOL(!IS_STR_EQ(ls, rs));
-        DROP();
-        DROP(); // r, l
-        PUSH(result);
-        DISPATCH();
-      }
-      Var result = varEqals(vm, l, r);
-      DROP();
-      DROP(); // r, l
-      PUSH(VAR_BOOL(!toBool(result)));
-      CHECK_ERROR();
-      DISPATCH();
-    }
-
-    OPCODE(LT) : {
-      // Don't pop yet, we need the reference for gc.
-      Var r = PEEK(-1), l = PEEK(-2);
-      double n1, n2;
-      if (vmIsNumeric(l, &n1) && vmIsNumeric(r, &n2)) {
-        Var result = VAR_BOOL(n1 < n2);
-        DROP();
-        DROP(); // r, l
-        PUSH(result);
-        DISPATCH();
-      }
-      Var result = varLesser(vm, l, r);
-      DROP();
-      DROP(); // r, l
-      PUSH(result);
-      CHECK_ERROR();
-      DISPATCH();
-    }
-
-    OPCODE(LTEQ) : {
-      // Don't pop yet, we need the reference for gc.
-      Var r = PEEK(-1), l = PEEK(-2);
-      double n1, n2;
-      if (vmIsNumeric(l, &n1) && vmIsNumeric(r, &n2)) {
-        Var result = VAR_BOOL(n1 <= n2);
-        DROP();
-        DROP(); // r, l
-        PUSH(result);
-        DISPATCH();
-      }
-
-      Var result = varLesser(vm, l, r);
-      CHECK_ERROR();
-      bool lteq = toBool(result);
-
-      if (!lteq)
-        result = varEqals(vm, l, r);
-      CHECK_ERROR();
-
-      DROP();
-      DROP(); // r, l
-      PUSH(result);
-      DISPATCH();
-    }
-
-    OPCODE(GT) : {
-      // Don't pop yet, we need the reference for gc.
-      Var r = PEEK(-1), l = PEEK(-2);
-      double n1, n2;
-      if (vmIsNumeric(l, &n1) && vmIsNumeric(r, &n2)) {
-        Var result = VAR_BOOL(n1 > n2);
-        DROP();
-        DROP(); // r, l
-        PUSH(result);
-        DISPATCH();
-      }
-      Var result = varGreater(vm, l, r);
-      DROP();
-      DROP(); // r, l
-      PUSH(result);
-      CHECK_ERROR();
-      DISPATCH();
-    }
-
-    OPCODE(GTEQ) : {
-      // Don't pop yet, we need the reference for gc.
-      Var r = PEEK(-1), l = PEEK(-2);
-      double n1, n2;
-      if (vmIsNumeric(l, &n1) && vmIsNumeric(r, &n2)) {
-        Var result = VAR_BOOL(n1 >= n2);
-        DROP();
-        DROP(); // r, l
-        PUSH(result);
-        DISPATCH();
-      }
-      Var result = varGreater(vm, l, r);
-      CHECK_ERROR();
-      bool gteq = toBool(result);
-
-      if (!gteq)
-        result = varEqals(vm, l, r);
-      CHECK_ERROR();
-
-      DROP();
-      DROP(); // r, l
-      PUSH(result);
-      DISPATCH();
-    }
-
-    OPCODE(RANGE) : {
-      // Don't pop yet, we need the reference for gc.
-      Var r = PEEK(-1), l = PEEK(-2);
-      Var result = varOpRange(vm, l, r);
-      DROP();
-      DROP(); // r, l
-      PUSH(result);
-      CHECK_ERROR();
-      DISPATCH();
-    }
-
-    OPCODE(IN) : {
-      // Don't pop yet, we need the reference for gc.
-      Var container = PEEK(-1), elem = PEEK(-2);
-      bool contains = varContains(vm, elem, container);
-      DROP();
-      DROP(); // container, elem
-      PUSH(VAR_BOOL(contains));
-      CHECK_ERROR();
-      DISPATCH();
-    }
-
-    OPCODE(IS) : {
-      // Don't pop yet, we need the reference for gc.
-      Var type = PEEK(-1), inst = PEEK(-2);
-      bool is = varIsType(vm, inst, type);
-      DROP();
-      DROP(); // container, elem
-      PUSH(VAR_BOOL(is));
-      CHECK_ERROR();
-      DISPATCH();
-    }
-
-    OPCODE(REPL_PRINT) : {
-      if (vm->config.stdout_write != NULL) {
-        Var tmp = PEEK(-1);
-        if (!IS_NULL(tmp)) {
-          vm->config.stdout_write(vm, varToString(vm, tmp, true)->data);
-          vm->config.stdout_write(vm, "\n");
-        }
-      }
-      DISPATCH();
-    }
-
-    OPCODE(END) : UNREACHABLE();
-#if !USE_COMPUTED_GOTO
-    break;
-
-    default:
-      UNREACHABLE();
-#endif
-#if !USE_COMPUTED_GOTO
+    bool cont = varIterate(vm, seq, iterator, value);
+    CHECK_ERROR();
+    if (!cont)
+      JUMP_ITER_EXIT();
+    DISPATCH();
   }
+
+  OPCODE(JUMP) : {
+    uint16_t offset = READ_SHORT();
+    ip += offset;
+    DISPATCH();
+  }
+
+  OPCODE(LOOP) : {
+    uint16_t offset = READ_SHORT();
+    ip -= offset;
+    DISPATCH();
+  }
+
+  OPCODE(JUMP_IF) : {
+    Var cond = POP();
+    uint16_t offset = READ_SHORT();
+    if (toBool(cond)) {
+      ip += offset;
+    }
+    DISPATCH();
+  }
+
+  OPCODE(JUMP_IF_NOT) : {
+    Var cond = POP();
+    uint16_t offset = READ_SHORT();
+    if (!toBool(cond)) {
+      ip += offset;
+    }
+    DISPATCH();
+  }
+
+  OPCODE(OR) : {
+    Var cond = PEEK(-1);
+    uint16_t offset = READ_SHORT();
+    if (toBool(cond)) {
+      ip += offset;
+    } else {
+      DROP();
+    }
+    DISPATCH();
+  }
+
+  OPCODE(AND) : {
+    Var cond = PEEK(-1);
+    uint16_t offset = READ_SHORT();
+    if (!toBool(cond)) {
+      ip += offset;
+    } else {
+      DROP();
+    }
+    DISPATCH();
+  }
+
+  OPCODE(RETURN) : {
+    // Close all the locals of the current frame.
+    closeUpvalues(fiber, rbp + 1);
+
+    // Set the return value.
+    Var ret_value = POP();
+
+    // Guard against corrupted return/base pointers to avoid native crashes.
+    if (fiber->ret == NULL || fiber->stack == NULL || fiber->ret < fiber->stack
+        || fiber->ret >= (fiber->stack + fiber->stack_size)) {
+      RUNTIME_ERROR(newString(vm, "Invalid fiber return pointer state."));
+    }
+
+    // Pop the last frame, and if no more call frames, we're done with
+    // the current fiber.
+    if (--fiber->frame_count == 0) {
+      // TODO: if we're evaluating an expression we need to set it's
+      // value on the stack.
+      // fiber->sp = fiber->stack; ??
+
+      if (fiber->caller == NULL) {
+        *fiber->ret = ret_value;
+        return RESULT_SUCCESS;
+
+      } else {
+        FIBER_SWITCH_BACK();
+        *fiber->ret = ret_value;
+      }
+
+    } else {
+      Var* return_slot = rbp;
+      if (return_slot == NULL || return_slot < fiber->stack
+          || return_slot >= (fiber->stack + fiber->stack_size)) {
+        // Fallback for rare stale frame-base states.
+        return_slot = fiber->ret;
+      }
+
+      if (return_slot == NULL || return_slot < fiber->stack
+          || return_slot >= (fiber->stack + fiber->stack_size)) {
+        RUNTIME_ERROR(newString(vm, "Invalid frame base pointer state."));
+      }
+
+      *return_slot = ret_value;
+      // Pop the params (locals should have popped at this point) and
+      // update stack pointer.
+      fiber->sp = return_slot + 1; // +1: return slot is returned value.
+    }
+
+    LOAD_FRAME();
+    DISPATCH();
+  }
+
+  OPCODE(GET_ATTRIB) : {
+    const uint8_t* attrib_site = ip - 1;
+    Var on = PEEK(-1); // Don't pop yet, we need the reference for gc.
+    String* name = moduleGetStringAt(module, READ_SHORT());
+    ASSERT(name != NULL, OOPS);
+
+    VMAttribInlineCacheEntry* aic = vmAttribInlineCacheAt(vm, attrib_site);
+    Var value = VAR_UNDEFINED;
+    bool cache_hit = false;
+
+    if (aic->site == attrib_site && aic->epoch == vm->inline_cache_epoch && aic->name == name) {
+      switch (aic->kind) {
+        case VM_ATTRIB_IC_INST_INLINE:
+          if (IS_OBJ_TYPE(on, OBJ_INST)) {
+            Instance* inst = (Instance*) AS_OBJ(on);
+            uint32_t slot = aic->slot_or_index;
+            if (inst->cls == aic->receiver_cls && slot < inst->inline_attrib_count) {
+              String* slot_name = inst->inline_attrib_names[slot];
+              if (slot_name == name) {
+                value = inst->inline_attrib_values[slot];
+                cache_hit = true;
+              }
+            }
+          }
+          break;
+
+        case VM_ATTRIB_IC_METHOD_BIND:
+          if (aic->method != NULL && getClass(vm, on) == aic->receiver_cls
+              && (aic->receiver_obj == NULL || (IS_OBJ(on) && AS_OBJ(on) == aic->receiver_obj))) {
+            MethodBind* mb = newMethodBind(vm, aic->method);
+            vmPushTempRef(vm, &mb->_super); // mb.
+            mb->instance = on;
+            value = VAR_OBJ(mb);
+            vmPopTempRef(vm); // mb.
+            cache_hit = true;
+          }
+          break;
+
+        case VM_ATTRIB_IC_NONE:
+        default:
+          break;
+      }
+    }
+
+    if (!cache_hit) {
+      value = varGetAttrib(vm, on, name, false, false);
+      CHECK_ERROR();
+
+      aic->site = attrib_site;
+      aic->epoch = vm->inline_cache_epoch;
+      aic->kind = VM_ATTRIB_IC_NONE;
+      aic->name = name;
+      aic->receiver_cls = NULL;
+      aic->receiver_obj = NULL;
+      aic->slot_or_index = 0;
+      aic->method = NULL;
+
+      if (IS_OBJ_TYPE(on, OBJ_INST)) {
+        Instance* inst = (Instance*) AS_OBJ(on);
+        for (uint8_t i = 0; i < inst->inline_attrib_count; i++) {
+          String* slot_name = inst->inline_attrib_names[i];
+          if (slot_name == name) {
+            aic->kind = VM_ATTRIB_IC_INST_INLINE;
+            aic->receiver_cls = inst->cls;
+            aic->slot_or_index = i;
+            break;
+          }
+        }
+      }
+
+      if (IS_OBJ_TYPE(value, OBJ_METHOD_BIND)) {
+        MethodBind* mb = (MethodBind*) AS_OBJ(value);
+        if (mb->method != NULL && !IS_OBJ_TYPE(on, OBJ_CLASS)) {
+          aic->kind = VM_ATTRIB_IC_METHOD_BIND;
+          aic->receiver_cls = getClass(vm, on);
+          aic->receiver_obj = NULL;
+          aic->method = mb->method;
+        }
+      }
+    }
+
+    DROP(); // on
+    PUSH(value);
+    DISPATCH();
+  }
+
+  OPCODE(GET_ATTRIB_KEEP) : {
+    const uint8_t* attrib_site = ip - 1;
+    Var on = PEEK(-1);
+    String* name = moduleGetStringAt(module, READ_SHORT());
+    ASSERT(name != NULL, OOPS);
+
+    VMAttribInlineCacheEntry* aic = vmAttribInlineCacheAt(vm, attrib_site);
+    Var value = VAR_UNDEFINED;
+    bool cache_hit = false;
+
+    if (aic->site == attrib_site && aic->epoch == vm->inline_cache_epoch && aic->name == name) {
+      switch (aic->kind) {
+        case VM_ATTRIB_IC_INST_INLINE:
+          if (IS_OBJ_TYPE(on, OBJ_INST)) {
+            Instance* inst = (Instance*) AS_OBJ(on);
+            uint32_t slot = aic->slot_or_index;
+            if (inst->cls == aic->receiver_cls && slot < inst->inline_attrib_count) {
+              String* slot_name = inst->inline_attrib_names[slot];
+              if (slot_name == name) {
+                value = inst->inline_attrib_values[slot];
+                cache_hit = true;
+              }
+            }
+          }
+          break;
+
+        case VM_ATTRIB_IC_METHOD_BIND:
+          if (aic->method != NULL && getClass(vm, on) == aic->receiver_cls
+              && (aic->receiver_obj == NULL || (IS_OBJ(on) && AS_OBJ(on) == aic->receiver_obj))) {
+            MethodBind* mb = newMethodBind(vm, aic->method);
+            vmPushTempRef(vm, &mb->_super); // mb.
+            mb->instance = on;
+            value = VAR_OBJ(mb);
+            vmPopTempRef(vm); // mb.
+            cache_hit = true;
+          }
+          break;
+
+        case VM_ATTRIB_IC_NONE:
+        default:
+          break;
+      }
+    }
+
+    if (!cache_hit) {
+      value = varGetAttrib(vm, on, name, false, false);
+      CHECK_ERROR();
+
+      aic->site = attrib_site;
+      aic->epoch = vm->inline_cache_epoch;
+      aic->kind = VM_ATTRIB_IC_NONE;
+      aic->name = name;
+      aic->receiver_cls = NULL;
+      aic->receiver_obj = NULL;
+      aic->slot_or_index = 0;
+      aic->method = NULL;
+
+      if (IS_OBJ_TYPE(on, OBJ_INST)) {
+        Instance* inst = (Instance*) AS_OBJ(on);
+        for (uint8_t i = 0; i < inst->inline_attrib_count; i++) {
+          String* slot_name = inst->inline_attrib_names[i];
+          if (slot_name == name) {
+            aic->kind = VM_ATTRIB_IC_INST_INLINE;
+            aic->receiver_cls = inst->cls;
+            aic->slot_or_index = i;
+            break;
+          }
+        }
+      }
+
+      if (IS_OBJ_TYPE(value, OBJ_METHOD_BIND)) {
+        MethodBind* mb = (MethodBind*) AS_OBJ(value);
+        if (mb->method != NULL && !IS_OBJ_TYPE(on, OBJ_CLASS)) {
+          aic->kind = VM_ATTRIB_IC_METHOD_BIND;
+          aic->receiver_cls = getClass(vm, on);
+          aic->receiver_obj = NULL;
+          aic->method = mb->method;
+        }
+      }
+    }
+
+    PUSH(value);
+    DISPATCH();
+  }
+
+  OPCODE(SET_ATTRIB) : {
+    Var value = PEEK(-1); // Don't pop yet, we need the reference for gc.
+    Var on = PEEK(-2);    // Don't pop yet, we need the reference for gc.
+    String* name = moduleGetStringAt(module, READ_SHORT());
+    ASSERT(name != NULL, OOPS);
+    varSetAttrib(vm, on, name, value, false);
+
+    DROP(); // value
+    DROP(); // on
+    PUSH(value);
+
+    CHECK_ERROR();
+    DISPATCH();
+  }
+
+  OPCODE(GET_SUBSCRIPT) : {
+    Var key = PEEK(-1); // Don't pop yet, we need the reference for gc.
+    Var on = PEEK(-2);  // Don't pop yet, we need the reference for gc.
+    Var value = varGetSubscript(vm, on, key);
+    DROP(); // key
+    DROP(); // on
+    PUSH(value);
+
+    CHECK_ERROR();
+    DISPATCH();
+  }
+
+  OPCODE(GET_SUBSCRIPT_KEEP) : {
+    Var key = PEEK(-1);
+    Var on = PEEK(-2);
+    PUSH(varGetSubscript(vm, on, key));
+    CHECK_ERROR();
+    DISPATCH();
+  }
+
+  OPCODE(SET_SUBSCRIPT) : {
+    Var value = PEEK(-1); // Don't pop yet, we need the reference for gc.
+    Var key = PEEK(-2);   // Don't pop yet, we need the reference for gc.
+    Var on = PEEK(-3);    // Don't pop yet, we need the reference for gc.
+    varsetSubscript(vm, on, key, value);
+    DROP(); // value
+    DROP(); // key
+    DROP(); // on
+    PUSH(value);
+
+    CHECK_ERROR();
+    DISPATCH();
+  }
+
+  OPCODE(POSITIVE) : {
+    // Don't pop yet, we need the reference for gc.
+    Var thiz_ = PEEK(-1);
+    Var result = varPositive(vm, thiz_);
+    DROP(); // this
+    PUSH(result);
+
+    CHECK_ERROR();
+    DISPATCH();
+  }
+
+  OPCODE(NEGATIVE) : {
+    // Don't pop yet, we need the reference for gc.
+    Var v = PEEK(-1);
+    Var result = varNegative(vm, v);
+    DROP(); // this
+    PUSH(result);
+
+    CHECK_ERROR();
+    DISPATCH();
+  }
+
+  OPCODE(NOT) : {
+    // Don't pop yet, we need the reference for gc.
+    Var v = PEEK(-1);
+    Var result = varNot(vm, v);
+    DROP(); // this
+    PUSH(result);
+
+    CHECK_ERROR();
+    DISPATCH();
+  }
+
+  OPCODE(BIT_NOT) : {
+    // Don't pop yet, we need the reference for gc.
+    Var v = PEEK(-1);
+    Var result = varBitNot(vm, v);
+    DROP(); // this
+    PUSH(result);
+
+    CHECK_ERROR();
+    DISPATCH();
+  }
+
+  // Do not ever use PUSH(binaryOp(vm, POP(), POP()));
+  // Function parameters are not evaluated in a defined order in C.
+
+  OPCODE(ADD) : {
+    // Don't pop yet, we need the reference for gc.
+    Var r = PEEK(-1), l = PEEK(-2);
+    uint8_t inplace = READ_BYTE();
+    ASSERT(inplace <= 1, OOPS);
+    double n1, n2;
+    if (vmIsNumeric(l, &n1) && vmIsNumeric(r, &n2)) {
+      Var result = VAR_NUM(n1 + n2);
+      DROP();
+      DROP(); // r, l
+      PUSH(result);
+      DISPATCH();
+    }
+    Var result = varAdd(vm, l, r, inplace);
+    DROP();
+    DROP(); // r, l
+    PUSH(result);
+
+    CHECK_ERROR();
+    DISPATCH();
+  }
+
+  OPCODE(SUBTRACT) : {
+    // Don't pop yet, we need the reference for gc.
+    Var r = PEEK(-1), l = PEEK(-2);
+    uint8_t inplace = READ_BYTE();
+    ASSERT(inplace <= 1, OOPS);
+    double n1, n2;
+    if (vmIsNumeric(l, &n1) && vmIsNumeric(r, &n2)) {
+      Var result = VAR_NUM(n1 - n2);
+      DROP();
+      DROP(); // r, l
+      PUSH(result);
+      DISPATCH();
+    }
+    Var result = varSubtract(vm, l, r, inplace);
+    DROP();
+    DROP(); // r, l
+    PUSH(result);
+
+    CHECK_ERROR();
+    DISPATCH();
+  }
+
+  OPCODE(MULTIPLY) : {
+    // Don't pop yet, we need the reference for gc.
+    Var r = PEEK(-1), l = PEEK(-2);
+    uint8_t inplace = READ_BYTE();
+    ASSERT(inplace <= 1, OOPS);
+    double n1, n2;
+    if (vmIsNumeric(l, &n1) && vmIsNumeric(r, &n2)) {
+      Var result = VAR_NUM(n1 * n2);
+      DROP();
+      DROP(); // r, l
+      PUSH(result);
+      DISPATCH();
+    }
+    Var result = varMultiply(vm, l, r, inplace);
+    DROP();
+    DROP(); // r, l
+    PUSH(result);
+
+    CHECK_ERROR();
+    DISPATCH();
+  }
+
+  OPCODE(DIVIDE) : {
+    // Don't pop yet, we need the reference for gc.
+    Var r = PEEK(-1), l = PEEK(-2);
+    uint8_t inplace = READ_BYTE();
+    ASSERT(inplace <= 1, OOPS);
+    double n1, n2;
+    if (vmIsNumeric(l, &n1) && vmIsNumeric(r, &n2)) {
+      if (n2 == 0) {
+        VM_SET_ERROR(vm, newString(vm, "Division by zero."));
+        CHECK_ERROR();
+      }
+      Var result = VAR_NUM(n1 / n2);
+      DROP();
+      DROP(); // r, l
+      PUSH(result);
+      DISPATCH();
+    }
+    Var result = varDivide(vm, l, r, inplace);
+    DROP();
+    DROP(); // r, l
+    PUSH(result);
+
+    CHECK_ERROR();
+    DISPATCH();
+  }
+
+  OPCODE(EXPONENT) : {
+    // Don't pop yet, we need the reference for gc.
+    Var r = PEEK(-1), l = PEEK(-2);
+    uint8_t inplace = READ_BYTE();
+    ASSERT(inplace <= 1, OOPS);
+    double n1, n2;
+    if (vmIsNumeric(l, &n1) && vmIsNumeric(r, &n2)) {
+      Var result = VAR_NUM(pow(n1, n2));
+      DROP();
+      DROP(); // r, l
+      PUSH(result);
+      DISPATCH();
+    }
+    Var result = varExponent(vm, l, r, inplace);
+    DROP();
+    DROP(); // r, l
+    PUSH(result);
+
+    CHECK_ERROR();
+    DISPATCH();
+  }
+
+  OPCODE(MOD) : {
+    // Don't pop yet, we need the reference for gc.
+    Var r = PEEK(-1), l = PEEK(-2);
+    uint8_t inplace = READ_BYTE();
+    ASSERT(inplace <= 1, OOPS);
+    double n1, n2;
+    if (vmIsNumeric(l, &n1) && vmIsNumeric(r, &n2)) {
+      if (n2 == 0) {
+        VM_SET_ERROR(vm, newString(vm, "Division by zero."));
+        CHECK_ERROR();
+      }
+      Var result = VAR_NUM(fmod(n1, n2));
+      DROP();
+      DROP(); // r, l
+      PUSH(result);
+      DISPATCH();
+    }
+    Var result = varModulo(vm, l, r, inplace);
+    DROP();
+    DROP(); // r, l
+    PUSH(result);
+
+    CHECK_ERROR();
+    DISPATCH();
+  }
+
+  OPCODE(BIT_AND) : {
+    // Don't pop yet, we need the reference for gc.
+    Var r = PEEK(-1), l = PEEK(-2);
+    uint8_t inplace = READ_BYTE();
+    ASSERT(inplace <= 1, OOPS);
+    double n1, n2;
+    if (vmIsNumeric(l, &n1) && vmIsNumeric(r, &n2) && floor(n1) == n1 && floor(n2) == n2) {
+      Var result = VAR_NUM((double) (((int64_t) n1) & ((int64_t) n2)));
+      DROP();
+      DROP(); // r, l
+      PUSH(result);
+      DISPATCH();
+    }
+    Var result = varBitAnd(vm, l, r, inplace);
+    DROP();
+    DROP(); // r, l
+    PUSH(result);
+
+    CHECK_ERROR();
+    DISPATCH();
+  }
+
+  OPCODE(BIT_OR) : {
+    // Don't pop yet, we need the reference for gc.
+    Var r = PEEK(-1), l = PEEK(-2);
+    uint8_t inplace = READ_BYTE();
+    ASSERT(inplace <= 1, OOPS);
+    double n1, n2;
+    if (vmIsNumeric(l, &n1) && vmIsNumeric(r, &n2) && floor(n1) == n1 && floor(n2) == n2) {
+      Var result = VAR_NUM((double) (((int64_t) n1) | ((int64_t) n2)));
+      DROP();
+      DROP(); // r, l
+      PUSH(result);
+      DISPATCH();
+    }
+    Var result = varBitOr(vm, l, r, inplace);
+    DROP();
+    DROP(); // r, l
+    PUSH(result);
+
+    CHECK_ERROR();
+    DISPATCH();
+  }
+
+  OPCODE(BIT_XOR) : {
+    // Don't pop yet, we need the reference for gc.
+    Var r = PEEK(-1), l = PEEK(-2);
+    uint8_t inplace = READ_BYTE();
+    ASSERT(inplace <= 1, OOPS);
+    double n1, n2;
+    if (vmIsNumeric(l, &n1) && vmIsNumeric(r, &n2) && floor(n1) == n1 && floor(n2) == n2) {
+      Var result = VAR_NUM((double) (((int64_t) n1) ^ ((int64_t) n2)));
+      DROP();
+      DROP(); // r, l
+      PUSH(result);
+      DISPATCH();
+    }
+    Var result = varBitXor(vm, l, r, inplace);
+    DROP();
+    DROP(); // r, l
+    PUSH(result);
+
+    CHECK_ERROR();
+    DISPATCH();
+  }
+
+  OPCODE(BIT_LSHIFT) : {
+    // Don't pop yet, we need the reference for gc.
+    Var r = PEEK(-1), l = PEEK(-2);
+    uint8_t inplace = READ_BYTE();
+    ASSERT(inplace <= 1, OOPS);
+    double n1, n2;
+    if (vmIsNumeric(l, &n1) && vmIsNumeric(r, &n2) && floor(n1) == n1 && floor(n2) == n2) {
+      Var result = VAR_NUM((double) (((int64_t) n1) << ((int64_t) n2)));
+      DROP();
+      DROP(); // r, l
+      PUSH(result);
+      DISPATCH();
+    }
+    Var result = varBitLshift(vm, l, r, inplace);
+    DROP();
+    DROP(); // r, l
+    PUSH(result);
+
+    CHECK_ERROR();
+    DISPATCH();
+  }
+
+  OPCODE(BIT_RSHIFT) : {
+    // Don't pop yet, we need the reference for gc.
+    Var r = PEEK(-1), l = PEEK(-2);
+    uint8_t inplace = READ_BYTE();
+    ASSERT(inplace <= 1, OOPS);
+    double n1, n2;
+    if (vmIsNumeric(l, &n1) && vmIsNumeric(r, &n2) && floor(n1) == n1 && floor(n2) == n2) {
+      Var result = VAR_NUM((double) (((int64_t) n1) >> ((int64_t) n2)));
+      DROP();
+      DROP(); // r, l
+      PUSH(result);
+      DISPATCH();
+    }
+    Var result = varBitRshift(vm, l, r, inplace);
+    DROP();
+    DROP(); // r, l
+    PUSH(result);
+
+    CHECK_ERROR();
+    DISPATCH();
+  }
+
+  OPCODE(EQEQ) : {
+    // Don't pop yet, we need the reference for gc.
+    Var r = PEEK(-1), l = PEEK(-2);
+    double n1, n2;
+    if (vmIsNumeric(l, &n1) && vmIsNumeric(r, &n2)) {
+      Var result = VAR_BOOL(n1 == n2);
+      DROP();
+      DROP(); // r, l
+      PUSH(result);
+      DISPATCH();
+    }
+    if (IS_OBJ_TYPE(l, OBJ_STRING) && IS_OBJ_TYPE(r, OBJ_STRING)) {
+      String* ls = AS_STRING(l);
+      String* rs = AS_STRING(r);
+      Var result = VAR_BOOL(IS_STR_EQ(ls, rs));
+      DROP();
+      DROP(); // r, l
+      PUSH(result);
+      DISPATCH();
+    }
+    Var result = varEqals(vm, l, r);
+    DROP();
+    DROP(); // r, l
+    PUSH(result);
+    CHECK_ERROR();
+    DISPATCH();
+  }
+
+  OPCODE(NOTEQ) : {
+    // Don't pop yet, we need the reference for gc.
+    Var r = PEEK(-1), l = PEEK(-2);
+    double n1, n2;
+    if (vmIsNumeric(l, &n1) && vmIsNumeric(r, &n2)) {
+      Var result = VAR_BOOL(n1 != n2);
+      DROP();
+      DROP(); // r, l
+      PUSH(result);
+      DISPATCH();
+    }
+    if (IS_OBJ_TYPE(l, OBJ_STRING) && IS_OBJ_TYPE(r, OBJ_STRING)) {
+      String* ls = AS_STRING(l);
+      String* rs = AS_STRING(r);
+      Var result = VAR_BOOL(!IS_STR_EQ(ls, rs));
+      DROP();
+      DROP(); // r, l
+      PUSH(result);
+      DISPATCH();
+    }
+    Var result = varEqals(vm, l, r);
+    DROP();
+    DROP(); // r, l
+    PUSH(VAR_BOOL(!toBool(result)));
+    CHECK_ERROR();
+    DISPATCH();
+  }
+
+  OPCODE(LT) : {
+    // Don't pop yet, we need the reference for gc.
+    Var r = PEEK(-1), l = PEEK(-2);
+    double n1, n2;
+    if (vmIsNumeric(l, &n1) && vmIsNumeric(r, &n2)) {
+      Var result = VAR_BOOL(n1 < n2);
+      DROP();
+      DROP(); // r, l
+      PUSH(result);
+      DISPATCH();
+    }
+    Var result = varLesser(vm, l, r);
+    DROP();
+    DROP(); // r, l
+    PUSH(result);
+    CHECK_ERROR();
+    DISPATCH();
+  }
+
+  OPCODE(LTEQ) : {
+    // Don't pop yet, we need the reference for gc.
+    Var r = PEEK(-1), l = PEEK(-2);
+    double n1, n2;
+    if (vmIsNumeric(l, &n1) && vmIsNumeric(r, &n2)) {
+      Var result = VAR_BOOL(n1 <= n2);
+      DROP();
+      DROP(); // r, l
+      PUSH(result);
+      DISPATCH();
+    }
+
+    Var result = varLesser(vm, l, r);
+    CHECK_ERROR();
+    bool lteq = toBool(result);
+
+    if (!lteq)
+      result = varEqals(vm, l, r);
+    CHECK_ERROR();
+
+    DROP();
+    DROP(); // r, l
+    PUSH(result);
+    DISPATCH();
+  }
+
+  OPCODE(GT) : {
+    // Don't pop yet, we need the reference for gc.
+    Var r = PEEK(-1), l = PEEK(-2);
+    double n1, n2;
+    if (vmIsNumeric(l, &n1) && vmIsNumeric(r, &n2)) {
+      Var result = VAR_BOOL(n1 > n2);
+      DROP();
+      DROP(); // r, l
+      PUSH(result);
+      DISPATCH();
+    }
+    Var result = varGreater(vm, l, r);
+    DROP();
+    DROP(); // r, l
+    PUSH(result);
+    CHECK_ERROR();
+    DISPATCH();
+  }
+
+  OPCODE(GTEQ) : {
+    // Don't pop yet, we need the reference for gc.
+    Var r = PEEK(-1), l = PEEK(-2);
+    double n1, n2;
+    if (vmIsNumeric(l, &n1) && vmIsNumeric(r, &n2)) {
+      Var result = VAR_BOOL(n1 >= n2);
+      DROP();
+      DROP(); // r, l
+      PUSH(result);
+      DISPATCH();
+    }
+    Var result = varGreater(vm, l, r);
+    CHECK_ERROR();
+    bool gteq = toBool(result);
+
+    if (!gteq)
+      result = varEqals(vm, l, r);
+    CHECK_ERROR();
+
+    DROP();
+    DROP(); // r, l
+    PUSH(result);
+    DISPATCH();
+  }
+
+  OPCODE(RANGE) : {
+    // Don't pop yet, we need the reference for gc.
+    Var r = PEEK(-1), l = PEEK(-2);
+    Var result = varOpRange(vm, l, r);
+    DROP();
+    DROP(); // r, l
+    PUSH(result);
+    CHECK_ERROR();
+    DISPATCH();
+  }
+
+  OPCODE(IN) : {
+    // Don't pop yet, we need the reference for gc.
+    Var container = PEEK(-1), elem = PEEK(-2);
+    bool contains = varContains(vm, elem, container);
+    DROP();
+    DROP(); // container, elem
+    PUSH(VAR_BOOL(contains));
+    CHECK_ERROR();
+    DISPATCH();
+  }
+
+  OPCODE(IS) : {
+    // Don't pop yet, we need the reference for gc.
+    Var type = PEEK(-1), inst = PEEK(-2);
+    bool is = varIsType(vm, inst, type);
+    DROP();
+    DROP(); // container, elem
+    PUSH(VAR_BOOL(is));
+    CHECK_ERROR();
+    DISPATCH();
+  }
+
+  OPCODE(REPL_PRINT) : {
+    if (vm->config.stdout_write != NULL) {
+      Var tmp = PEEK(-1);
+      if (!IS_NULL(tmp)) {
+        vm->config.stdout_write(vm, varToString(vm, tmp, true)->data);
+        vm->config.stdout_write(vm, "\n");
+      }
+    }
+    DISPATCH();
+  }
+
+  OPCODE(END) : UNREACHABLE();
+#if !USE_COMPUTED_GOTO
+  break;
+
+  default:
+    UNREACHABLE();
+#endif
+#if !USE_COMPUTED_GOTO
+}
 #endif
 
-  UNREACHABLE();
-  return RESULT_RUNTIME_ERROR;
+UNREACHABLE();
+return RESULT_RUNTIME_ERROR;
 }

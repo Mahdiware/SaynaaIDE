@@ -95,8 +95,7 @@ static void* defaultRealloc(void* memory, size_t new_size, void* _);
 static void stderrWrite(VM* vm, const char* text);
 static void stdoutWrite(VM* vm, const char* text);
 static char* stdinRead(VM* vm);
-static char* loadScriptAutoDetect(VM* vm, const char* path);
-static Result runFileAutoDetect(VM* vm, const char* path, bool* is_bytecode);
+static LoadScriptResult loadScript(VM* vm, const char* path);
 
 void* Realloc(VM* vm, void* ptr, size_t size) {
   ASSERT(vm->config.realloc_fn != NULL, "VM's allocator was NULL.");
@@ -122,7 +121,7 @@ Configuration NewConfiguration() {
 #endif
 
 #endif
-  config.load_script_fn = loadScriptAutoDetect;
+  config.load_script_fn = loadScript;
 
   return config;
 }
@@ -149,11 +148,9 @@ VM* NewVM(Configuration* config) {
   vm->interned_strings_capacity = 1024;
   vm->interned_strings_count = 0;
   vm->interned_strings = (String**) vm->config.realloc_fn(
-      NULL, sizeof(String*) * vm->interned_strings_capacity,
-      vm->config.user_data);
+      NULL, sizeof(String*) * vm->interned_strings_capacity, vm->config.user_data);
   ASSERT(vm->interned_strings != NULL, "Out of memory.");
-  memset(vm->interned_strings, 0,
-         sizeof(String*) * vm->interned_strings_capacity);
+  memset(vm->interned_strings, 0, sizeof(String*) * vm->interned_strings_capacity);
 
   vm->modules = newMap(vm);
   vm->search_paths = newList(vm, 8);
@@ -200,9 +197,8 @@ void FreeVM(VM* vm) {
   vm->working_set = (Object**) vm->config.realloc_fn(vm->working_set, 0,
                                                      vm->config.user_data);
 
-  vm->interned_strings = (String**) vm->config.realloc_fn(vm->interned_strings,
-                                                           0,
-                                                           vm->config.user_data);
+  vm->interned_strings = (String**) vm->config.realloc_fn(vm->interned_strings, 0,
+                                                          vm->config.user_data);
 
   // Validate that all handles have been released by the host application.
   // If handles remain, it indicates a resource leak in the host's usage of the VM.
@@ -497,14 +493,10 @@ Result RunStringPcall(VM* vm, const char* source) {
 }
 
 Result RunFile(VM* vm, const char* path) {
-  return runFileAutoDetect(vm, path, NULL);
+  return RunFileWithModule(vm, NULL, path);
 }
 
-Result RunFileAutoDetect(VM* vm, const char* path, bool* is_bytecode) {
-  return runFileAutoDetect(vm, path, is_bytecode);
-}
-
-static Result runFileAutoDetect(VM* vm, const char* path, bool* is_bytecode) {
+Result RunFileWithModule(VM* vm, Module* module, const char* path) {
   // Note: Even if the file is already in the VM's script cache (e.g., via
   // import), we explicitly recompile it here to ensure the cache reflects the
   // latest content on disk.
@@ -513,7 +505,7 @@ static Result runFileAutoDetect(VM* vm, const char* path, bool* is_bytecode) {
          "No script loading functions defined.");
 
   Result result = RESULT_SUCCESS;
-  Module* module = NULL;
+  // Module* module = NULL;
 
   // Resolve the path.
   char* resolved_ = NULL;
@@ -535,8 +527,12 @@ static Result runFileAutoDetect(VM* vm, const char* path, bool* is_bytecode) {
     return RESULT_COMPILE_ERROR;
   }
 
-  module = newModule(vm);
-  vmPushTempRef(vm, &module->_super); // module.
+  bool is_null_module = (module == NULL);
+
+  if (is_null_module) {
+    module = newModule(vm);
+    vmPushTempRef(vm, &module->_super); // module.
+  }
   {
     // Set module path and and deallocate resolved.
     String* script_path = newString(vm, resolved_);
@@ -546,10 +542,8 @@ static Result runFileAutoDetect(VM* vm, const char* path, bool* is_bytecode) {
     vmPopTempRef(vm); // script_path.
 
     const char* _path = module->path->data;
-    bool local_is_bytecode = false;
-    Result load_status = RESULT_SUCCESS;
-    char* source = LoadScriptAutoDetect(vm, _path, &local_is_bytecode,
-                                        &load_status);
+    LoadScriptResult load_result = vm->config.load_script_fn(vm, _path);
+    char* source = load_result.content;
     if (source == NULL) {
       result = RESULT_COMPILE_ERROR;
       if (vm->config.stderr_write != NULL) {
@@ -560,22 +554,22 @@ static Result runFileAutoDetect(VM* vm, const char* path, bool* is_bytecode) {
           vm->config.stderr_write(vm, "Error loading script at \"");
         }
         vm->config.stderr_write(vm, _path);
-        if (load_status != RESULT_SUCCESS) {
+        if (load_result.status != RESULT_SUCCESS) {
           vm->config.stderr_write(vm, "\" (bytecode: ");
-          vm->config.stderr_write(vm, saynaa_status_message(load_status));
+          vm->config.stderr_write(vm, saynaa_status_message(load_result.status));
           vm->config.stderr_write(vm, ")\n");
         } else {
           vm->config.stderr_write(vm, "\"\n");
         }
       }
     } else {
-      if (local_is_bytecode) {
+      if (load_result.is_bytecode) {
+        initializeModule(vm, module, true);
         SaynaaBytecodeHeader header;
         Result status = saynaa_bytecode_decode_header(
             (const uint8_t*) source, SAYNAA_BYTECODE_HEADER_SIZE, &header);
         if (status == RESULT_SUCCESS) {
-          const uint8_t* payload = (const uint8_t*) source
-                                   + SAYNAA_BYTECODE_HEADER_SIZE;
+          const uint8_t* payload = (const uint8_t*) source + SAYNAA_BYTECODE_HEADER_SIZE;
           status = saynaa_bytecode_deserialize_module(vm, module, payload,
                                                       header.bytecode_size);
         }
@@ -583,12 +577,10 @@ static Result runFileAutoDetect(VM* vm, const char* path, bool* is_bytecode) {
         if (status != RESULT_SUCCESS) {
           result = RESULT_COMPILE_ERROR;
           if (!VM_HAS_ERROR(vm)) {
-            VM_SET_ERROR(vm,
-                         stringFormat(vm, "Bytecode deserialize failed: $",
-                                      saynaa_status_message(status), false));
+            VM_SET_ERROR(vm, stringFormat(vm, "Bytecode deserialize failed: $",
+                                          saynaa_status_message(status), false));
           }
         } else {
-          initializeModule(vm, module, true);
           result = RESULT_SUCCESS;
         }
       } else {
@@ -599,14 +591,13 @@ static Result runFileAutoDetect(VM* vm, const char* path, bool* is_bytecode) {
       Realloc(vm, source, 0);
     }
 
-    if (is_bytecode)
-      *is_bytecode = local_is_bytecode;
-
     if (result == RESULT_SUCCESS) {
       vmRegisterModule(vm, module, module->path);
     }
   }
-  vmPopTempRef(vm); // module.
+  if (is_null_module) {
+    vmPopTempRef(vm); // module.
+  }
 
   if (result != RESULT_SUCCESS)
     return result;
@@ -637,7 +628,10 @@ Result CompileStringToBytecode(VM* vm, const char* source, SaynaaBytecode* out) 
   vmPushTempRef(vm, &module->_super); // module.
 
   module->path = newString(vm, "@(Bytecode)");
-  Result result = compile(vm, module, source, NULL);
+  CompileOptions options = newCompilerOptions();
+  // runtime flag it allow to compile code that return value to module body,
+  options.runtime = true;
+  Result result = compile(vm, module, source, &options);
 
   if (result == RESULT_SUCCESS) {
     ByteBuffer payload;
@@ -659,12 +653,12 @@ Result CompileFileToBytecode(VM* vm, const char* path, SaynaaBytecode* out) {
   if (vm == NULL || path == NULL || out == NULL)
     return RESULT_COMPILE_ERROR;
 
-  bool is_bytecode = false;
-  char* source = LoadScriptAutoDetect(vm, path, &is_bytecode, NULL);
-  if (source == NULL)
+  LoadScriptResult load_result = loadScript(vm, path);
+  char* source = load_result.content;
+  if (source == NULL || load_result.status != RESULT_SUCCESS)
     return RESULT_COMPILE_ERROR;
 
-  if (is_bytecode) {
+  if (load_result.is_bytecode) {
     Realloc(vm, source, 0);
     return RESULT_COMPILE_ERROR;
   }
@@ -1416,10 +1410,6 @@ static char* stdinRead(VM* vm) {
   return str;
 }
 
-static char* loadScriptAutoDetect(VM* vm, const char* path) {
-  return LoadScriptAutoDetect(vm, path, NULL, NULL);
-}
-
 static uint8_t* readFileRawBytes(VM* vm, const char* path, size_t* out_size) {
   if (out_size)
     *out_size = 0;
@@ -1447,18 +1437,15 @@ static uint8_t* readFileRawBytes(VM* vm, const char* path, size_t* out_size) {
   return buff;
 }
 
-char* LoadScriptAutoDetect(VM* vm, const char* path, bool* is_bytecode,
-                           Result* out_status) {
-  if (out_status)
-    *out_status = RESULT_SUCCESS;
-
-  if (is_bytecode)
-    *is_bytecode = false;
+static LoadScriptResult loadScript(VM* vm, const char* path) {
+  LoadScriptResult result = {0};
 
   size_t read = 0;
   uint8_t* buff = readFileRawBytes(vm, path, &read);
-  if (buff == NULL)
-    return NULL;
+  if (buff == NULL) {
+    result.status = RESULT_BYTECODE_IO_ERROR;
+    return result;
+  }
 
   if (read >= SAYNAA_BYTECODE_HEADER_SIZE) {
     SaynaaBytecodeHeader header;
@@ -1468,35 +1455,40 @@ char* LoadScriptAutoDetect(VM* vm, const char* path, bool* is_bytecode,
       if (status == RESULT_BYTECODE_INVALID_MAGIC) {
         // Not bytecode, fall through to source.
       } else if (status != RESULT_SUCCESS) {
-        if (out_status)
-          *out_status = status;
+        result.status = status;
         Realloc(vm, buff, 0);
-        return NULL;
+        return result;
       } else {
         const uint8_t* payload = buff + SAYNAA_BYTECODE_HEADER_SIZE;
         status = saynaa_bytecode_validate_checksum(&header, payload, header.bytecode_size);
         if (status != RESULT_SUCCESS) {
-          if (out_status)
-            *out_status = status;
+          result.status = status;
           Realloc(vm, buff, 0);
-          return NULL;
+          return result;
         }
         status = saynaa_bytecode_validate_payload(payload, header.bytecode_size);
         if (status != RESULT_SUCCESS) {
-          if (out_status)
-            *out_status = status;
+          result.status = status;
           Realloc(vm, buff, 0);
-          return NULL;
+          return result;
         }
-        if (is_bytecode)
-          *is_bytecode = true;
-        return (char*) buff;
+        result.content = (char*) buff;
+        result.is_bytecode = true;
+        result.status = RESULT_SUCCESS;
+        return result;
       }
-    } else if (out_status) {
-      *out_status = status;
     }
   }
 
   buff[read] = '\0';
-  return (char*) buff;
+  result.content = (char*) buff;
+  result.is_bytecode = false;
+  result.status = RESULT_SUCCESS;
+  return result;
+}
+
+LoadScriptResult LoadScript(VM* vm, const char* path) {
+  CHECK_ARG_NULL(vm);
+  CHECK_ARG_NULL(path);
+  return loadScript(vm, path);
 }

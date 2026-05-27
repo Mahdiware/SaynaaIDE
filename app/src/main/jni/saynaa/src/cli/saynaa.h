@@ -73,6 +73,8 @@ extern "C" {
 // heap, and manage memory allocations.
 typedef struct VM VM;
 
+typedef struct Module Module;
+
 // A handle to the variables. It'll hold the reference to the
 // variable and ensure that the variable it holds won't be garbage collected
 // till it's released with releaseHandle().
@@ -113,12 +115,6 @@ typedef char* (*ReadFn)(VM* vm);
 // the host application. The first argument is depend on the callback it's
 // registered.
 typedef void (*SignalFn)(void*);
-
-// Load and return the script. Called by the compiler to fetch initial source
-// code and source for import statements. Return NULL to indicate failure to
-// load. Otherwise the string **must** be allocated with Realloc() and
-// the VM will claim the ownership of the string.
-typedef char* (*LoadScriptFn)(VM* vm, const char* path);
 
 #ifndef NO_DL
 
@@ -219,6 +215,17 @@ typedef enum Result {
   RESULT_BYTECODE_TRUNCATED,
   RESULT_BYTECODE_IO_ERROR,
 } Result;
+
+typedef struct {
+  char* content;    // script source or bytecode buffer
+  bool is_bytecode; // 1 = bytecode, 0 = source
+  Result status;    // execution / load status
+} LoadScriptResult;
+
+// Load and return the script. Called by the compiler to fetch initial source
+// code and source for import statements. The content buffer is allocated with
+// Realloc() and the VM claims ownership of the buffer.
+typedef LoadScriptResult (*LoadScriptFn)(VM* vm, const char* path);
 
 typedef struct Argument {
   // argument count: is number of value inside argv
@@ -353,21 +360,18 @@ PUBLIC Result RunStringPcall(VM* vm, const char* source);
 // Run the file at [path] relative to the current working directory.
 PUBLIC Result RunFile(VM* vm, const char* path);
 
-// Run the file at [path] and report if it was bytecode.
-PUBLIC Result RunFileAutoDetect(VM* vm, const char* path, bool* is_bytecode);
+// Run the file at [path] with the provided module.
+PUBLIC Result RunFileWithModule(VM* vm, Module* module, const char* path);
 
 // Load script content, auto-detecting bytecode headers if present.
-// Returns NULL on error. The buffer is allocated with Realloc().
-PUBLIC char* LoadScriptAutoDetect(VM* vm, const char* path, bool* is_bytecode,
-                                  Result* out_status);
+// Returns a LoadScriptResult with the content and status.
+PUBLIC LoadScriptResult LoadScript(VM* vm, const char* path);
 
 // Compile source string into in-memory bytecode.
-PUBLIC Result CompileStringToBytecode(VM* vm, const char* source,
-                                      SaynaaBytecode* out);
+PUBLIC Result CompileStringToBytecode(VM* vm, const char* source, SaynaaBytecode* out);
 
 // Compile source file at [path] into in-memory bytecode.
-PUBLIC Result CompileFileToBytecode(VM* vm, const char* path,
-                                    SaynaaBytecode* out);
+PUBLIC Result CompileFileToBytecode(VM* vm, const char* path, SaynaaBytecode* out);
 
 // time vm taked.
 PUBLIC double vm_time(VM* vm);

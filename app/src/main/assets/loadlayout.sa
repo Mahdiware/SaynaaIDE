@@ -23,6 +23,7 @@ Color = java.bindClass('android.graphics.Color')
 Typeface = java.bindClass('android.graphics.Typeface')
 TruncateAt = java.bindClass('android.text.TextUtils$TruncateAt')
 AndroidR = java.bindClass('android.R')
+AndroidRLayout = java.bindClass('android.R$layout')
 Context = java.bindClass('android.content.Context')
 DisplayMetrics = java.bindClass('android.util.DisplayMetrics')
 
@@ -758,7 +759,7 @@ function apply_attrs(view, node)
   items = node.get('items')
   if items != null then
     list = java.create('java.util.ArrayList', items)
-    adapter = ArrayAdapter(context, AndroidR.layout.simple_list_item_1, list)
+    adapter = ArrayAdapter(context, AndroidRLayout.simple_list_item_1, list)
     view.setAdapter(adapter)
   end
 end
