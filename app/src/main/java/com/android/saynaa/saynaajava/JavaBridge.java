@@ -113,6 +113,8 @@ public class JavaBridge {
       }
       return out;
     }
+    case Saynaa.SLOT_TYPE_MODULE:
+      return new SaynaaModule(saynaa, slot);
     default:
       return null;
     }
@@ -235,9 +237,9 @@ public class JavaBridge {
   private static Object normalizeArg(Object arg) {
     if (arg == null)
       return null;
-    if (arg instanceof SaynaaObject) {
-      return ((SaynaaObject) arg).getObject();
-    }
+    // if (arg instanceof SaynaaObject) {
+    //   return ((SaynaaObject) arg).getObject();
+    // }
     if (arg instanceof SaynaaContext) {
       Context ctx = ((SaynaaContext) arg).getContext();
       return ctx != null ? ctx : arg;
@@ -382,24 +384,40 @@ public class JavaBridge {
   }
 
   private static Field findFieldQuietly(Class<?> cls, String fieldName) {
+    if (cls == null || fieldName == null)
+      return null;
+
     FieldKey key = new FieldKey(cls, fieldName);
     if (missingFieldCache.containsKey(key)) {
       return null;
     }
 
-    Field field = fieldCache.get(key);
-    if (field != null) {
-      return field;
-    }
+    Field cached = fieldCache.get(key);
+    if (cached != null)
+      return cached;
 
     try {
-      field = cls.getField(fieldName);
+      // direct lookup (fast path)
+      Field field = cls.getField(fieldName);
       fieldCache.put(key, field);
       Log.d(TAG, "Cached field: " + field);
       return field;
-    } catch (NoSuchFieldException e) {
-      missingFieldCache.put(key, Boolean.TRUE);
-      return null;
+
+    } catch (NoSuchFieldException ignored) {
+      // fallback: scan declared fields (important fix)
+      try {
+        Field field = cls.getDeclaredField(fieldName);
+        field.setAccessible(true);
+
+        fieldCache.put(key, field);
+        Log.d(TAG, "Cached declared field: " + field);
+
+        return field;
+
+      } catch (NoSuchFieldException e2) {
+        missingFieldCache.put(key, Boolean.TRUE);
+        return null;
+      }
     }
   }
 
@@ -1142,8 +1160,8 @@ public class JavaBridge {
   private static Object normalizeReturn(Object value) {
     if (value == null)
       return null;
-    if (value instanceof SaynaaObject)
-      return ((SaynaaObject) value).getObject();
+    // if (value instanceof SaynaaObject)
+    //   return ((SaynaaObject) value).getObject();
     if (value instanceof CharSequence)
       return value.toString();
     if (value instanceof Character)
@@ -1201,6 +1219,12 @@ public class JavaBridge {
       return true;
     }
 
+    // SaynaaModule
+    if (normalized instanceof SaynaaModule) {
+      saynaa.setSlotHandle(slot, ((SaynaaModule) normalized).getSlot());
+      return true;
+    }
+
     return false;
   }
 
@@ -1226,8 +1250,7 @@ public class JavaBridge {
     return pushToSlotAsSaynaaInternal(saynaa, slot, value, null, 0);
   }
 
-  private static IdentityHashMap<Object, Boolean> ensureVisitingMap(
-      IdentityHashMap<Object, Boolean> visiting) {
+  private static IdentityHashMap<Object, Boolean> ensureVisitingMap(IdentityHashMap<Object, Boolean> visiting) {
     return visiting != null ? visiting : new IdentityHashMap<Object, Boolean>();
   }
 

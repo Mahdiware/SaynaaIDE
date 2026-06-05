@@ -107,7 +107,6 @@ void add_java_exports(VM* vm, Handle* mod) {
   }
 }
 
-
 void clear_callbacks(VM* vm) {
   BridgeState* bridge = bridge_from_vm(vm);
   if (bridge == NULL)
@@ -293,9 +292,8 @@ bool invoke_registered_callback(JNIEnv* env, VM* vm, BridgeState* bridge, Callba
   return ok;
 }
 
-bool invoke_registered_callback_from_slots(JNIEnv* env, VM* vm, BridgeState* bridge,
-    CallbackEntry* entry, const char* runtimeMethodName, int argStart, int argCount,
-    jobject* outResult) {
+bool invoke_registered_callback_from_slots(JNIEnv* env, VM* vm, BridgeState* bridge, CallbackEntry* entry,
+    const char* runtimeMethodName, int argStart, int argCount, jobject* outResult) {
   if (vm == NULL || bridge == NULL || entry == NULL)
     return false;
 
@@ -541,7 +539,7 @@ jobject bridge_find_class_exact(JNIEnv* env, VM* vm, BridgeState* bridge, const 
 }
 
 jobject bridge_find_class(JNIEnv* env, VM* vm, BridgeState* bridge, const char* requestedName,
-  bool searchPackages, char** resolvedNameOut) {
+    bool searchPackages, char** resolvedNameOut) {
   if (resolvedNameOut != NULL)
     *resolvedNameOut = NULL;
 
@@ -763,9 +761,8 @@ jobject make_args_array(JNIEnv* env, VM* vm, BridgeState* bridge, int startSlot,
   if (saynaaObj == NULL)
     return NULL;
 
-  jobjectArray args = (jobjectArray) (*env)->CallStaticObjectMethod(
-      env, bridge->javaBridgeClass, bridge->mArgsArrayFromSlots, saynaaObj,
-      (jint) startSlot, (jint) argc);
+  jobjectArray args = (jobjectArray) (*env)->CallStaticObjectMethod(env, bridge->javaBridgeClass,
+      bridge->mArgsArrayFromSlots, saynaaObj, (jint) startSlot, (jint) argc);
   (*env)->DeleteLocalRef(env, saynaaObj);
 
   if ((*env)->ExceptionCheck(env)) {
@@ -1067,7 +1064,6 @@ void fn_bindClass(VM* vm) {
     (*env)->DeleteLocalRef(env, cls);
 }
 
-
 void fn_new(VM* vm) {
   int argc = GetArgc(vm);
   if (argc < 1) {
@@ -1088,9 +1084,8 @@ void fn_new(VM* vm) {
     return;
   }
 
-  jboolean ok = (*env)->CallStaticBooleanMethod(
-      env, bridge->javaBridgeClass, bridge->mNewFromSlots, saynaaObj,
-      (jint) 1, (jint) 2, (jint) (argc - 1), (jint) 0);
+  jboolean ok = (*env)->CallStaticBooleanMethod(env, bridge->javaBridgeClass, bridge->mNewFromSlots,
+      saynaaObj, (jint) 1, (jint) 2, (jint) (argc - 1), (jint) 0);
 
   (*env)->DeleteLocalRef(env, saynaaObj);
 
@@ -1113,8 +1108,8 @@ static jobject make_empty_args(JNIEnv* env) {
   return args;
 }
 
-static bool build_java_array_from_list(JNIEnv* env, VM* vm, BridgeState* bridge,
-    jobject classObj, int listSlot, jobject* outArray) {
+static bool build_java_array_from_list(
+    JNIEnv* env, VM* vm, BridgeState* bridge, jobject classObj, int listSlot, jobject* outArray) {
   if (outArray == NULL)
     return false;
   *outArray = NULL;
@@ -1157,8 +1152,7 @@ static bool build_java_array_from_list(JNIEnv* env, VM* vm, BridgeState* bridge,
 
   jmethodID mNewInstance = (*env)->GetStaticMethodID(
       env, arrayClass, "newInstance", "(Ljava/lang/Class;I)Ljava/lang/Object;");
-  jmethodID mSet = (*env)->GetStaticMethodID(
-      env, arrayClass, "set", "(Ljava/lang/Object;ILjava/lang/Object;)V");
+  jmethodID mSet = (*env)->GetStaticMethodID(env, arrayClass, "set", "(Ljava/lang/Object;ILjava/lang/Object;)V");
   if (mNewInstance == NULL || mSet == NULL) {
     (*env)->DeleteLocalRef(env, arrayClass);
     (*env)->DeleteLocalRef(env, componentType);
@@ -1336,8 +1330,7 @@ void fn_create(VM* vm) {
   jmethodID mIsInterface = (*env)->GetMethodID(env, clsClass, "isInterface", "()Z");
   jmethodID mGetModifiers = (*env)->GetMethodID(env, clsClass, "getModifiers", "()I");
   jboolean isArray = (*env)->CallBooleanMethod(env, classObj, mIsArray);
-  jboolean isInterface = mIsInterface == NULL ? JNI_FALSE
-      : (*env)->CallBooleanMethod(env, classObj, mIsInterface);
+  jboolean isInterface = mIsInterface == NULL ? JNI_FALSE : (*env)->CallBooleanMethod(env, classObj, mIsInterface);
   if ((*env)->ExceptionCheck(env)) {
     (*env)->DeleteLocalRef(env, clsClass);
     (*env)->DeleteLocalRef(env, classObj);
@@ -1401,8 +1394,8 @@ void fn_create(VM* vm) {
 
       jstring jMethod = (*env)->NewStringUTF(env, methodName == NULL ? "" : methodName);
       jstring jScript = (*env)->NewStringUTF(env, script == NULL ? "" : script);
-      jobject proxy = (*env)->CallStaticObjectMethod(
-          env, bridge->javaBridgeClass, bridge->mCreateProxy, saynaaObj, classNameObj, jMethod, jScript);
+      jobject proxy = (*env)->CallStaticObjectMethod(env, bridge->javaBridgeClass,
+          bridge->mCreateProxy, saynaaObj, classNameObj, jMethod, jScript);
 
       (*env)->DeleteLocalRef(env, jScript);
       (*env)->DeleteLocalRef(env, jMethod);
@@ -1436,9 +1429,8 @@ void fn_create(VM* vm) {
       return;
     }
 
-    int callbackId = (callbackType == vCLOSURE)
-        ? register_callback(vm, 2)
-        : register_map_callback(vm, 2, methodName);
+    int callbackId = (callbackType == vCLOSURE) ? register_callback(vm, 2)
+                                                : register_map_callback(vm, 2, methodName);
     if (callbackId == 0) {
       if (classNameObj != NULL)
         (*env)->DeleteLocalRef(env, classNameObj);
@@ -1475,9 +1467,8 @@ void fn_create(VM* vm) {
     return;
   }
 
-  jboolean ok = (*env)->CallStaticBooleanMethod(
-      env, bridge->javaBridgeClass, bridge->mCreateFromSlots, saynaaObj,
-      (jint) 1, (jint) 2, (jint) argc, (jint) 0);
+  jboolean ok = (*env)->CallStaticBooleanMethod(env, bridge->javaBridgeClass,
+      bridge->mCreateFromSlots, saynaaObj, (jint) 1, (jint) 2, (jint) argc, (jint) 0);
 
   (*env)->DeleteLocalRef(env, saynaaObj);
   (*env)->DeleteLocalRef(env, clsClass);
@@ -1516,8 +1507,7 @@ void fn_length(VM* vm) {
 
   JNIEnv* env = env_from_jvm(bridge->jvm);
   jobject target = slot_to_java(env, vm, bridge, 1);
-  jdouble length = (*env)->CallStaticDoubleMethod(
-      env, bridge->javaBridgeClass, bridge->mJavaLength, target);
+  jdouble length = (*env)->CallStaticDoubleMethod(env, bridge->javaBridgeClass, bridge->mJavaLength, target);
   if (target != NULL)
     (*env)->DeleteLocalRef(env, target);
 
@@ -1567,9 +1557,8 @@ void fn_call(VM* vm) {
         if (GetSlotType(vm, slot) != vMAP)
           continue;
 
-        jobject iface = (*env)->CallStaticObjectMethod(
-            env, bridge->javaBridgeClass, bridge->mResolveCallbackInterface,
-            target, jMethod, (jint) callArgc, (jint) i);
+        jobject iface = (*env)->CallStaticObjectMethod(env, bridge->javaBridgeClass,
+            bridge->mResolveCallbackInterface, target, jMethod, (jint) callArgc, (jint) i);
 
         if ((*env)->ExceptionCheck(env)) {
           throw_if_exception(vm, env, "resolveCallbackInterface failed");
@@ -1605,9 +1594,8 @@ void fn_call(VM* vm) {
     return;
   }
 
-  jboolean ok = (*env)->CallStaticBooleanMethod(
-      env, bridge->javaBridgeClass, bridge->mCallFromSlots, saynaaObj,
-      (jint) 1, (jint) 2, (jint) 3, (jint) (argc - 2), (jint) 0);
+  jboolean ok = (*env)->CallStaticBooleanMethod(env, bridge->javaBridgeClass,
+      bridge->mCallFromSlots, saynaaObj, (jint) 1, (jint) 2, (jint) 3, (jint) (argc - 2), (jint) 0);
 
   (*env)->DeleteLocalRef(env, saynaaObj);
   if (target != NULL)
@@ -1648,9 +1636,8 @@ void fn_callStatic(VM* vm) {
     return;
   }
 
-  jboolean ok = (*env)->CallStaticBooleanMethod(
-      env, bridge->javaBridgeClass, bridge->mCallStaticFromSlots, saynaaObj,
-      (jint) 1, (jint) 2, (jint) 3, (jint) (argc - 2), (jint) 0);
+  jboolean ok = (*env)->CallStaticBooleanMethod(env, bridge->javaBridgeClass, bridge->mCallStaticFromSlots,
+      saynaaObj, (jint) 1, (jint) 2, (jint) 3, (jint) (argc - 2), (jint) 0);
 
   (*env)->DeleteLocalRef(env, saynaaObj);
 
@@ -1686,9 +1673,8 @@ void fn_getField(VM* vm) {
     return;
   }
 
-  jboolean ok = (*env)->CallStaticBooleanMethod(
-      env, bridge->javaBridgeClass, bridge->mGetFieldFromSlots, saynaaObj,
-      (jint) 1, (jint) 2, (jint) 0);
+  jboolean ok = (*env)->CallStaticBooleanMethod(env, bridge->javaBridgeClass,
+      bridge->mGetFieldFromSlots, saynaaObj, (jint) 1, (jint) 2, (jint) 0);
 
   (*env)->DeleteLocalRef(env, saynaaObj);
 
@@ -1730,9 +1716,8 @@ void fn_setField(VM* vm) {
     return;
   }
 
-  jboolean ok = (*env)->CallStaticBooleanMethod(
-      env, bridge->javaBridgeClass, bridge->mSetFieldFromSlots, saynaaObj,
-      (jint) 1, (jint) 2, (jint) 3, (jint) 0);
+  jboolean ok = (*env)->CallStaticBooleanMethod(env, bridge->javaBridgeClass,
+      bridge->mSetFieldFromSlots, saynaaObj, (jint) 1, (jint) 2, (jint) 3, (jint) 0);
 
   (*env)->DeleteLocalRef(env, saynaaObj);
 
@@ -1899,9 +1884,8 @@ void fn_createProxy(VM* vm) {
     return;
   }
 
-  jboolean ok = (*env)->CallStaticBooleanMethod(
-      env, bridge->javaBridgeClass, bridge->mCreateProxyFromSlots, saynaaObj,
-      (jint) 1, (jint) 2, (jint) callbackArgIndex, (jint) argc, (jint) 0);
+  jboolean ok = (*env)->CallStaticBooleanMethod(env, bridge->javaBridgeClass, bridge->mCreateProxyFromSlots,
+      saynaaObj, (jint) 1, (jint) 2, (jint) callbackArgIndex, (jint) argc, (jint) 0);
 
   (*env)->DeleteLocalRef(env, saynaaObj);
 
@@ -1929,7 +1913,6 @@ void register_java_api(VM* vm) {
   RegisterBuiltinFn(vm, "java_call_static", fn_callStatic, -1, "Invoke Java static method.");
   RegisterBuiltinFn(vm, "java_get_field", fn_getField, 2, "Read Java field value.");
   RegisterBuiltinFn(vm, "java_set_field", fn_setField, 3, "Write Java field value.");
-  RegisterBuiltinFn(vm, "eventView", fn_eventView, 0, "Return current event view object.");
   RegisterBuiltinFn(vm, "createProxy", fn_createProxy,
       -1, "createProxy(interface, callback) or createProxy(interface, method, callback) -> Java listener/proxy.");
   RegisterBuiltinFn(vm, "instanceof", fn_instanceof, 2, "instanceof(javaObject, classOrName) -> boolean.");

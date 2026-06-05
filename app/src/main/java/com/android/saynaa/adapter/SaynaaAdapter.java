@@ -18,11 +18,15 @@ import android.widget.Filter;
 import android.widget.Filterable;
 import android.widget.ImageView;
 import android.widget.TextView;
+import com.android.saynaa.activity.SaynaaActivity;
+import com.android.saynaa.saynaajava.SaynaaException;
+import com.android.saynaa.saynaajava.SaynaaState;
 import java.io.File;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -104,6 +108,11 @@ public class SaynaaAdapter extends BaseAdapter implements Filterable {
     this(context, 0, data, viewFactory);
   }
 
+  public SaynaaAdapter(Context context, Object data, Object layoutSpec) {
+    this(context, resolveLayoutResId(layoutSpec), coerceDataList(data),
+        resolveViewFactory(context, layoutSpec));
+  }
+
   private SaynaaAdapter(Context context, int layoutResId, List<Map<String, Object>> data,
       SaynaaViewFactory viewFactory) {
     if (context == null) {
@@ -151,6 +160,10 @@ public class SaynaaAdapter extends BaseAdapter implements Filterable {
     notifyDataSetChanged();
   }
 
+  public void setData(Object data) {
+    setData(coerceDataList(data));
+  }
+
   public List<Map<String, Object>> getData() {
     return mData;
   }
@@ -169,6 +182,10 @@ public class SaynaaAdapter extends BaseAdapter implements Filterable {
         notifyDataSetChanged();
       }
     }
+  }
+
+  public void addAll(Object items) {
+    addAll(coerceDataList(items));
   }
 
   public void insert(int position, Map<String, Object> item) {
@@ -304,6 +321,137 @@ public class SaynaaAdapter extends BaseAdapter implements Filterable {
     return mFilter;
   }
 
+  private static int resolveLayoutResId(Object layoutSpec) {
+    if (layoutSpec instanceof Number) {
+      return ((Number) layoutSpec).intValue();
+    }
+    return 0;
+  }
+
+  private static SaynaaViewFactory resolveViewFactory(Context context, Object layoutSpec) {
+    if (layoutSpec instanceof SaynaaViewFactory) {
+      return (SaynaaViewFactory) layoutSpec;
+    }
+    if (layoutSpec instanceof Map || layoutSpec instanceof List) {
+      if (!(context instanceof SaynaaActivity)) {
+        throw new IllegalArgumentException("SaynaaActivity is required to use loadlayout.");
+      }
+      return new SaynaaLayoutFactory(context, layoutSpec);
+    }
+    return null;
+  }
+
+  private static List<Map<String, Object>> coerceDataList(Object data) {
+    if (data == null) {
+      return new ArrayList<>();
+    }
+    if (data instanceof List) {
+      return coerceList((List<?>) data);
+    }
+    if (data instanceof Map) {
+      return coerceMap((Map<?, ?>) data);
+    }
+    return new ArrayList<>();
+  }
+
+  private static List<Map<String, Object>> coerceList(List<?> list) {
+    List<Map<String, Object>> out = new ArrayList<>();
+    if (list == null) {
+      return out;
+    }
+    for (Object item : list) {
+      Map<String, Object> row = coerceRow(item);
+      if (row != null) {
+        out.add(row);
+      }
+    }
+    return out;
+  }
+
+  private static List<Map<String, Object>> coerceMap(Map<?, ?> map) {
+    List<Map<String, Object>> out = new ArrayList<>();
+    if (map == null || map.isEmpty()) {
+      return out;
+    }
+
+    boolean allNumeric = true;
+    List<Map.Entry<?, ?>> entries = new ArrayList<>(map.entrySet());
+    for (Map.Entry<?, ?> entry : entries) {
+      if (toNumericKey(entry.getKey()) == null) {
+        allNumeric = false;
+        break;
+      }
+    }
+
+    if (allNumeric) {
+      Collections.sort(entries, new Comparator<Map.Entry<?, ?>>() {
+        @Override
+        public int compare(Map.Entry<?, ?> left, Map.Entry<?, ?> right) {
+          Long leftKey = toNumericKey(left.getKey());
+          Long rightKey = toNumericKey(right.getKey());
+          if (leftKey == null && rightKey == null) {
+            return 0;
+          }
+          if (leftKey == null) {
+            return 1;
+          }
+          if (rightKey == null) {
+            return -1;
+          }
+          return Long.compare(leftKey, rightKey);
+        }
+      });
+      for (Map.Entry<?, ?> entry : entries) {
+        Map<String, Object> row = coerceRow(entry.getValue());
+        if (row != null) {
+          out.add(row);
+        }
+      }
+      return out;
+    }
+
+    Map<String, Object> row = coerceRow(map);
+    if (row != null) {
+      out.add(row);
+    }
+    return out;
+  }
+
+  private static Map<String, Object> coerceRow(Object item) {
+    if (item instanceof Map) {
+      Map<String, Object> row = new HashMap<>();
+      Map<?, ?> map = (Map<?, ?>) item;
+      for (Map.Entry<?, ?> entry : map.entrySet()) {
+        if (entry.getKey() == null) {
+          continue;
+        }
+        row.put(String.valueOf(entry.getKey()), entry.getValue());
+      }
+      return row;
+    }
+
+    if (item != null) {
+      Map<String, Object> row = new HashMap<>();
+      row.put("text", item);
+      return row;
+    }
+    return null;
+  }
+
+  private static Long toNumericKey(Object key) {
+    if (key instanceof Number) {
+      return ((Number) key).longValue();
+    }
+    if (key instanceof String) {
+      try {
+        return Long.parseLong((String) key);
+      } catch (NumberFormatException ignored) {
+        return null;
+      }
+    }
+    return null;
+  }
+
   private View createRowView(ViewGroup parent) {
     if (mViewFactory != null) {
       View view = mViewFactory.createView(mInflater, parent);
@@ -313,6 +461,60 @@ public class SaynaaAdapter extends BaseAdapter implements Filterable {
       return view;
     }
     return mInflater.inflate(mLayoutResId, parent, false);
+  }
+
+  private static final class SaynaaLayoutFactory implements SaynaaViewFactory {
+    private static final String LOADLAYOUT_ALIAS = "__saynaa_loadlayout";
+    private final Object layoutSpec;
+    private final SaynaaActivity activity;
+    private final SaynaaState saynaaState;
+    private boolean loadlayoutReady;
+
+    SaynaaLayoutFactory(Context context, Object layoutSpec) {
+      this.layoutSpec = layoutSpec;
+      this.activity = context instanceof SaynaaActivity ? (SaynaaActivity) context : null;
+      this.saynaaState = this.activity != null ? this.activity.getSaynaaState() : null;
+    }
+
+    @Override
+    public View createView(LayoutInflater inflater, ViewGroup parent) {
+      if (activity == null || saynaaState == null) {
+        throw new IllegalStateException("SaynaaActivity is required to use loadlayout.");
+      }
+      Object result = callLoadlayout(layoutSpec);
+      if (result instanceof View) {
+        return (View) result;
+      }
+      throw new IllegalStateException("loadlayout did not return a View.");
+    }
+
+    private Object callLoadlayout(Object layoutSpec) {
+      if (!ensureLoadlayout()) {
+        return null;
+      }
+      try {
+        return saynaaState.callGlobalFunction(LOADLAYOUT_ALIAS, activity, layoutSpec);
+      } catch (SaynaaException e) {
+        return null;
+      }
+    }
+
+    private boolean ensureLoadlayout() {
+      if (loadlayoutReady) {
+        return true;
+      }
+      try {
+        if (saynaaState.getGlobalFunctionId(LOADLAYOUT_ALIAS) >= 0) {
+          loadlayoutReady = true;
+          return true;
+        }
+        saynaaState.doString(LOADLAYOUT_ALIAS + " = loadlayout.loadlayout");
+        loadlayoutReady = saynaaState.getGlobalFunctionId(LOADLAYOUT_ALIAS) >= 0;
+        return loadlayoutReady;
+      } catch (SaynaaException e) {
+        return false;
+      }
+    }
   }
 
   private void applyEntries(ViewHolder holder, Map<String, Object> row, boolean firstBind) {

@@ -1,7 +1,7 @@
 #pragma once
 
-#include "saynaa_config.h"
 #include "saynaa.h"
+#include "saynaa_config.h"
 #include "saynaa_vm.h"
 
 #include <android/log.h>
@@ -25,7 +25,6 @@ typedef struct BridgeState {
   jclass javaBridgeClass;
   jobject activity;
   jobject saynaaObject;
-  jobject lastEventView;
 
   Handle* javaModule;
   Handle* javaWrapperModule;
@@ -160,6 +159,7 @@ extern void java_method_call(VM* vm);
 extern void java_class_str(VM* vm);
 extern void java_object_str(VM* vm);
 extern void java_method_str(VM* vm);
+extern void java_method_getter(VM* vm);
 extern bool java_to_slot(JNIEnv* env, VM* vm, BridgeState* bridge, int slot, jobject obj);
 extern jobject slot_to_java(JNIEnv* env, VM* vm, BridgeState* bridge, int slot);
 extern bool ensure_java_module(VM* vm);
@@ -180,12 +180,12 @@ extern CallbackEntry* find_callback(VM* vm, int callbackId);
 extern bool invoke_registered_callback(JNIEnv* env, VM* vm, BridgeState* bridge,
     CallbackEntry* entry, const char* runtimeMethodName, jobject args, jobject* outResult);
 extern bool invoke_registered_callback_from_slots(JNIEnv* env, VM* vm, BridgeState* bridge,
-  CallbackEntry* entry, const char* runtimeMethodName, int argStart, int argCount, jobject* outResult);
+    CallbackEntry* entry, const char* runtimeMethodName, int argStart, int argCount, jobject* outResult);
 extern jobject create_native_callback_proxy(JNIEnv* env, VM* vm, BridgeState* bridge,
     jstring jInterface, const char* methodName, int callbackId);
 extern void release_bridge_handle(VM* vm, Handle** handlePtr);
-extern bool object_to_slot(JNIEnv* env, VM* vm, BridgeState* bridge, int slot, jobject obj,
-  const char* wrapErrorMessage);
+extern bool object_to_slot(
+    JNIEnv* env, VM* vm, BridgeState* bridge, int slot, jobject obj, const char* wrapErrorMessage);
 
 extern void java_ref_destructor(void* ptr);
 extern JavaRef* clone_java_ref(JNIEnv* env, JavaRef* src);

@@ -1,25 +1,18 @@
 package com.android.saynaa.saynaajava;
 
 public class SaynaaObject {
-  private final Object value;
+  // private final Object value;
 
-  public SaynaaObject(Object value) {
-    this.value = value;
+  // FIXME: use SaynaaState instead of Saynaa
+  protected final Saynaa saynaa;
+  protected final int slot;
+
+  public SaynaaObject(Saynaa saynaa, int slot) {
+    this.saynaa = saynaa;
+    this.slot = slot;
   }
 
-  public Object getObject() {
-    return value;
-  }
-
-  public Object call(String methodName, Object... args) {
-    return JavaBridge.callJavaMethod(value, methodName, args);
-  }
-
-  public Object getField(String fieldName) {
-    return JavaBridge.getFieldValue(value, fieldName);
-  }
-
-  public boolean setField(String fieldName, Object fieldValue) {
-    return JavaBridge.setFieldValue(value, fieldName, fieldValue);
+  public int getSlot() {
+    return slot;
   }
 }

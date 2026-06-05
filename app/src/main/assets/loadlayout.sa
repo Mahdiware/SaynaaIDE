@@ -4,7 +4,7 @@ context = null
 ids = {}
 idmap = {}
 next_id = 0x7f000000
-target_module = _module
+target_module = null
 
 ViewGroup = java.bindClass('android.view.ViewGroup')
 View = java.bindClass('android.view.View')
@@ -859,30 +859,23 @@ function create_view(node, parent)
   return view
 end
 
-function loadlayout(root_module, node)
-  if node == null then
-    node = root_module
-    root_module = _module
-  end
+function loadlayout(activity, node)
+  assert(java.instanceof(activity, Context), 'loadlayout: activity is null')
   ids = {}
   idmap = {}
   next_id = 0x7f000000
-  target_module = root_module
-  globals = root_module.globals()
-  if globals != null then
-    context = globals.get('activity')
-  end
-  if context == null then
-    assert(false, 'loadlayout: activity is null')
-  end
+  target_module = activity.getModule()
+  assert(target_module is Module, 'loadlayout: target module isnt a module')
+  context = activity
+
   dm = context.getResources().getDisplayMetrics()
   wm = context.getSystemService(Context.WINDOW_SERVICE)
   out = DisplayMetrics()
   wm.getDefaultDisplay().getMetrics(out)
   W = out.widthPixels
   H = out.heightPixels
-  root_module.define('ids', ids)
-  root_module.define('idmap', idmap)
+  target_module.define('ids', ids)
+  target_module.define('idmap', idmap)
   return create_view(node, null)
 end
 

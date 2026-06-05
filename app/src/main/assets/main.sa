@@ -4,6 +4,7 @@ import "android.text.*"
 import "android.os.*"
 import "android.graphics.*"
 import "com.android.saynaa.*"
+import "com.android.saynaa.adapter.*"
 
 function toast(msg)
 	Toast.makeText(activity, msg, Toast.LENGTH_SHORT).show()
@@ -52,16 +53,34 @@ DemoLayout = {
   {
     ListView,
     id: 'DemoList',
-    items: ['Mohamed - Software Engineer', 'Ahmed - Designer', 'Ali - Product Manager', 'Amina - QA Engineer'],
     layout_width: 'match_parent',
     layout_height: '240dp'
   }
 }
 
-assert(activity != null, 'activity is null')
+AdapterData = [
+  { text: 'Mahdi' },
+  { text: 'Ahmed' }
+]
 
-root = loadlayout.loadlayout(_module, DemoLayout)
-assert(root != null, 'loadlayout returned null')
+AdapterItem = {
+  LinearLayout,
+  orientation: 'horizontal',
+  padding: '8dp',
+  layout_width: 'match_parent',
+  layout_height: 'wrap_content',
+
+  {
+    TextView,
+    id: 'text',
+    textSize: '16sp',
+    textColor: '#111111',
+    layout_width: 'wrap_content',
+    layout_height: 'wrap_content'
+  }
+}
+
+assert(activity != null, 'activity is null')
 
 function runfunc_test(arg1, arg2, arg3, arg4)
 	return arg1 + arg2 + arg3 + arg4
@@ -69,8 +88,19 @@ end
 
 assert(activity.runFunc("runfunc_test", 1, 2, 3, 40) == 46, "activity.runFunc return mismatch")
 
+# FIXME: the nested class don't work now
+# R = java.bindClass('android.R')
+# list_item_1 = R.layout.simple_list_item_1
+# toast("id is: ${ list_item_1 }")
+
+debug("This is a debug message from Saynaa script.")
+
 function onCreate(arg1)
+  root = loadlayout.loadlayout(activity, DemoLayout)
+  assert(root != null, 'loadlayout returned null')
   activity.setContentView(root)
+  # adapter = SaynaaAdapter(activity, AdapterData, AdapterItem)
+  # DemoList.setAdapter(adapter)
   nextpage.setOnClickListener(View.OnClickListener({
     onClick: function(v)
       print('next page button clicked')

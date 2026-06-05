@@ -7,15 +7,24 @@ import com.android.saynaa.activity.SaynaaActivity;
 import com.android.saynaa.saynaajava.PCallResult;
 
 public class Saynaa {
+
+  public static final int SLOT_TYPE_OBJECT = 0;
   public static final int SLOT_TYPE_NULL = 1;
   public static final int SLOT_TYPE_BOOL = 2;
   public static final int SLOT_TYPE_NUMBER = 3;
   public static final int SLOT_TYPE_STRING = 4;
   public static final int SLOT_TYPE_LIST = 5;
   public static final int SLOT_TYPE_MAP = 6;
+  public static final int SLOT_TYPE_RANGE = 7;
+  public static final int SLOT_TYPE_MODULE = 8;
+  public static final int SLOT_TYPE_CLOSURE = 9;
+  public static final int SLOT_TYPE_METHOD_BIND = 10;
+  public static final int SLOT_TYPE_FIBER = 11;
+  public static final int SLOT_TYPE_CLASS = 12;
   public static final int SLOT_TYPE_POINTER = 13;
   public static final int SLOT_TYPE_INSTANCE = 14;
   Context context;
+
   static {
     System.loadLibrary("saynaajava");
   }
@@ -35,10 +44,6 @@ public class Saynaa {
 
   public synchronized int runStringPcall(String code) {
     return saynaa_doStringPcall(code);
-  }
-
-  public synchronized void setLastEventView(View view) {
-    saynaa_setLastEventView(view);
   }
 
   public synchronized void invokeCallback(int callbackId, Object arg0) {
@@ -96,27 +101,9 @@ public class Saynaa {
     return JavaBridge.slotToJava(this, retSlot);
   }
 
-  public synchronized Object callFunctionByIdWithView(int functionId, View view, Object... args) {
-    setLastEventView(view);
-    try {
-      return callFunctionByIdWithArgs(functionId, args);
-    } finally {
-      setLastEventView(null);
-    }
-  }
-
   public synchronized Object callGlobalFunction(String name, Object... args) {
     int functionId = getGlobalFunctionId(name);
     return callFunctionByIdWithArgs(functionId, args);
-  }
-
-  public synchronized Object callGlobalFunctionWithView(String name, View view, Object... args) {
-    setLastEventView(view);
-    try {
-      return callGlobalFunction(name, args);
-    } finally {
-      setLastEventView(null);
-    }
   }
 
   public synchronized boolean setGlobal(String name, Object value) {
@@ -152,6 +139,10 @@ public class Saynaa {
 
   synchronized void setSlotString(int slot, String value) {
     saynaa_setSlotString(slot, value);
+  }
+
+  synchronized void setSlotHandle(int slot, int handleId) {
+    saynaa_setSlotHandle(slot, handleId);
   }
 
   synchronized void newList(int slot) {
@@ -218,6 +209,10 @@ public class Saynaa {
     return runString(code);
   }
 
+  public synchronized Object getModule() {
+    return saynaa_getModule();
+  }
+
   public synchronized void close() {
     if (this.vm != null && this.vm.getPointer() != 0) {
       try {
@@ -251,9 +246,9 @@ public class Saynaa {
 
   private synchronized native void execute(Context context);
   private synchronized native int saynaa_doStringPcall(String code);
-  private synchronized native void saynaa_setLastEventView(View view);
   private synchronized native void invokeCallbackNative(int callbackId, Object arg0);
   private synchronized native CPtr saynaa_open();
+  private synchronized native Object saynaa_getModule();
   private synchronized native PCallResult saynaa_pcall(String functionName, Object[] args);
   private synchronized native int saynaa_doFile(String fileName);
   private synchronized native int saynaa_doString(String code);
@@ -268,6 +263,7 @@ public class Saynaa {
   private synchronized native void saynaa_setSlotBool(int slot, boolean value);
   private synchronized native void saynaa_setSlotNumber(int slot, double value);
   private synchronized native void saynaa_setSlotString(int slot, String value);
+  private synchronized native void saynaa_setSlotHandle(int slot, int handleId);
   private synchronized native void saynaa_newList(int slot);
   private synchronized native void saynaa_newMap(int slot);
   private synchronized native boolean saynaa_listInsert(int listSlot, int index, int valueSlot);

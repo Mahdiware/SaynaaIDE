@@ -75,15 +75,11 @@ public final class SaynaaProxyFactory {
           boolean matches = wildcard || (methodName != null && methodName.equals(method.getName()));
           if (saynaa != null && !saynaa.isClosed() && matches) {
             try {
-              View eventView = null;
-              if (args != null && args.length > 0 && args[0] instanceof View) {
-                eventView = (View) args[0];
-              }
               if (functionId[0] < 0 && functionName != null && !functionName.isEmpty()) {
                 functionId[0] = saynaa.getGlobalFunctionId(functionName);
               }
               if (functionId[0] >= 0) {
-                saynaa.callFunctionByIdWithView(functionId[0], eventView, args);
+                saynaa.callFunctionByIdWithArgs(functionId[0], args);
               }
             } catch (Throwable t) {
               sendProxyError(saynaa, method.getName(), t);

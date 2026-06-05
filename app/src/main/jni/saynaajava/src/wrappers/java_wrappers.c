@@ -126,8 +126,8 @@ void java_class_getter(VM* vm) {
   }
 
   // Try resolving nested class references like View.OnClickListener -> android.view.View$OnClickListener
-  if (name != NULL && name[0] != '\0' && is_uppercase_ascii(name[0])
-      && bridge != NULL && bridge->javaBridgeClass != NULL && bridge->mFindClass != NULL) {
+  if (name != NULL && name[0] != '\0' && is_uppercase_ascii(name[0]) && bridge != NULL
+      && bridge->javaBridgeClass != NULL && bridge->mFindClass != NULL) {
     jobject classObj = (*env)->NewLocalRef(env, thiz->class_ref->global);
     jstring ownerNameObj = get_java_object_name(env, vm, bridge, classObj,
         "JavaClass._getter getName() failed", "JavaClass._getter failed to resolve class name.");
@@ -385,7 +385,7 @@ void java_class_call(VM* vm) {
   if (VM_HAS_ERROR(vm) || (args == NULL && argc > 0)) {
     if (!VM_HAS_ERROR(vm) && argc > 0)
       LOGE("JavaClass._call argument conversion failed.");
-      SetRuntimeError(vm, "JavaClass._call argument conversion failed.");
+    SetRuntimeError(vm, "JavaClass._call argument conversion failed.");
     if (args != NULL)
       (*env)->DeleteLocalRef(env, args);
     if (classNameObj != NULL)
@@ -611,9 +611,8 @@ void java_method_call(VM* vm) {
           if (GetSlotType(vm, slot) != vMAP)
             continue;
 
-          jobject iface = (*env)->CallStaticObjectMethod(
-              env, bridge->javaBridgeClass, bridge->mResolveCallbackInterface,
-              targetRef, jMethod, (jint) argc, (jint) i);
+          jobject iface = (*env)->CallStaticObjectMethod(env, bridge->javaBridgeClass,
+              bridge->mResolveCallbackInterface, targetRef, jMethod, (jint) argc, (jint) i);
 
           if ((*env)->ExceptionCheck(env)) {
             throw_if_exception(vm, env, "resolveCallbackInterface failed");
@@ -727,13 +726,4 @@ void fn_activity(VM* vm) {
     }
   }
   wrap_bridge_global(vm, bridge->activity, 0);
-}
-
-void fn_eventView(VM* vm) {
-  BridgeState* bridge = bridge_from_vm(vm);
-  if (bridge == NULL) {
-    setSlotNull(vm, 0);
-    return;
-  }
-  wrap_bridge_global(vm, bridge->lastEventView, 0);
 }

@@ -291,6 +291,15 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
     return SaynaaApplication.getInstance().setSharedData(key, value);
   }
 
+  public Object getModule() {
+    try {
+      return saynaaState.getModule();
+    } catch (SaynaaException e) {
+      e.printStackTrace();
+      return null;
+    }
+  }
+
   private void initSaynaa() {
     saynaaState = ensureState();
     saynaa = saynaaState.getSaynaa();
