@@ -119,7 +119,7 @@ void java_class_getter(VM* vm) {
     }
 
     if (fieldValue != NULL) {
-      put_java_result(vm, env, bridge, fieldValue, 0);
+      object_to_slot(env, vm, bridge, 0, fieldValue, "Failed to wrap Java result object.");
       (*env)->DeleteLocalRef(env, fieldValue);
       return;
     }
@@ -317,7 +317,7 @@ void java_class_call(VM* vm) {
               return;
             }
 
-            put_java_result(vm, env, bridge, proxy, 0);
+            object_to_slot(env, vm, bridge, 0, proxy, "Failed to wrap Java result object.");
             if (proxy != NULL)
               (*env)->DeleteLocalRef(env, proxy);
 
@@ -348,7 +348,7 @@ void java_class_call(VM* vm) {
             return;
           }
 
-          put_java_result(vm, env, bridge, proxy, 0);
+          object_to_slot(env, vm, bridge, 0, proxy, "Failed to wrap Java result object.");
           (*env)->DeleteLocalRef(env, proxy);
           if (inferred != NULL)
             (*env)->ReleaseStringUTFChars(env, (jstring) inferredObj, inferred);
@@ -371,7 +371,7 @@ void java_class_call(VM* vm) {
       if (callbackType == vMAP && callbackId > 0) {
         jobject proxy = create_native_callback_proxy(env, vm, bridge, classNameObj, "*", callbackId);
         if (proxy != NULL) {
-          put_java_result(vm, env, bridge, proxy, 0);
+          object_to_slot(env, vm, bridge, 0, proxy, "Failed to wrap Java result object.");
           (*env)->DeleteLocalRef(env, proxy);
           (*env)->DeleteLocalRef(env, classNameObj);
           (*env)->DeleteLocalRef(env, classObj);
@@ -424,7 +424,7 @@ void java_class_call(VM* vm) {
     (*env)->DeleteLocalRef(env, classNameObj);
   (*env)->DeleteLocalRef(env, classObj);
 
-  put_java_result(vm, env, bridge, obj, 0);
+  object_to_slot(env, vm, bridge, 0, obj, "Failed to wrap Java result object.");
   if (obj != NULL)
     (*env)->DeleteLocalRef(env, obj);
 }
@@ -461,7 +461,7 @@ void java_object_getter(VM* vm) {
     }
 
     if (fieldValue != NULL) {
-      put_java_result(vm, env, bridge, fieldValue, 0);
+      object_to_slot(env, vm, bridge, 0, fieldValue, "Failed to wrap Java result object.");
       (*env)->DeleteLocalRef(env, fieldValue);
       return;
     }
@@ -633,7 +633,7 @@ void java_method_call(VM* vm) {
           jobject proxy = create_native_callback_proxy(env, vm, bridge, (jstring) iface, "*", callbackId);
           (*env)->DeleteLocalRef(env, iface);
           if (proxy != NULL) {
-            java_to_slot(env, vm, bridge, slot, proxy);
+            object_to_slot(env, vm, bridge, slot, proxy, "Failed to wrap Java callback object.");
             (*env)->DeleteLocalRef(env, proxy);
           }
         }
@@ -680,7 +680,7 @@ void java_method_call(VM* vm) {
     return;
   }
 
-  put_java_result(vm, env, bridge, ret, 0);
+  object_to_slot(env, vm, bridge, 0, ret, "Failed to wrap Java result object.");
   if (ret != NULL)
     (*env)->DeleteLocalRef(env, ret);
 }
@@ -696,10 +696,10 @@ void java_method_str(VM* vm) {
   setSlotString(vm, 0, "<JavaMethod>");
 }
 
-void fn_activity(VM* vm) {
+void java_activity(VM* vm, int slotout) {
   BridgeState* bridge = bridge_from_vm(vm);
   if (bridge == NULL) {
-    setSlotNull(vm, 0);
+    setSlotNull(vm, slotout);
     return;
   }
   if (bridge->activity == NULL && bridge->saynaaObject != NULL) {
@@ -725,5 +725,5 @@ void fn_activity(VM* vm) {
       }
     }
   }
-  wrap_bridge_global(vm, bridge->activity, 0);
+  wrap_bridge_global(vm, bridge->activity, slotout);
 }

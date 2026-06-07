@@ -7,7 +7,6 @@ import com.android.saynaa.activity.SaynaaActivity;
 import com.android.saynaa.saynaajava.PCallResult;
 
 public class Saynaa {
-
   public static final int SLOT_TYPE_OBJECT = 0;
   public static final int SLOT_TYPE_NULL = 1;
   public static final int SLOT_TYPE_BOOL = 2;
@@ -153,6 +152,32 @@ public class Saynaa {
     saynaa_newMap(slot);
   }
 
+  synchronized SaynaaModule newModule(String name) {
+    Object module = saynaa_newModule(name);
+    // module is istance of SaynaaModule
+    if (module instanceof SaynaaModule) {
+      return (SaynaaModule) module;
+    } else {
+      return null;
+    }
+  }
+
+  synchronized boolean moduleSetGlobal(SaynaaModule module, String name, Object value) {
+    return saynaa_moduleSetGlobal(module.getSlot(), name, value);
+  }
+
+  synchronized boolean moduleSetGlobal(SaynaaModule module, String name, Object clazz, String methodName) {
+    return saynaa_moduleSetGlobal(module.getSlot(), name, clazz, methodName);
+  }
+
+  synchronized boolean registerModule(SaynaaModule module) {
+    return saynaa_registerModule(module.getSlot());
+  }
+
+  synchronized int runFile(SaynaaModule module, String path) {
+    return saynaa_runFile(module.getSlot(), path);
+  }
+
   synchronized boolean listInsert(int listSlot, int index, int valueSlot) {
     return saynaa_listInsert(listSlot, index, valueSlot);
   }
@@ -161,8 +186,22 @@ public class Saynaa {
     return saynaa_mapSet(mapSlot, keySlot, valueSlot);
   }
 
-  synchronized boolean wrapJavaObject(int slot, Object value) {
-    return saynaa_wrapJavaObject(slot, value);
+  synchronized boolean bindJavaObject(int slot, Object value) {
+    return saynaa_bindJavaObject(slot, value);
+  }
+
+  synchronized boolean bindJavaClass(int slot, Class<?> clazz) {
+    return saynaa_bindJavaClass(slot, clazz);
+  }
+
+  synchronized boolean bindJavaMethod(int slot, Object target, String methodName) {
+    if (target instanceof Class) {
+      // Static method
+      return saynaa_bindJavaMethod(slot, target, methodName, true);
+    } else {
+      // Instance method
+      return saynaa_bindJavaMethod(slot, target, methodName, false);
+    }
   }
 
   synchronized int getSlotType(int slot) {
@@ -244,7 +283,6 @@ public class Saynaa {
     return this.vm == null ? 0 : this.vm.getPointer();
   }
 
-  private synchronized native void execute(Context context);
   private synchronized native int saynaa_doStringPcall(String code);
   private synchronized native void invokeCallbackNative(int callbackId, Object arg0);
   private synchronized native CPtr saynaa_open();
@@ -266,9 +304,18 @@ public class Saynaa {
   private synchronized native void saynaa_setSlotHandle(int slot, int handleId);
   private synchronized native void saynaa_newList(int slot);
   private synchronized native void saynaa_newMap(int slot);
+  private synchronized native Object saynaa_newModule(String name);
+  private synchronized native boolean saynaa_moduleSetGlobal(int moduleSlot, String name, Object value);
+  private synchronized native boolean saynaa_moduleSetGlobal(
+      int moduleSlot, String name, Object clazz, String methodName);
+  private synchronized native boolean saynaa_registerModule(int moduleSlot);
+  private synchronized native int saynaa_runFile(int moduleSlot, String path);
   private synchronized native boolean saynaa_listInsert(int listSlot, int index, int valueSlot);
   private synchronized native boolean saynaa_mapSet(int mapSlot, int keySlot, int valueSlot);
-  private synchronized native boolean saynaa_wrapJavaObject(int slot, Object value);
+  private synchronized native boolean saynaa_bindJavaObject(int slot, Object value);
+  private synchronized native boolean saynaa_bindJavaClass(int slot, Class<?> clazz);
+  private synchronized native boolean saynaa_bindJavaMethod(
+      int slot, Object target, String methodName, boolean isStatic);
   private synchronized native int saynaa_getSlotType(int slot);
   private synchronized native boolean saynaa_getSlotBool(int slot);
   private synchronized native double saynaa_getSlotNumber(int slot);

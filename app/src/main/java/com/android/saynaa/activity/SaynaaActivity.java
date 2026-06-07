@@ -200,7 +200,25 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
       showScriptError("onCreate error", t.getMessage());
       setContentView(layout);
     }
+    //runTest();
   }
+
+  // public void runTest() {
+  //   try {
+  //     SaynaaModule module2 = saynaaState.newModule("hellomodule");
+
+  //     File testFile = new File(saynaaDir == null ? localDir : saynaaDir, "test.sa");
+  //     int result = saynaaState.runFile(module2, testFile.getAbsolutePath());
+  //     // print result
+  //     if (result != 0) {
+  //       showScriptError(errorReason(result),
+  //           "Failed to run test.sa @ " + testFile.getAbsolutePath() + "\n" + drainNativeErrors());
+  //     }
+  //   } catch (Exception e) {
+  //     Log.e(TAG, "runTest failed", e);
+  //     showScriptError("runTest error", e.getMessage());
+  //   }
+  // }
 
   @Override
   public void onReceive(Context context, Intent intent) {
@@ -301,7 +319,7 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
   }
 
   private void initSaynaa() {
-    saynaaState = ensureState();
+    saynaaState = getOrCreateState();
     saynaa = saynaaState.getSaynaa();
     ArrayList<Object> javaList = new ArrayList<>();
     javaList.add("alpha");
@@ -315,10 +333,20 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
       saynaaState.setGlobalValue("java_pushed_list_saynaa", javaList, true);
       saynaaState.setGlobalValue("java_pushed_map_saynaa", javaMap, true);
       saynaaState.setGlobal("activity", this);
+
+      // SaynaaModule module = saynaaState.newModule("mahdiware");
+      // saynaaState.moduleSetGlobal(module, "version", "1.0");
+      // saynaaState.moduleSetGlobal(module, "printf", this, "printf");
+      // saynaaState.registerModule(module);
+
     } catch (SaynaaException e) {
       sendMsg("initSaynaa error: " + e.getMessage());
     }
   }
+
+  // public void printf(String msg) {
+  //   Toast.makeText(this, msg, Toast.LENGTH_SHORT).show();
+  // }
 
   public ArrayList<ClassLoader> getClassLoaders() {
     if (dexLoader == null)
@@ -520,7 +548,7 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
     if (key == null || key.trim().isEmpty())
       return;
     try {
-      ensureState().setGlobal(key, value);
+      getOrCreateState().setGlobal(key, value);
     } catch (SaynaaException e) {
       sendMsg("set error: " + e.getMessage());
     }
@@ -530,7 +558,7 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
     if (key == null || key.trim().isEmpty())
       return null;
     try {
-      return ensureState().getGlobal(key);
+      return getOrCreateState().getGlobal(key);
     } catch (SaynaaException e) {
       sendMsg("get error: " + e.getMessage());
       return null;
@@ -614,7 +642,7 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
 
   public Object doFile(String filePath, Object[] args) {
     try {
-      ensureState();
+      getOrCreateState();
 
       if (filePath.charAt(0) != '/') {
         filePath = getSaynaaDir() + "/" + filePath;
@@ -646,7 +674,7 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
     }
 
     try {
-      PCallResult result = ensureState().pcall(funcName, args);
+      PCallResult result = getOrCreateState().pcall(funcName, args);
       if (!result.success && mDebug) {
         Log.w(TAG, "runFunc non-zero result for hook=" + funcName + ": " + result.message);
         showScriptError(result.message, "Hook failed: " + funcName + "\n" + drainNativeErrors());
@@ -854,10 +882,10 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
 
   @Override
   public SaynaaState getSaynaaState() {
-    return ensureState();
+    return getOrCreateState();
   }
 
-  private SaynaaState ensureState() {
+  private SaynaaState getOrCreateState() {
     if (saynaaState == null || saynaaState.isClosed()) {
       saynaaState = SaynaaStateFactory.newState(this);
     }

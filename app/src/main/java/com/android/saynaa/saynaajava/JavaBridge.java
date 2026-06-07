@@ -13,6 +13,7 @@ import java.lang.reflect.Proxy;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Enumeration;
 import java.util.HashMap;
@@ -1178,13 +1179,13 @@ public class JavaBridge {
       return false;
 
     if (numberValue instanceof BigInteger || numberValue instanceof BigDecimal) {
-      return saynaa.wrapJavaObject(slot, numberValue);
+      return saynaa.bindJavaObject(slot, numberValue);
     }
 
     if (numberValue instanceof Long) {
       long longValue = numberValue.longValue();
       if (longValue < MIN_SAFE_INTEGER_LONG || longValue > MAX_SAFE_INTEGER_LONG) {
-        return saynaa.wrapJavaObject(slot, numberValue);
+        return saynaa.bindJavaObject(slot, numberValue);
       }
       saynaa.setSlotNumber(slot, (double) longValue);
       return true;
@@ -1192,7 +1193,7 @@ public class JavaBridge {
 
     double numeric = numberValue.doubleValue();
     if (!isFiniteDouble(numeric)) {
-      return saynaa.wrapJavaObject(slot, numberValue);
+      return saynaa.bindJavaObject(slot, numberValue);
     }
 
     saynaa.setSlotNumber(slot, numeric);
@@ -1228,18 +1229,25 @@ public class JavaBridge {
     return false;
   }
 
-  public static boolean pushToSlot(Saynaa saynaa, int slot, Object value) {
+  public static boolean pushToSlot(Saynaa saynaa, int slot, Object... value) {
     if (saynaa == null || saynaa.isClosed())
       return false;
 
-    Object normalized = normalizeReturn(value);
+    Object normalized = normalizeReturn(value != null && value.length > 0 ? value[0] : null);
     saynaa.reserveSlots(slot + 3);
 
     if (pushScalarToSlot(saynaa, slot, normalized)) {
       return true;
     }
 
-    return saynaa.wrapJavaObject(slot, normalized);
+    if (normalized instanceof Class) {
+      if (value != null && value.length == 2 && value[1] instanceof String) {
+        String methodName = (String) value[1];
+        return saynaa.bindJavaMethod(slot, (Class<?>) normalized, methodName);
+      }
+      return saynaa.bindJavaClass(slot, (Class<?>) normalized);
+    }
+    return saynaa.bindJavaObject(slot, normalized);
   }
 
   public static boolean pushToSlot(SaynaaState state, int slot, Object value) {
@@ -1267,14 +1275,14 @@ public class JavaBridge {
 
     if (depth >= MAX_BRIDGE_RECURSION_DEPTH) {
       Log.w(TAG, "pushToSlotAsSaynaa depth limit reached; wrapping Java object.");
-      return saynaa.wrapJavaObject(slot, normalized);
+      return saynaa.bindJavaObject(slot, normalized);
     }
 
     if (normalized instanceof Map) {
       visiting = ensureVisitingMap(visiting);
       if (visiting.containsKey(normalized)) {
         Log.w(TAG, "pushToSlotAsSaynaa cycle detected in Map; wrapping Java object.");
-        return saynaa.wrapJavaObject(slot, normalized);
+        return saynaa.bindJavaObject(slot, normalized);
       }
 
       visiting.put(normalized, Boolean.TRUE);
@@ -1300,7 +1308,7 @@ public class JavaBridge {
       visiting = ensureVisitingMap(visiting);
       if (visiting.containsKey(normalized)) {
         Log.w(TAG, "pushToSlotAsSaynaa cycle detected in Iterable; wrapping Java object.");
-        return saynaa.wrapJavaObject(slot, normalized);
+        return saynaa.bindJavaObject(slot, normalized);
       }
 
       visiting.put(normalized, Boolean.TRUE);
@@ -1324,7 +1332,7 @@ public class JavaBridge {
       visiting = ensureVisitingMap(visiting);
       if (visiting.containsKey(normalized)) {
         Log.w(TAG, "pushToSlotAsSaynaa cycle detected in array; wrapping Java object.");
-        return saynaa.wrapJavaObject(slot, normalized);
+        return saynaa.bindJavaObject(slot, normalized);
       }
 
       visiting.put(normalized, Boolean.TRUE);
@@ -1345,7 +1353,7 @@ public class JavaBridge {
       }
     }
 
-    return saynaa.wrapJavaObject(slot, normalized);
+    return saynaa.bindJavaObject(slot, normalized);
   }
 
   public static boolean pushToSlotAsSaynaa(SaynaaState state, int slot, Object value) {

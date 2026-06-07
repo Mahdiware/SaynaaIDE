@@ -95,6 +95,9 @@ assert(activity.runFunc("runfunc_test", 1, 2, 3, 40) == 46, "activity.runFunc re
 
 debug("This is a debug message from Saynaa script.")
 
+result = load("${java.saynaadir}loadtest.sa")
+debug("loadtest: ${result}")
+
 function onCreate(arg1)
   root = loadlayout.loadlayout(activity, DemoLayout)
   assert(root != null, 'loadlayout returned null')

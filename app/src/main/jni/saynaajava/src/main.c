@@ -245,7 +245,7 @@ bool invoke_registered_callback(JNIEnv* env, VM* vm, BridgeState* bridge, Callba
 
   for (int i = 0; i < argc; i++) {
     jobject arg = (*env)->GetObjectArrayElement(env, argsArray, (jsize) i);
-    bool ok = java_to_slot(env, vm, bridge, 2 + i, arg);
+    bool ok = object_to_slot(env, vm, bridge, 2 + i, arg, "Failed to wrap Java argument object.");
     if (arg != NULL)
       (*env)->DeleteLocalRef(env, arg);
     if (!ok)
@@ -721,10 +721,6 @@ bool create_java_method_instance(VM* vm, JavaRef* target, const char* method_nam
   return true;
 }
 
-bool put_java_result(VM* vm, JNIEnv* env, BridgeState* bridge, jobject obj, int slot) {
-  return object_to_slot(env, vm, bridge, slot, obj, "Failed to wrap Java result object.");
-}
-
 jobject slot_to_java(JNIEnv* env, VM* vm, BridgeState* bridge, int slot) {
   if (env == NULL || vm == NULL || bridge == NULL || bridge->javaBridgeClass == NULL
       || bridge->mSlotToJava == NULL || bridge->saynaaObject == NULL) {
@@ -745,10 +741,6 @@ jobject slot_to_java(JNIEnv* env, VM* vm, BridgeState* bridge, int slot) {
   }
 
   return result;
-}
-
-bool java_to_slot(JNIEnv* env, VM* vm, BridgeState* bridge, int slot, jobject obj) {
-  return object_to_slot(env, vm, bridge, slot, obj, "Failed to wrap Java object.");
 }
 
 jobject make_args_array(JNIEnv* env, VM* vm, BridgeState* bridge, int startSlot, int argc) {
@@ -991,7 +983,7 @@ void fn_loadLib(VM* vm) {
     return;
   }
 
-  java_to_slot(env, vm, bridge, 0, ret);
+  object_to_slot(env, vm, bridge, 0, ret, "Failed to wrap Java object.");
   if (ret != NULL)
     (*env)->DeleteLocalRef(env, ret);
 }
@@ -1410,7 +1402,7 @@ void fn_create(VM* vm) {
         return;
       }
 
-      java_to_slot(env, vm, bridge, 0, proxy);
+      object_to_slot(env, vm, bridge, 0, proxy, "Failed to wrap Java object.");
       if (proxy != NULL)
         (*env)->DeleteLocalRef(env, proxy);
       if (classNameObj != NULL)
@@ -1446,7 +1438,7 @@ void fn_create(VM* vm) {
     (*env)->DeleteLocalRef(env, classObj);
 
     if (proxy != NULL) {
-      java_to_slot(env, vm, bridge, 0, proxy);
+      object_to_slot(env, vm, bridge, 0, proxy, "Failed to wrap Java object.");
       (*env)->DeleteLocalRef(env, proxy);
     }
     return;
@@ -1579,7 +1571,7 @@ void fn_call(VM* vm) {
         jobject proxy = create_native_callback_proxy(env, vm, bridge, (jstring) iface, "*", callbackId);
         (*env)->DeleteLocalRef(env, iface);
         if (proxy != NULL) {
-          java_to_slot(env, vm, bridge, slot, proxy);
+          object_to_slot(env, vm, bridge, slot, proxy, "Failed to wrap Java object.");
           (*env)->DeleteLocalRef(env, proxy);
         }
       }
@@ -1873,7 +1865,7 @@ void fn_createProxy(VM* vm) {
     if (proxy == NULL)
       return;
 
-    put_java_result(vm, env, bridge, proxy, 0);
+    object_to_slot(env, vm, bridge, 0, proxy, "Failed to wrap Java result object.");
     (*env)->DeleteLocalRef(env, proxy);
     return;
   }
@@ -1943,6 +1935,13 @@ bool ensure_java_module(VM* vm) {
   moduleSetGlobal(vm, java, "loaded", 6, VAR_OBJ(newMap(vm)));
   moduleSetGlobal(vm, java, "imported", 8, VAR_OBJ(newList(vm, 0)));
   moduleSetGlobal(vm, java, "saynaadir", 9, VAR_OBJ(newString(vm, "")));
+
+  // reserveSlots(vm, 1);
+  // setSlotHandle(vm, 0, java);
+
+  // java_activity(vm, 1);
+  // wrap_bridge_global(vm, bridge->activity, 1);
+  // setAttribute(vm, 0, "activity", 1);
 
   registerModule(vm, mod);
   bridge->javaModule = mod;

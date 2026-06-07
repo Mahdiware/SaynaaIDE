@@ -72,6 +72,8 @@ JNIEXPORT jobject JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1open
   }
 
   bridge->javaBridgeClass = (jclass) (*env)->NewGlobalRef(env, localBridgeClass);
+  bridge->JavaObjectClass = (jclass) (*env)->NewGlobalRef(
+      env, (*env)->FindClass(env, "java/lang/Object"));
   (*env)->DeleteLocalRef(env, localBridgeClass);
 
   bridge->mFindClass = (*env)->GetStaticMethodID(
@@ -111,7 +113,7 @@ JNIEXPORT jobject JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1open
   bridge->mGetDefaultInterfaceMethodName = (*env)->GetStaticMethodID(env, bridge->javaBridgeClass,
       "getDefaultInterfaceMethodName", "(Ljava/lang/String;)Ljava/lang/String;");
   bridge->mPushToSlot = (*env)->GetStaticMethodID(env, bridge->javaBridgeClass, "pushToSlot",
-      "(Lcom/android/saynaa/saynaajava/Saynaa;ILjava/lang/Object;)Z");
+      "(Lcom/android/saynaa/saynaajava/Saynaa;I[Ljava/lang/Object;)Z");
   bridge->mSlotToJava = (*env)->GetStaticMethodID(env, bridge->javaBridgeClass, "slotToJava",
       "(Lcom/android/saynaa/saynaajava/Saynaa;I)Ljava/lang/Object;");
   bridge->mArgsArrayFromSlots = (*env)->GetStaticMethodID(env, bridge->javaBridgeClass,
@@ -179,7 +181,6 @@ JNIEXPORT jobject JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1getM
   if (bridge == NULL)
     return NULL;
 
-  // no longer needed current_module_from_vm(vm);
   Module* module = bridge->mainModule != NULL ? (Module*) AS_OBJ(bridge->mainModule->value) : NULL;
   if (module == NULL)
     return NULL;
@@ -245,7 +246,7 @@ JNIEXPORT jobject JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1pcal
   for (int i = 0; i < argc; i++) {
     jobject arg = (*env)->GetObjectArrayElement(env, args, i);
 
-    if (!java_to_slot(env, vm, bridge, i + 1, arg)) {
+    if (!object_to_slot(env, vm, bridge, i + 1, arg, "Failed to wrap Java argument object.")) {
       (*env)->DeleteLocalRef(env, arg);
       success = JNI_FALSE;
       message = "Argument conversion failed";
@@ -419,7 +420,7 @@ JNIEXPORT jboolean JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1set
   }
 
   reserveSlots(vm, 2);
-  if (!java_to_slot(env, vm, bridge, 1, value)) {
+  if (!object_to_slot(env, vm, bridge, 1, value, "Failed to wrap Java value object.")) {
     (*env)->ReleaseStringUTFChars(env, name, key);
     return JNI_FALSE;
   }
@@ -566,6 +567,201 @@ JNIEXPORT void JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1newMap(
   NewMap(vm, slot);
 }
 
+JNIEXPORT jobject JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1newModule(
+    JNIEnv* env, jobject thiz, jstring name) {
+  VM* vm = vm_from_saynaa(env, thiz);
+  BridgeState* bridge = bridge_from_vm(vm);
+
+  if (vm == NULL || name == NULL)
+    return NULL;
+  const char* nameChars = (*env)->GetStringUTFChars(env, name, NULL);
+  if (nameChars == NULL)
+    return NULL;
+  Handle* module = NewModule(vm, nameChars);
+  (*env)->ReleaseStringUTFChars(env, name, nameChars);
+  if (module == NULL)
+    return NULL;
+
+  registerModule(vm, module);
+  setSlotHandle(vm, 0, module);
+  jobject result = slot_to_java(env, vm, bridge, 0);
+
+  // TODO: i think this will cause a leak,
+  // we need to track module handles and release them when the module is GC'd in java
+  releaseHandle(vm, module);
+  return result;
+}
+
+JNIEXPORT jboolean JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1registerModule(
+    JNIEnv* env, jobject thiz, jint slot) {
+  VM* vm = vm_from_saynaa(env, thiz);
+  if (vm == NULL)
+    return JNI_FALSE;
+  reserveSlots(vm, slot + 1);
+
+  if (GetSlotType(vm, slot) != vMODULE) {
+    LOGE("Slot %d is not a module, its: %d", slot, GetSlotType(vm, slot));
+    return JNI_FALSE;
+  }
+
+  Handle* handle = GetSlotHandle(vm, slot);
+  if (handle == NULL)
+    return JNI_FALSE;
+
+  registerModule(vm, handle);
+  return JNI_TRUE;
+}
+
+JNIEXPORT jboolean JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1moduleSetGlobal(
+    JNIEnv* env, jobject thiz, jint moduleSlot, jstring name, jobject value) {
+  VM* vm = vm_from_saynaa(env, thiz);
+  if (vm == NULL || name == NULL)
+    return JNI_FALSE;
+
+  BridgeState* bridge = bridge_from_vm(vm);
+  const char* key = (*env)->GetStringUTFChars(env, name, NULL);
+  if (key == NULL)
+    return JNI_FALSE;
+
+  reserveSlots(vm, moduleSlot + 1);
+
+  if (GetSlotType(vm, moduleSlot) != vMODULE) {
+    LOGE("Slot %d is not a module, its: %d", moduleSlot, GetSlotType(vm, moduleSlot));
+    (*env)->ReleaseStringUTFChars(env, name, key);
+    return JNI_FALSE;
+  }
+
+  Handle* handle = GetSlotHandle(vm, moduleSlot);
+  if (handle == NULL) {
+    (*env)->ReleaseStringUTFChars(env, name, key);
+    return JNI_FALSE;
+  }
+
+  Module* module = (Module*) AS_OBJ(handle->value);
+  if (module == NULL) {
+    (*env)->ReleaseStringUTFChars(env, name, key);
+    return JNI_FALSE;
+  }
+
+  reserveSlots(vm, moduleSlot + 2);
+  if (!object_to_slot(env, vm, bridge, moduleSlot + 1, value, "Failed to wrap Java value object.")) {
+    (*env)->ReleaseStringUTFChars(env, name, key);
+    return JNI_FALSE;
+  }
+
+  Handle* valueHandle = GetSlotHandle(vm, moduleSlot + 1);
+  if (valueHandle == NULL) {
+    (*env)->ReleaseStringUTFChars(env, name, key);
+    return JNI_FALSE;
+  }
+
+  moduleSetGlobal(vm, module, key, (uint32_t) strlen(key), valueHandle->value);
+
+  releaseHandle(vm, valueHandle);
+  (*env)->ReleaseStringUTFChars(env, name, key);
+  return JNI_TRUE;
+}
+
+// private synchronized native boolean saynaa_moduleSetGlobal(int moduleSlot, String name, Class<?>
+// clazz, String methodName); use: objects_to_slot function
+JNIEXPORT jboolean JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1moduleSetGlobalMethod(
+    JNIEnv* env, jobject thiz, jint moduleSlot, jstring name, jobject clazz, jstring methodName) {
+  VM* vm = vm_from_saynaa(env, thiz);
+  if (vm == NULL || name == NULL || clazz == NULL || methodName == NULL)
+    return JNI_FALSE;
+
+  BridgeState* bridge = bridge_from_vm(vm);
+
+  const char* key = (*env)->GetStringUTFChars(env, name, NULL);
+  const char* methodNameChars = (*env)->GetStringUTFChars(env, methodName, NULL);
+
+  if (key == NULL || methodNameChars == NULL)
+    return JNI_FALSE;
+
+  reserveSlots(vm, moduleSlot + 1);
+
+  if (GetSlotType(vm, moduleSlot) != vMODULE) {
+    LOGE("Slot %d is not a module", moduleSlot);
+    goto cleanup_fail;
+  }
+
+  Handle* handle = GetSlotHandle(vm, moduleSlot);
+  if (handle == NULL)
+    goto cleanup_fail;
+
+  Module* module = (Module*) AS_OBJ(handle->value);
+  if (module == NULL)
+    goto cleanup_fail;
+
+  reserveSlots(vm, moduleSlot + 4);
+
+  // Create Object[] (2 args)
+  jobjectArray arr = (*env)->NewObjectArray(env, 2, bridge->JavaObjectClass, NULL);
+
+  if (arr == NULL)
+    goto cleanup_fail;
+
+  (*env)->SetObjectArrayElement(env, arr, 0, methodName);
+  (*env)->SetObjectArrayElement(env, arr, 1, methodName);
+
+  // Call bridge
+  bool ok = objects_to_slot(env, vm, bridge, moduleSlot + 1, arr, "Failed to convert Java method reference.");
+
+  (*env)->DeleteLocalRef(env, arr);
+
+  if (!ok)
+    goto cleanup_fail;
+
+  Handle* methodHandle = GetSlotHandle(vm, moduleSlot + 1);
+  if (methodHandle == NULL)
+    goto cleanup_fail;
+
+  moduleSetGlobal(vm, module, key, (uint32_t) strlen(key), methodHandle->value);
+
+  releaseHandle(vm, methodHandle);
+
+  (*env)->ReleaseStringUTFChars(env, name, key);
+  (*env)->ReleaseStringUTFChars(env, methodName, methodNameChars);
+
+  return JNI_TRUE;
+
+cleanup_fail:
+  (*env)->ReleaseStringUTFChars(env, name, key);
+  (*env)->ReleaseStringUTFChars(env, methodName, methodNameChars);
+  return JNI_FALSE;
+}
+
+JNIEXPORT jint JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1runFile(
+    JNIEnv* env, jobject thiz, jint moduleSlot, jstring path) {
+  VM* vm = vm_from_saynaa(env, thiz);
+  if (vm == NULL || path == NULL)
+    return RESULT_RUNTIME_ERROR;
+
+  const char* pathChars = (*env)->GetStringUTFChars(env, path, NULL);
+  if (pathChars == NULL)
+    return RESULT_RUNTIME_ERROR;
+
+  if (GetSlotType(vm, moduleSlot) != vMODULE) {
+    LOGE("Slot %d is not a module, its: %d", moduleSlot, GetSlotType(vm, moduleSlot));
+    (*env)->ReleaseStringUTFChars(env, path, pathChars);
+    return JNI_FALSE;
+  }
+
+  reserveSlots(vm, moduleSlot + 1);
+
+  Handle* handle = GetSlotHandle(vm, moduleSlot);
+  if (handle == NULL) {
+    (*env)->ReleaseStringUTFChars(env, path, pathChars);
+    return JNI_FALSE;
+  }
+
+  Module* module = (Module*) AS_OBJ(handle->value);
+  jint result = (jint) RunFileWithModule(vm, module, pathChars);
+
+  (*env)->ReleaseStringUTFChars(env, path, pathChars);
+  return result;
+}
+
 JNIEXPORT jboolean JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1listInsert(
     JNIEnv* env, jobject thiz, jint listSlot, jint index, jint valueSlot) {
   VM* vm = vm_from_saynaa(env, thiz);
@@ -587,7 +783,35 @@ JNIEXPORT jboolean JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1map
   return MapSet(vm, mapSlot, keySlot, valueSlot) ? JNI_TRUE : JNI_FALSE;
 }
 
-JNIEXPORT jboolean JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1wrapJavaObject(
+JNIEXPORT jboolean JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1bindJavaClass(
+    JNIEnv* env, jobject thiz, jint slot, jobject value) {
+  VM* vm = vm_from_saynaa(env, thiz);
+  if (vm == NULL)
+    return JNI_FALSE;
+  reserveSlots(vm, slot + 1);
+
+  if (value == NULL) {
+    setSlotNull(vm, slot);
+    return JNI_TRUE;
+  }
+
+  BridgeState* bridge = bridge_from_vm(vm);
+  if (bridge == NULL || bridge->jvm == NULL || bridge->clsJavaClass == NULL)
+    return JNI_FALSE;
+
+  JavaRef* ref = make_java_ref(env, bridge->jvm, value);
+  if (ref == NULL)
+    return JNI_FALSE;
+
+  if (!create_java_instance(vm, &bridge->clsJavaClass, ref, slot)) {
+    java_ref_destructor(ref);
+    return JNI_FALSE;
+  }
+
+  return JNI_TRUE;
+}
+
+JNIEXPORT jboolean JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1bindJavaObject(
     JNIEnv* env, jobject thiz, jint slot, jobject value) {
   VM* vm = vm_from_saynaa(env, thiz);
   if (vm == NULL)
@@ -614,6 +838,83 @@ JNIEXPORT jboolean JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1wra
 
   return JNI_TRUE;
 }
+
+// use this function: create_java_method_instance(target (object), name (string), false(is static), 0 (slot for method instance));
+JNIEXPORT jboolean JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1bindJavaMethod(
+    JNIEnv* env, jobject thiz, jint slot, jobject target, jstring methodName, jboolean isStatic) {
+  VM* vm = vm_from_saynaa(env, thiz);
+  if (vm == NULL)
+    return JNI_FALSE;
+  reserveSlots(vm, slot + 1);
+
+  if (methodName == NULL) {
+    setSlotNull(vm, slot);
+    return JNI_TRUE;
+  }
+
+  BridgeState* bridge = bridge_from_vm(vm);
+  if (bridge == NULL || bridge->jvm == NULL || bridge->clsJavaMethod == NULL)
+    return JNI_FALSE;
+
+  JavaRef* targetRef = NULL;
+  if (target != NULL) {
+    targetRef = make_java_ref(env, bridge->jvm, target);
+    if (targetRef == NULL)
+      return JNI_FALSE;
+  }
+
+  const char* methodNameChars = (*env)->GetStringUTFChars(env, methodName, NULL);
+  if (methodNameChars == NULL) {
+    if (targetRef != NULL)
+      java_ref_destructor(targetRef);
+    return JNI_FALSE;
+  }
+
+  bool success = create_java_method_instance(vm, targetRef, methodNameChars, isStatic == JNI_TRUE, slot);
+
+  (*env)->ReleaseStringUTFChars(env, methodName, methodNameChars);
+
+  if (!success) {
+    if (targetRef != NULL)
+      java_ref_destructor(targetRef);
+    return JNI_FALSE;
+  }
+
+  return JNI_TRUE;
+}
+
+/*
+bool create_java_method_instance(VM* vm, JavaRef* target, const char* method_name, bool is_static, int outSlot) {
+  BridgeState* bridge = bridge_from_vm(vm);
+  if (bridge != NULL && bridge->clsJavaMethod == NULL) {
+    if (!ensure_wrapper_classes(vm)) {
+      if (target != NULL)
+        java_ref_destructor(target);
+      return false;
+    }
+  }
+  if (bridge == NULL || bridge->clsJavaMethod == NULL || target == NULL || method_name == NULL) {
+    SetRuntimeError(vm, "Internal error creating JavaMethod instance.");
+    if (target != NULL)
+      java_ref_destructor(target);
+    return false;
+  }
+
+  reserveSlots(vm, 6);
+  setSlotHandle(vm, 1, bridge->clsJavaMethod);
+  setSlotPointer(vm, 2, target, NULL);
+  setSlotString(vm, 3, method_name);
+  setSlotBool(vm, 4, is_static);
+
+  if (!NewInstance(vm, 1, outSlot, 3, 2)) {
+    java_ref_destructor(target);
+    return false;
+  }
+
+  return true;
+}
+
+*/
 
 JNIEXPORT jint JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1getSlotType(
     JNIEnv* env, jobject thiz, jint slot) {
@@ -862,87 +1163,6 @@ JNIEXPORT jint JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1doStrin
   return (jint) ret;
 }
 
-JNIEXPORT void JNICALL Java_com_android_saynaa_saynaajava_Saynaa_execute(
-    JNIEnv* env, jobject thiz, jobject context) {
-  VM* vm = vm_from_saynaa(env, thiz);
-  if (vm == NULL) {
-    LOGE("VM not initialized.");
-    return;
-  }
-
-  BridgeState* bridge = bridge_from_vm(vm);
-  if (bridge != NULL) {
-    ensure_files_search_path(vm, bridge, env, context);
-
-    clear_callbacks(vm);
-    // Keep wrapper/module handles alive for the VM lifetime.
-    // Releasing and recreating them on each execute() can re-register
-    // module names (e.g. "java_wrappers") and trigger assertion failures
-    // in DEBUG builds.
-
-    if (bridge->activity != NULL) {
-      (*env)->DeleteGlobalRef(env, bridge->activity);
-      bridge->activity = NULL;
-    }
-    if (context != NULL) {
-      bridge->activity = (*env)->NewGlobalRef(env, context);
-    }
-  }
-
-  jclass saynaaCls = (*env)->GetObjectClass(env, thiz);
-  jfieldID sourceField = (*env)->GetFieldID(env, saynaaCls, "source", "Ljava/lang/String;");
-  jfieldID scriptPathField = (*env)->GetFieldID(env, saynaaCls, "scriptPath", "Ljava/lang/String;");
-  jstring source = (jstring) (*env)->GetObjectField(env, thiz, sourceField);
-  jstring scriptPath = scriptPathField == NULL ? NULL : (jstring) (*env)->GetObjectField(env, thiz, scriptPathField);
-  (*env)->DeleteLocalRef(env, saynaaCls);
-
-  const char* path = NULL;
-  if (scriptPath != NULL) {
-    path = (*env)->GetStringUTFChars(env, scriptPath, NULL);
-  }
-
-  const char* code = NULL;
-  if (source != NULL) {
-    code = (*env)->GetStringUTFChars(env, source, NULL);
-  }
-
-  Result result;
-  if (path != NULL && path[0] != '\0') {
-    LOGI("Running script file... path=%s", path);
-    result = saynaa_run_file_in_main_module(vm, path);
-  } else if (code != NULL) {
-    LOGI("Running script... source_len=%d", (int) strlen(code));
-    result = saynaa_run_in_main_module(vm, code, "@(String)");
-  } else {
-    LOGE("Neither scriptPath nor source is available.");
-    if (source != NULL)
-      (*env)->DeleteLocalRef(env, source);
-    if (scriptPath != NULL)
-      (*env)->DeleteLocalRef(env, scriptPath);
-    return;
-  }
-
-  if (source != NULL) {
-    if (code != NULL)
-      (*env)->ReleaseStringUTFChars(env, source, code);
-    (*env)->DeleteLocalRef(env, source);
-  }
-  if (scriptPath != NULL) {
-    if (path != NULL)
-      (*env)->ReleaseStringUTFChars(env, scriptPath, path);
-    (*env)->DeleteLocalRef(env, scriptPath);
-  }
-
-  if (result != RESULT_SUCCESS) {
-    LOGE("Saynaa execution failed with code: %d", (int) result);
-    if (vm->fiber != NULL && vm->fiber->error != NULL && vm->fiber->error->data != NULL) {
-      LOGE("VM error: %s", vm->fiber->error->data);
-    }
-  } else {
-    LOGI("Saynaa execution finished successfully.");
-  }
-}
-
 JNIEXPORT void JNICALL Java_com_android_saynaa_saynaajava_Saynaa_invokeCallbackNative(
     JNIEnv* env, jobject thiz, jint callbackId, jobject arg0) {
   VM* vm = vm_from_saynaa(env, thiz);
@@ -1135,6 +1355,10 @@ JNIEXPORT void JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1close(J
     if (bridge->activity != NULL) {
       (*env)->DeleteGlobalRef(env, bridge->activity);
       bridge->activity = NULL;
+    }
+    if (bridge->JavaObjectClass != NULL) {
+      (*env)->DeleteGlobalRef(env, bridge->JavaObjectClass);
+      bridge->JavaObjectClass = NULL;
     }
     if (bridge->javaBridgeClass != NULL) {
       (*env)->DeleteGlobalRef(env, bridge->javaBridgeClass);

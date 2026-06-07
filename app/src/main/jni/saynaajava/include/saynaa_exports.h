@@ -40,7 +40,7 @@ JNIEXPORT jboolean JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1lis
     JNIEnv* env, jobject thiz, jint listSlot, jint index, jint valueSlot);
 JNIEXPORT jboolean JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1mapSet(
     JNIEnv* env, jobject thiz, jint mapSlot, jint keySlot, jint valueSlot);
-JNIEXPORT jboolean JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1wrapJavaObject(
+JNIEXPORT jboolean JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1bindJavaObject(
     JNIEnv* env, jobject thiz, jint slot, jobject value);
 JNIEXPORT jint JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1getSlotType(
     JNIEnv* env, jobject thiz, jint slot);

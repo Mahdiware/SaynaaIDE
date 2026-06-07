@@ -1,0 +1,7 @@
+return {
+    name: "Load Test",
+    description: "A simple load test for the Saynaa IDE.",
+    year: 2024,
+    month: 6,
+    day: 1,
+}

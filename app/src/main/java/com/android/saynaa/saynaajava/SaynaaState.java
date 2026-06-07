@@ -198,6 +198,48 @@ public class SaynaaState {
     saynaa.newMap(slot);
   }
 
+  public synchronized SaynaaModule newModule(String name) throws SaynaaException {
+    if (isClosed()) {
+      throw new SaynaaException("SaynaaState is closed.");
+    }
+    SaynaaModule module = saynaa.newModule(name);
+
+    if (module == null) {
+      throw new SaynaaException("Failed to create module with name: " + name);
+    }
+
+    return module;
+  }
+
+  public synchronized boolean moduleSetGlobal(SaynaaModule module, String name, Object value) throws SaynaaException {
+    if (isClosed()) {
+      throw new SaynaaException("SaynaaState is closed.");
+    }
+    return saynaa.moduleSetGlobal(module, name, value);
+  }
+
+  public synchronized boolean moduleSetGlobal(
+      SaynaaModule module, String name, Object clazz, String methodName) throws SaynaaException {
+    if (isClosed()) {
+      throw new SaynaaException("SaynaaState is closed.");
+    }
+    return saynaa.moduleSetGlobal(module, name, clazz, methodName);
+  }
+
+  public synchronized boolean registerModule(SaynaaModule module) throws SaynaaException {
+    if (isClosed()) {
+      throw new SaynaaException("SaynaaState is closed.");
+    }
+    return saynaa.registerModule(module);
+  }
+
+  public synchronized int runFile(SaynaaModule module, String path) throws SaynaaException {
+    if (isClosed()) {
+      throw new SaynaaException("SaynaaState is closed.");
+    }
+    return saynaa.runFile(module, path);
+  }
+
   public synchronized boolean listInsert(int listSlot, int index, int valueSlot) throws SaynaaException {
     if (isClosed()) {
       throw new SaynaaException("SaynaaState is closed.");
@@ -212,11 +254,25 @@ public class SaynaaState {
     return saynaa.mapSet(mapSlot, keySlot, valueSlot);
   }
 
-  public synchronized boolean wrapJavaObject(int slot, Object value) throws SaynaaException {
+  public synchronized boolean bindJavaMethod(int slot, Object target, String methodName) throws SaynaaException {
     if (isClosed()) {
       throw new SaynaaException("SaynaaState is closed.");
     }
-    return saynaa.wrapJavaObject(slot, value);
+    return saynaa.bindJavaMethod(slot, target, methodName);
+  }
+
+  public synchronized boolean bindJavaObject(int slot, Object value) throws SaynaaException {
+    if (isClosed()) {
+      throw new SaynaaException("SaynaaState is closed.");
+    }
+    return saynaa.bindJavaObject(slot, value);
+  }
+
+  public synchronized boolean bindJavaClass(int slot, Class<?> clazz) throws SaynaaException {
+    if (isClosed()) {
+      throw new SaynaaException("SaynaaState is closed.");
+    }
+    return saynaa.bindJavaClass(slot, clazz);
   }
 
   public synchronized int getSlotType(int slot) throws SaynaaException {
