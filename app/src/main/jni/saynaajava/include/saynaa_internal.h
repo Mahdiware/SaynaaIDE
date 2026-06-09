@@ -27,7 +27,6 @@ typedef struct BridgeState {
   jobject activity;
   jobject saynaaObject;
 
-  Handle* javaModule;
   Handle* javaWrapperModule;
   Handle* clsJavaClass;
   Handle* clsJavaObject;
@@ -124,21 +123,6 @@ extern bool clear_jni_exception_with_log(JNIEnv* env, const char* where);
 extern jclass safe_find_class(VM* vm, JNIEnv* env, const char* className, const char* where);
 extern jmethodID safe_get_static_method_id(
     VM* vm, JNIEnv* env, jclass cls, const char* name, const char* sig, const char* where);
-extern void fn_bindClass(VM* vm);
-extern void fn_new(VM* vm);
-extern void fn_create(VM* vm);
-extern void fn_createProxy(VM* vm);
-extern void fn_loadLib(VM* vm);
-extern void fn_call(VM* vm);
-extern void fn_callStatic(VM* vm);
-extern void fn_getField(VM* vm);
-extern void fn_setField(VM* vm);
-extern void fn_astable(VM* vm);
-extern void fn_instanceof(VM* vm);
-extern void fn_javaToString(VM* vm);
-extern void fn_length(VM* vm);
-extern void java_activity(VM* vm, int slotout);
-extern void fn_eventView(VM* vm);
 
 extern void* new_java_class_instance(VM* vm);
 extern void delete_java_class_instance(VM* vm, void* ptr);
@@ -162,7 +146,6 @@ extern void java_object_str(VM* vm);
 extern void java_method_str(VM* vm);
 extern void java_method_getter(VM* vm);
 extern jobject slot_to_java(JNIEnv* env, VM* vm, BridgeState* bridge, int slot);
-extern bool ensure_java_module(VM* vm);
 extern bool ensure_wrapper_classes(VM* vm);
 
 extern void android_stdout_write(VM* vm, const char* text);
@@ -171,8 +154,6 @@ extern void android_stderr_write(VM* vm, const char* text);
 extern bool call_java_method(VM* vm, int num_args, bool is_static);
 
 extern bool register_java_wrapper_classes(VM* vm);
-extern void register_java_api(VM* vm);
-extern void ensure_files_search_path(VM* vm, BridgeState* bridge, JNIEnv* env, jobject context);
 extern void clear_callbacks(VM* vm);
 extern int register_callback(VM* vm, int slot);
 extern int register_map_callback(VM* vm, int mapSlot, const char* methodName);
@@ -184,9 +165,8 @@ extern bool invoke_registered_callback_from_slots(JNIEnv* env, VM* vm, BridgeSta
 extern jobject create_native_callback_proxy(JNIEnv* env, VM* vm, BridgeState* bridge,
     jstring jInterface, const char* methodName, int callbackId);
 extern void release_bridge_handle(VM* vm, Handle** handlePtr);
-extern bool object_to_slot(
-    JNIEnv* env, VM* vm, BridgeState* bridge, int slot, jobject obj, const char* wrapErrorMessage);
-extern bool objects_to_slot(JNIEnv* env, VM* vm, BridgeState* bridge, int startSlot,
+extern jobjectArray create_singleton_array(JNIEnv* env, jobject obj, jclass objClass);
+extern bool object_to_slot(JNIEnv* env, VM* vm, BridgeState* bridge, int startSlot,
     jobjectArray arr, const char* wrapErrorMessage);
 
 extern void java_ref_destructor(void* ptr);

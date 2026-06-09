@@ -6,10 +6,20 @@ import android.view.View;
 public class SaynaaState {
   private final Saynaa saynaa;
   private final int stateId;
+  private final Context context;
 
   SaynaaState(Context context, int stateId) {
     this.saynaa = new Saynaa(context);
     this.stateId = stateId;
+    this.context = context;
+  }
+
+  public synchronized Context getContext() {
+    return this.context;
+  }
+
+  public synchronized String getSaynaaDir() {
+    return SaynaaApplication.getInstance().getSaynaaDir();
   }
 
   public synchronized void doString(String source) throws SaynaaException {

@@ -10,6 +10,22 @@ function toast(msg)
 	Toast.makeText(activity, msg, Toast.LENGTH_SHORT).show()
 end
 
+toast("SaynaaDir: ${java.saynaadir}")
+
+function assert_pcall(result, label)
+	ok = result[0]
+	if ok == null then
+		ok = result[1]
+	end
+	if ok != true then
+		err = result[1]
+		if err == null then
+			err = result[2]
+		end
+		assert(false, label + ': ' + str(err))
+	end
+end
+
 /*
 loadDex("hello.dex")
 import "com.saynaa.dextest.Hello"
@@ -17,6 +33,43 @@ import "com.saynaa.dextest.Hello"
 msg = Hello.hello()
 toast(msg)
 */
+
+import mahdiware
+
+mahdiware.printf("Hello from Saynaa script!")
+import java
+
+textview = java.bindClass("android.widget.TextView")
+
+// new
+assert(java.new("java.lang.String", "Hello from java.new!") == "Hello from java.new!", "java.new failed")
+
+// create, length
+testList = java.new('java.util.ArrayList')
+testList.add('a')
+testList.add('b')
+assert(java.length(testList) == 2, 'java.length failed')
+
+# testing new with multiple args and different types
+# LayoutParams = java.bindClass('android.widget.LinearLayout$LayoutParams')
+# params = java.new(LayoutParams, -1, -2)
+# assert(params != null, 'LayoutParams(width, height) failed')
+# java.testing(1, 2, 4, "hello", params, LinearLayout, textview)
+
+
+# testing getField and setField
+result = pcall(function()
+	pt = java.new('android.graphics.Point', 1, 2)
+	java.setField(pt, 'x', 7)
+	return java.getField(pt, 'x')
+end)
+assert_pcall(result, 'java.getField/setField failed')
+assert(result[1] == 7, 'java.getField x mismatch')
+
+
+# testing callStatic
+result = java.callStatic('java.lang.Math','abs',-10)
+assert(result == 10, 'Math.abs failed')
 
 DemoLayout = {
   LinearLayout,
@@ -27,10 +80,10 @@ DemoLayout = {
   layout_height: 'match_parent',
 
   {
-    TextView,
+    textview,
     id: 'Title',
-    text: 'Saynaa List Demo',
-    textSize: '22sp',
+    text: "Welcome to Saynaa!",
+    textSize: '32sp',
     textStyle: 'bold',
     textColor: '#111111',
     layout_width: 'match_parent',
@@ -54,31 +107,33 @@ DemoLayout = {
     ListView,
     id: 'DemoList',
     layout_width: 'match_parent',
-    layout_height: '240dp'
+    layout_height: 'match_parent',
+    items: ['Item 1', 'Item 2', 'Item 3', 'Item 4', 'Item 5']
   }
 }
 
-AdapterData = [
-  { text: 'Mahdi' },
-  { text: 'Ahmed' }
-]
+# FIXME: SaynaaAdapter don't work now, need to fix the adapter first
+# AdapterData = [
+#   { text: 'Mahdi' },
+#   { text: 'Ahmed' }
+# ]
 
-AdapterItem = {
-  LinearLayout,
-  orientation: 'horizontal',
-  padding: '8dp',
-  layout_width: 'match_parent',
-  layout_height: 'wrap_content',
+# AdapterItem = {
+#   LinearLayout,
+#   orientation: 'horizontal',
+#   padding: '8dp',
+#   layout_width: 'match_parent',
+#   layout_height: 'wrap_content',
 
-  {
-    TextView,
-    id: 'text',
-    textSize: '16sp',
-    textColor: '#111111',
-    layout_width: 'wrap_content',
-    layout_height: 'wrap_content'
-  }
-}
+#   {
+#     TextView,
+#     id: 'text',
+#     textSize: '16sp',
+#     textColor: '#111111',
+#     layout_width: 'wrap_content',
+#     layout_height: 'wrap_content'
+#   }
+# }
 
 assert(activity != null, 'activity is null')
 
@@ -95,7 +150,7 @@ assert(activity.runFunc("runfunc_test", 1, 2, 3, 40) == 46, "activity.runFunc re
 
 debug("This is a debug message from Saynaa script.")
 
-result = load("${java.saynaadir}loadtest.sa")
+result = load("${java.saynaadir}/loadtest.sa")
 debug("loadtest: ${result}")
 
 function onCreate(arg1)

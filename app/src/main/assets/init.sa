@@ -1,5 +1,10 @@
+
+
 import java
 import package
+
+package.path.append(java.saynaadir)
+
 import loadlayout
 
 # Classpath prefixes for fallback resolution
@@ -27,9 +32,13 @@ package.searchers.append(function (name)
    return null  # not handled
 end)
 
+function bindClass(name)
+    return java.bindClass(name)
+end
+
 _module._missing = function(name)
     for path in classpath do
-        result = pcall(java.bindClass, path + name)
+        result = pcall(bindClass, path + name)
 
         if result[0] and result[1] != null then
             define(name, result[1])  # cache

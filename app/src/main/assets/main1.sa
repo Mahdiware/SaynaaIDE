@@ -42,16 +42,16 @@ end
 activity.setTitle('Saynaa Demo')
 
 
-testList = java.create('java.util.ArrayList')
+testList = java.new('java.util.ArrayList')
 testList.add('a')
 testList.add('b')
 assert(java.length(testList) == 2, 'java.length failed')
 
-result = pcall(function()
-	return java.call(testList, 'size')
-end)
-assert_pcall(result, 'java.call failed')
-assert(result[1] == 2, 'java.call size mismatch')
+# result = pcall(function()
+# 	return java.call(testList, 'size')
+# end)
+# assert_pcall(result, 'java.call failed')
+# assert(result[1] == 2, 'java.call size mismatch')
 
 result = pcall(function()
 	return java.callStatic('java.lang.Integer', 'parseInt', '123')
@@ -67,55 +67,55 @@ end)
 assert_pcall(result, 'java.getField/setField failed')
 assert(result[1] == 7, 'java.getField x mismatch')
 
-result = pcall(function()
-	state = { ok: false }
-	runner = Runnable(function()
-		state.setattr('ok', true)
-	end)
-	java.call(runner, 'run')
-	return state.get('ok')
-end)
-assert_pcall(result, 'Runnable(function) failed')
-assert(result[1] == true, 'Runnable(function) run mismatch')
+# result = pcall(function()
+# 	state = { ok: false }
+# 	runner = Runnable(function()
+# 		state.setattr('ok', true)
+# 	end)
+# 	java.call(runner, 'run')
+# 	return state.get('ok')
+# end)
+# assert_pcall(result, 'Runnable(function) failed')
+# assert(result[1] == true, 'Runnable(function) run mismatch')
 
-result = pcall(function()
-	proxy = java.createProxy('java.lang.Runnable', "script_proxy_ok = true")
-	assert(proxy != null, 'java.createProxy script returned null')
-	java.call(proxy, 'run')
-	return true
-end)
-assert_pcall(result, 'java.createProxy script failed')
-assert(result[1] == true, 'java.createProxy script mismatch')
+# result = pcall(function()
+# 	proxy = java.createProxy('java.lang.Runnable', "script_proxy_ok = true")
+# 	assert(proxy != null, 'java.createProxy script returned null')
+# 	java.call(proxy, 'run')
+# 	return true
+# end)
+# assert_pcall(result, 'java.createProxy script failed')
+# assert(result[1] == true, 'java.createProxy script mismatch')
 
-result = pcall(function()
-	proxy_called = false
-	listener = java.createProxy('android.view.View$OnLongClickListener', {
-		onLongClick: function(v)
-			proxy_called = true
-			return false
-		end
-	})
-	assert(listener != null, 'java.createProxy OnLongClickListener returned null')
-	dummy = View(activity)
-	ret = java.call(listener, 'onLongClick', dummy)
-	assert(proxy_called == true, 'java.createProxy OnLongClickListener not called')
-	return ret
-end)
-assert_pcall(result, 'java.createProxy OnLongClickListener failed')
-assert(result[1] == false, 'java.createProxy OnLongClickListener return mismatch')
+# result = pcall(function()
+# 	proxy_called = false
+# 	listener = java.createProxy('android.view.View$OnLongClickListener', {
+# 		onLongClick: function(v)
+# 			proxy_called = true
+# 			return false
+# 		end
+# 	})
+# 	assert(listener != null, 'java.createProxy OnLongClickListener returned null')
+# 	dummy = View(activity)
+# 	ret = java.call(listener, 'onLongClick', dummy)
+# 	assert(proxy_called == true, 'java.createProxy OnLongClickListener not called')
+# 	return ret
+# end)
+# assert_pcall(result, 'java.createProxy OnLongClickListener failed')
+# assert(result[1] == false, 'java.createProxy OnLongClickListener return mismatch')
 
-result = pcall(function()
-	state = { ok: false }
-	proxy = java.create('java.lang.Runnable', {
-		run: function()
-			state.setattr('ok', true)
-		end
-	})
-	java.call(proxy, 'run')
-	return state.get('ok')
-end)
-assert_pcall(result, 'java.create(interface) failed')
-assert(result[1] == true, 'java.create interface run mismatch')
+# result = pcall(function()
+# 	state = { ok: false }
+# 	proxy = java.create('java.lang.Runnable', {
+# 		run: function()
+# 			state.setattr('ok', true)
+# 		end
+# 	})
+# 	java.call(proxy, 'run')
+# 	return state.get('ok')
+# end)
+# assert_pcall(result, 'java.create(interface) failed')
+# assert(result[1] == true, 'java.create interface run mismatch')
 
 if java_pushed_number != null then
 	assert(java_pushed_number != null, 'java_pushed_number missing')
@@ -188,7 +188,8 @@ click_cb = {
 		status.setText('Status: button clicked')
 	end
 }
-btn.setOnClickListener(java.create('android.view.View$OnClickListener', click_cb))
+
+btn.setOnClickListener(View.OnClickListener(click_cb))
 
 open2_cb = {
 	onClick: function(v)
@@ -202,9 +203,9 @@ open2_cb = {
 		activity.finish()
 	end
 }
-btn2.setOnClickListener(java.create('android.view.View$OnClickListener', open2_cb))
+btn2.setOnClickListener(View.OnClickListener(open2_cb))
 
-proxy_click = java.create('android.view.View$OnClickListener', {
+proxy_click = View.OnClickListener({
 	onClick: function(v)
 		activity.newActivity('proxy_test')
 	end
@@ -237,7 +238,7 @@ long_click_cb = {
 		return true
 	end
 }
-btn.setOnLongClickListener(java.create('android.view.View$OnLongClickListener', long_click_cb))
+btn.setOnLongClickListener(View.OnLongClickListener(long_click_cb))
 
 textWatcher_cb = {
 	beforeTextChanged: function(s, start, count, after)

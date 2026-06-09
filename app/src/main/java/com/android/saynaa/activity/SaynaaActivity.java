@@ -29,6 +29,7 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 import com.android.saynaa.saynaajava.*;
+import com.android.saynaa.saynaajava.JavaModule;
 import com.android.saynaa.utils.FileUtil;
 import java.io.File;
 import java.io.FileNotFoundException;
@@ -200,7 +201,7 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
       showScriptError("onCreate error", t.getMessage());
       setContentView(layout);
     }
-    //runTest();
+    // runTest();
   }
 
   // public void runTest() {
@@ -321,6 +322,8 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
   private void initSaynaa() {
     saynaaState = getOrCreateState();
     saynaa = saynaaState.getSaynaa();
+    JavaModule javamodule = new JavaModule(saynaaState);
+    javamodule.create();
     ArrayList<Object> javaList = new ArrayList<>();
     javaList.add("alpha");
     javaList.add(123);
@@ -334,19 +337,23 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
       saynaaState.setGlobalValue("java_pushed_map_saynaa", javaMap, true);
       saynaaState.setGlobal("activity", this);
 
-      // SaynaaModule module = saynaaState.newModule("mahdiware");
+      SaynaaModule module = saynaaState.newModule("mahdiware");
       // saynaaState.moduleSetGlobal(module, "version", "1.0");
-      // saynaaState.moduleSetGlobal(module, "printf", this, "printf");
-      // saynaaState.registerModule(module);
-
+      saynaaState.moduleSetGlobal(module, "printf", SaynaaActivity.class, "printf");
+      saynaaState.moduleSetGlobal(module, "testing", this, "testing");
+      saynaaState.registerModule(module);
     } catch (SaynaaException e) {
       sendMsg("initSaynaa error: " + e.getMessage());
     }
   }
 
-  // public void printf(String msg) {
-  //   Toast.makeText(this, msg, Toast.LENGTH_SHORT).show();
-  // }
+  public Object testing() {
+    return new JavaMethodBinding(this, "printf");
+  }
+
+  public static void printf(String msg) {
+    Log.w(TAG, msg);
+  }
 
   public ArrayList<ClassLoader> getClassLoaders() {
     if (dexLoader == null)

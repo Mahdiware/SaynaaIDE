@@ -748,7 +748,7 @@ function apply_attrs(view, node)
   if on_click != null then
     view.setClickable(true)
     if type(on_click) == "Closure" then
-      view.setOnClickListener(java.create('android.view.View$OnClickListener', {
+      view.setOnClickListener(View.OnClickListener({
         onClick: on_click
       }))
     else
@@ -758,7 +758,7 @@ function apply_attrs(view, node)
 
   items = node.get('items')
   if items != null then
-    list = java.create('java.util.ArrayList', items)
+    list = java.new('java.util.ArrayList', items)
     adapter = ArrayAdapter(context, AndroidRLayout.simple_list_item_1, list)
     view.setAdapter(adapter)
   end

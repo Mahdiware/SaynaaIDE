@@ -706,7 +706,7 @@ public class JavaBridge {
     return createJavaObject(cls, args);
   }
 
-  private static Object createJavaObjectFlexible(Object classOrName, Object... args) {
+  public static Object createJavaObjectFlexible(Object classOrName, Object... args) {
     if (classOrName instanceof Class) {
       return createJavaObject((Class<?>) classOrName, args);
     }
@@ -955,6 +955,7 @@ public class JavaBridge {
 
     Object[] normalized = normalizeArgs(args);
     logArgsDebug("callStaticJavaMethod " + className + "." + methodName, normalized);
+
     Method method = findMethod(cls, methodName, normalized);
     if (method == null)
       return null;
@@ -1236,17 +1237,48 @@ public class JavaBridge {
     Object normalized = normalizeReturn(value != null && value.length > 0 ? value[0] : null);
     saynaa.reserveSlots(slot + 3);
 
+    // log value details for debugging
+    // StringBuilder sb = new StringBuilder();
+    // sb.append("pushToSlot value length=").append(value != null ? value.length : "null");
+    // if (value != null) {
+    //   for (int i = 0; i < value.length; i++) {
+    //     Object v = value[i];
+    //     sb.append(", arg").append(i);
+    //     if (v == null) {
+    //       sb.append("=null");
+    //       continue;
+    //     }
+    //     sb.append(" type=").append(v.getClass().getName());
+    //     if (v instanceof Class<?>) {
+    //       sb.append(" class=").append(((Class<?>) v).getName());
+    //     } else {
+    //       sb.append(" value=").append(String.valueOf(v));
+    //     }
+    //   }
+    // }
+    // Log.d(TAG, sb.toString());
+
     if (pushScalarToSlot(saynaa, slot, normalized)) {
       return true;
     }
 
-    if (normalized instanceof Class) {
-      if (value != null && value.length == 2 && value[1] instanceof String) {
-        String methodName = (String) value[1];
-        return saynaa.bindJavaMethod(slot, (Class<?>) normalized, methodName);
-      }
+    boolean hasMethod = value != null && value.length == 2 && value[1] instanceof String;
+
+    if (hasMethod) {
+      String methodName = (String) value[1];
+      return saynaa.bindJavaMethod(slot, normalized, methodName);
+    }
+
+    if (normalized instanceof Class<?>) {
       return saynaa.bindJavaClass(slot, (Class<?>) normalized);
     }
+
+    // JavaMethodBinding
+    if (normalized instanceof JavaMethodBinding) {
+      JavaMethodBinding binding = (JavaMethodBinding) normalized;
+      return saynaa.bindJavaMethod(slot, binding.getTarget(), binding.getMethodName());
+    }
+
     return saynaa.bindJavaObject(slot, normalized);
   }
 
