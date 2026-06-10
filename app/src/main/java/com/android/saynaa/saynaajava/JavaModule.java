@@ -1,6 +1,10 @@
 package com.android.saynaa.saynaajava;
 
 import android.util.Log;
+import com.android.saynaa.saynaajava.reflection.MethodHelper;
+import com.android.saynaa.saynaajava.reflection.ReflectionFinder;
+import com.android.saynaa.saynaajava.reflection.ReflectionNormalizer;
+import com.android.saynaa.saynaajava.reflection.FieldHelper;
 
 public class JavaModule {
   protected final SaynaaState state;
@@ -18,10 +22,11 @@ public class JavaModule {
       state.moduleSetGlobal(module, "saynaadir", state.getSaynaaDir());
       state.moduleSetGlobal(module, "bindClass", JavaBridge.class, "findClass");
       state.moduleSetGlobal(module, "new", this, "newJavaObject");
-      state.moduleSetGlobal(module, "getField", JavaBridge.class, "getFieldValue");
-      state.moduleSetGlobal(module, "setField", JavaBridge.class, "setFieldValue");
+      state.moduleSetGlobal(module, "getField", FieldHelper.class, "getFieldValue");
+      state.moduleSetGlobal(module, "setField", FieldHelper.class, "setFieldValue");
       state.moduleSetGlobal(module, "tostring", JavaBridge.class, "javaToString");
-      state.moduleSetGlobal(module, "instanceof", JavaBridge.class, "instanceOf");
+      state.moduleSetGlobal(module, "call", MethodHelper.class, "call");
+      state.moduleSetGlobal(module, "instanceof", this, "instanceOf");
       state.moduleSetGlobal(module, "callStatic", JavaBridge.class, "callStaticJavaMethod");
       state.moduleSetGlobal(module, "length", JavaBridge.class, "lengthOf");
       state.moduleSetGlobal(module, "testing", this, "testing");
@@ -42,15 +47,26 @@ public class JavaModule {
     }
   }
 
+  public boolean instanceOf(Object target, Object classOrName) {
+    if (target == null || classOrName == null)
+      return false;
+
+    if (classOrName instanceof Class) {
+      return ((Class<?>) classOrName).isInstance(target);
+    }
+
+    if (classOrName instanceof String) {
+      Class<?> cls = ReflectionFinder.findClass((String) classOrName);
+      return cls != null && cls.isInstance(target);
+    }
+
+    return false;
+  }
+
   public boolean testing(Object... args) {
     for (Object arg : args) {
       Log.d(TAG, "testing arg: " + arg);
     }
     return true;
   }
-
-  // Target                   Meaning           Dispatch
-  // String (class name)	    static call	      Class.method
-  // Class<?>	                static call	      Class.method
-  // Object instance	        instance call	    obj.method
 }

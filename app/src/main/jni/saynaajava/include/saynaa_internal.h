@@ -35,16 +35,12 @@ typedef struct BridgeState {
 
   jmethodID mFindClass;
   jmethodID mCreateJavaObject;
-  jmethodID mCreateFromSlots;
-  jmethodID mNewFromSlots;
   jmethodID mCallJavaMethod;
   jmethodID mCallStaticJavaMethod;
   jmethodID mCallFromSlots;
   jmethodID mCallStaticFromSlots;
   jmethodID mGetFieldValue;
   jmethodID mSetFieldValue;
-  jmethodID mGetFieldFromSlots;
-  jmethodID mSetFieldFromSlots;
   jmethodID mResolveCallbackInterface;
   jmethodID mCreateProxy;
   jmethodID mCreateProxyFromSlots;
@@ -57,7 +53,6 @@ typedef struct BridgeState {
   jmethodID mJavaLength;
   jmethodID mJavaToString;
   jmethodID mAstableToSlot;
-  jmethodID mInstanceOf;
   jmethodID mOnNativeError;
 
   int nextCallbackId;

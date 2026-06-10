@@ -26,6 +26,9 @@ AndroidR = java.bindClass('android.R')
 AndroidRLayout = java.bindClass('android.R$layout')
 Context = java.bindClass('android.content.Context')
 DisplayMetrics = java.bindClass('android.util.DisplayMetrics')
+BitmapFactory = java.bindClass('android.graphics.BitmapFactory')
+BitmapDrawable = java.bindClass('android.graphics.drawable.BitmapDrawable')
+
 
 RelativeLayoutRule = {
   layout_above: 2,
@@ -511,14 +514,14 @@ end
 function apply_layout(view, params, node)
   layout_weight = node.get('layout_weight')
   if layout_weight != null and java.instanceof(params, LinearLayoutParams) then
-    java.setField(params, 'weight', layout_weight)
+    params.weight = check_value(layout_weight)
   end
 
   layout_gravity = node.get('layout_gravity')
   if layout_gravity != null and java.instanceof(params, LinearLayoutParams) then
     g = parse_gravity(layout_gravity)
     if g != null then
-      java.setField(params, 'gravity', g)
+      params.gravity = g
     end
   end
 
@@ -698,6 +701,9 @@ function apply_attrs(view, node)
     if type(background) == 'Number' then
       view.setBackgroundColor(background)
     end
+    if type(background) == 'JavaObject' then
+      view.setBackground(background)
+    end
   end
 
   src = node.get('src')
@@ -706,6 +712,22 @@ function apply_attrs(view, node)
       res_id = get_identifier(src.sub(1))
       if res_id != 0 then
         view.setImageResource(res_id)
+      end
+    else
+      // Load image from saynaadir + file path
+      bitmap = BitmapFactory.decodeFile(java.saynaadir + "/" + src)
+      if (bitmap != null)
+        // Convert to drawable
+        drawable = BitmapDrawable(context.getResources(), bitmap)
+        view.setImageDrawable(drawable)
+      else
+        // Load image from file path
+        bitmap = BitmapFactory.decodeFile(src)
+        if (bitmap != null)
+          // Convert to drawable
+          drawable = BitmapDrawable(context.getResources(), bitmap)
+          view.setImageDrawable(drawable)
+        end
       end
     end
     if type(src) == 'Number' then

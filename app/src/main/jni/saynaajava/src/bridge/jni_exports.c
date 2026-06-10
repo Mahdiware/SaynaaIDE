@@ -80,10 +80,6 @@ JNIEXPORT jobject JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1open
       env, bridge->javaBridgeClass, "findClass", "(Ljava/lang/String;)Ljava/lang/Class;");
   bridge->mCreateJavaObject = (*env)->GetStaticMethodID(env, bridge->javaBridgeClass,
       "createJavaObject", "(Ljava/lang/String;[Ljava/lang/Object;)Ljava/lang/Object;");
-  bridge->mCreateFromSlots = (*env)->GetStaticMethodID(env, bridge->javaBridgeClass,
-      "createFromSlots", "(Lcom/android/saynaa/saynaajava/Saynaa;IIII)Z");
-  bridge->mNewFromSlots = (*env)->GetStaticMethodID(
-      env, bridge->javaBridgeClass, "newFromSlots", "(Lcom/android/saynaa/saynaajava/Saynaa;IIII)Z");
   bridge->mCallJavaMethod = (*env)->GetStaticMethodID(env, bridge->javaBridgeClass, "callJavaMethod",
       "(Ljava/lang/Object;Ljava/lang/String;[Ljava/lang/Object;)Ljava/lang/Object;");
   bridge->mCallStaticJavaMethod = (*env)->GetStaticMethodID(env, bridge->javaBridgeClass,
@@ -96,10 +92,6 @@ JNIEXPORT jobject JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1open
       "(Ljava/lang/Object;Ljava/lang/String;)Ljava/lang/Object;");
   bridge->mSetFieldValue = (*env)->GetStaticMethodID(env, bridge->javaBridgeClass, "setFieldValue",
       "(Ljava/lang/Object;Ljava/lang/String;Ljava/lang/Object;)Z");
-  bridge->mGetFieldFromSlots = (*env)->GetStaticMethodID(env, bridge->javaBridgeClass,
-      "getFieldFromSlots", "(Lcom/android/saynaa/saynaajava/Saynaa;III)Z");
-  bridge->mSetFieldFromSlots = (*env)->GetStaticMethodID(env, bridge->javaBridgeClass,
-      "setFieldFromSlots", "(Lcom/android/saynaa/saynaajava/Saynaa;IIII)Z");
   bridge->mResolveCallbackInterface = (*env)->GetStaticMethodID(env, bridge->javaBridgeClass,
       "resolveCallbackInterface", "(Ljava/lang/Object;Ljava/lang/String;II)Ljava/lang/String;");
   bridge->mCreateProxy = (*env)->GetStaticMethodID(env, bridge->javaBridgeClass,
@@ -123,24 +115,20 @@ JNIEXPORT jobject JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1open
       env, bridge->javaBridgeClass, "javaToString", "(Ljava/lang/Object;)Ljava/lang/String;");
   bridge->mAstableToSlot = (*env)->GetStaticMethodID(env, bridge->javaBridgeClass, "astableToSlot",
       "(Lcom/android/saynaa/saynaajava/Saynaa;ILjava/lang/Object;)Z");
-  bridge->mInstanceOf = (*env)->GetStaticMethodID(
-      env, bridge->javaBridgeClass, "instanceOf", "(Ljava/lang/Object;Ljava/lang/Object;)Z");
 
   jclass saynaaClass = (*env)->GetObjectClass(env, thiz);
   bridge->mOnNativeError = (*env)->GetMethodID(env, saynaaClass, "onNativeError", "(Ljava/lang/String;)V");
   (*env)->DeleteLocalRef(env, saynaaClass);
 
-  if (bridge->mFindClass == NULL || bridge->mCreateJavaObject == NULL || bridge->mCreateFromSlots == NULL
-      || bridge->mNewFromSlots == NULL || bridge->mCallJavaMethod == NULL
+  if (bridge->mFindClass == NULL || bridge->mCreateJavaObject == NULL || bridge->mCallJavaMethod == NULL
       || bridge->mCallStaticJavaMethod == NULL || bridge->mCallFromSlots == NULL
-      || bridge->mCallStaticFromSlots == NULL || bridge->mGetFieldValue == NULL || bridge->mSetFieldValue == NULL
-      || bridge->mGetFieldFromSlots == NULL || bridge->mSetFieldFromSlots == NULL
-      || bridge->mResolveCallbackInterface == NULL || bridge->mCreateProxy == NULL
-      || bridge->mCreateProxyFromSlots == NULL || bridge->mResolveInterfaceNameFromSlots == NULL
-      || bridge->mCreateNativeCallbackProxy == NULL || bridge->mGetDefaultInterfaceMethodName == NULL
-      || bridge->mPushToSlot == NULL || bridge->mSlotToJava == NULL || bridge->mArgsArrayFromSlots == NULL
-      || bridge->mJavaLength == NULL || bridge->mJavaToString == NULL || bridge->mAstableToSlot == NULL
-      || bridge->mInstanceOf == NULL || bridge->mOnNativeError == NULL) {
+      || bridge->mCallStaticFromSlots == NULL || bridge->mGetFieldValue == NULL
+      || bridge->mSetFieldValue == NULL || bridge->mResolveCallbackInterface == NULL
+      || bridge->mCreateProxy == NULL || bridge->mCreateProxyFromSlots == NULL
+      || bridge->mResolveInterfaceNameFromSlots == NULL || bridge->mCreateNativeCallbackProxy == NULL
+      || bridge->mGetDefaultInterfaceMethodName == NULL || bridge->mPushToSlot == NULL
+      || bridge->mSlotToJava == NULL || bridge->mArgsArrayFromSlots == NULL || bridge->mJavaLength == NULL
+      || bridge->mJavaToString == NULL || bridge->mAstableToSlot == NULL || bridge->mOnNativeError == NULL) {
     (*env)->DeleteGlobalRef(env, bridge->saynaaObject);
     (*env)->DeleteGlobalRef(env, bridge->javaBridgeClass);
     free(bridge);
@@ -1157,7 +1145,6 @@ JNIEXPORT jint JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1doStrin
   VM* vm = vm_from_saynaa(env, thiz);
   if (vm == NULL || codeString == NULL)
     return (jint) RESULT_RUNTIME_ERROR;
-
 
   const char* code = (*env)->GetStringUTFChars(env, codeString, NULL);
   if (code == NULL)

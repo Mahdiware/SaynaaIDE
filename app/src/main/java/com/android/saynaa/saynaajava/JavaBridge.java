@@ -3,6 +3,12 @@ package com.android.saynaa.saynaajava;
 import android.content.Context;
 import android.util.Log;
 import android.view.Menu;
+import com.android.saynaa.saynaajava.reflection.FieldHelper;
+import com.android.saynaa.saynaajava.reflection.ReflectionFinder;
+import com.android.saynaa.saynaajava.reflection.ReflectionKeys.ConstructorKey;
+import com.android.saynaa.saynaajava.reflection.ReflectionKeys.FieldKey;
+import com.android.saynaa.saynaajava.reflection.ReflectionKeys.MethodKey;
+import com.android.saynaa.saynaajava.reflection.ReflectionNormalizer;
 import java.lang.reflect.Array;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
@@ -121,6 +127,20 @@ public class JavaBridge {
     }
   }
 
+  // findClass used in JNI
+  public static Class<?> findClass(String className) {
+    return ReflectionFinder.findClass(className);
+  }
+
+  // getFieldValue and setFieldValue used in JNI
+  public static boolean setFieldValue(Object objOrClass, String fieldName, Object value) {
+    return FieldHelper.setFieldValue(objOrClass, fieldName, value);
+  }
+
+  public static Object getFieldValue(Object objOrClass, String fieldName) {
+    return FieldHelper.getFieldValue(objOrClass, fieldName);
+  }
+
   public static Object[] argsFromSlots(Saynaa saynaa, int startSlot, int argc) {
     if (saynaa == null || saynaa.isClosed() || argc <= 0)
       return new Object[0];
@@ -219,61 +239,10 @@ public class JavaBridge {
     return astableToSlot(unwrapState(state), listSlot, value);
   }
 
-  public static boolean instanceOf(Object target, Object classOrName) {
-    if (target == null || classOrName == null)
-      return false;
-
-    if (classOrName instanceof Class) {
-      return ((Class<?>) classOrName).isInstance(target);
-    }
-
-    if (classOrName instanceof String) {
-      Class<?> cls = findClass((String) classOrName);
-      return cls != null && cls.isInstance(target);
-    }
-
-    return false;
-  }
-
-  private static Object normalizeArg(Object arg) {
-    if (arg == null)
-      return null;
-    // if (arg instanceof SaynaaObject) {
-    //   return ((SaynaaObject) arg).getObject();
-    // }
-    if (arg instanceof SaynaaContext) {
-      Context ctx = ((SaynaaContext) arg).getContext();
-      return ctx != null ? ctx : arg;
-    }
-    return arg;
-  }
-
-  private static Object[] normalizeArgs(Object... args) {
-    if (args == null || args.length == 0)
-      return args;
-    Object[] out = new Object[args.length];
-    for (int i = 0; i < args.length; i++) {
-      out[i] = normalizeArg(args[i]);
-    }
-    return out;
-  }
-
-  private static boolean classesEqual(Class<?> a, Class<?> b) {
-    return a == b || (a != null && a.equals(b));
-  }
-
-  private static int classHash(Class<?> c) {
-    return c == null ? 0 : c.hashCode();
-  }
-
-  // Cache for classes
-  private static final Map<String, Class<?>> classCache = new HashMap<>();
   // Cache for methods
   private static final Map<MethodKey, Method> methodCache = new HashMap<>();
   // Cache for method misses to avoid repeated reflective scans during dynamic dispatch.
   private static final Map<MethodKey, Boolean> missingMethodCache = new HashMap<>();
-  // Cache for class method arrays to reduce repeated reflection scans.
-  private static final Map<Class<?>, Method[]> classMethodsCache = new HashMap<>();
   // Cache for fast-path method lookup by single-argument type (String/int/double/bool/void).
   private static final Map<String, Method> stringMethodCache = new HashMap<>();
   private static final Map<String, Method> integerMethodCache = new HashMap<>();
@@ -287,262 +256,12 @@ public class JavaBridge {
   // Cache for missing fields to avoid repeated reflective exceptions on method-style access.
   private static final Map<FieldKey, Boolean> missingFieldCache = new HashMap<>();
 
-  // --- Utility classes for cache keys ---
-  private static class MethodKey {
-    private final Class<?> cls;
-    private final String methodName;
-    private final Class<?>[] paramTypes;
-
-    MethodKey(Class<?> cls, String methodName, Class<?>[] paramTypes) {
-      this.cls = cls;
-      this.methodName = methodName;
-      this.paramTypes = paramTypes;
-    }
-
-    @Override
-    public boolean equals(Object o) {
-      if (!(o instanceof MethodKey))
-        return false;
-      MethodKey other = (MethodKey) o;
-      if (!cls.equals(other.cls) || !methodName.equals(other.methodName))
-        return false;
-      if (paramTypes.length != other.paramTypes.length)
-        return false;
-      for (int i = 0; i < paramTypes.length; i++) {
-        if (!classesEqual(paramTypes[i], other.paramTypes[i]))
-          return false;
-      }
-      return true;
-    }
-
-    @Override
-    public int hashCode() {
-      int result = cls.hashCode();
-      result = 31 * result + methodName.hashCode();
-      for (Class<?> p : paramTypes) {
-        result = 31 * result + classHash(p);
-      }
-      return result;
-    }
-  }
-
-  private static class ConstructorKey {
-    private final Class<?> cls;
-    private final Class<?>[] paramTypes;
-
-    ConstructorKey(Class<?> cls, Class<?>[] paramTypes) {
-      this.cls = cls;
-      this.paramTypes = paramTypes;
-    }
-
-    @Override
-    public boolean equals(Object o) {
-      if (!(o instanceof ConstructorKey))
-        return false;
-      ConstructorKey other = (ConstructorKey) o;
-      if (!cls.equals(other.cls))
-        return false;
-      if (paramTypes.length != other.paramTypes.length)
-        return false;
-      for (int i = 0; i < paramTypes.length; i++) {
-        if (!classesEqual(paramTypes[i], other.paramTypes[i]))
-          return false;
-      }
-      return true;
-    }
-
-    @Override
-    public int hashCode() {
-      int result = cls.hashCode();
-      for (Class<?> p : paramTypes) {
-        result = 31 * result + classHash(p);
-      }
-      return result;
-    }
-  }
-
-  private static class FieldKey {
-    private final Class<?> cls;
-    private final String fieldName;
-
-    FieldKey(Class<?> cls, String fieldName) {
-      this.cls = cls;
-      this.fieldName = fieldName;
-    }
-
-    @Override
-    public boolean equals(Object o) {
-      if (!(o instanceof FieldKey))
-        return false;
-      FieldKey other = (FieldKey) o;
-      return cls.equals(other.cls) && fieldName.equals(other.fieldName);
-    }
-
-    @Override
-    public int hashCode() {
-      return cls.hashCode() * 31 + fieldName.hashCode();
-    }
-  }
-
-  private static Field findFieldQuietly(Class<?> cls, String fieldName) {
-    if (cls == null || fieldName == null)
-      return null;
-
-    FieldKey key = new FieldKey(cls, fieldName);
-    if (missingFieldCache.containsKey(key)) {
-      return null;
-    }
-
-    Field cached = fieldCache.get(key);
-    if (cached != null)
-      return cached;
-
-    try {
-      // direct lookup (fast path)
-      Field field = cls.getField(fieldName);
-      fieldCache.put(key, field);
-      Log.d(TAG, "Cached field: " + field);
-      return field;
-
-    } catch (NoSuchFieldException ignored) {
-      // fallback: scan declared fields (important fix)
-      try {
-        Field field = cls.getDeclaredField(fieldName);
-        field.setAccessible(true);
-
-        fieldCache.put(key, field);
-        Log.d(TAG, "Cached declared field: " + field);
-
-        return field;
-
-      } catch (NoSuchFieldException e2) {
-        missingFieldCache.put(key, Boolean.TRUE);
-        return null;
-      }
-    }
-  }
-
-  private static Method[] getMethodsCached(Class<?> cls) {
-    Method[] methods = classMethodsCache.get(cls);
-    if (methods != null) {
-      return methods;
-    }
-    methods = cls.getMethods();
-    classMethodsCache.put(cls, methods);
-    return methods;
-  }
-
-  private static final List<ClassLoader> extraClassLoaders = new ArrayList<>();
-
-  public static synchronized void setExtraClassLoaders(List<ClassLoader> loaders) {
-    extraClassLoaders.clear();
-    if (loaders != null) {
-      extraClassLoaders.addAll(loaders);
-    }
-  }
-
-  public static synchronized void addExtraClassLoader(ClassLoader loader) {
-    if (loader != null) {
-      extraClassLoaders.add(loader);
-    }
-  }
-
-  private static synchronized List<ClassLoader> snapshotExtraLoaders() {
-    return new ArrayList<>(extraClassLoaders);
-  }
-
-  // --- Class loading with caching ---
-  public static Class<?> findClass(String className) {
-    Class<?> cls = classCache.get(className);
-    if (cls != null)
-      return cls;
-
-    try {
-      cls = Class.forName(className);
-      classCache.put(className, cls);
-      Log.d(TAG, "Found and cached class: " + className);
-      return cls;
-    } catch (ClassNotFoundException e) {
-      // Fall through to custom loaders.
-    }
-
-    for (ClassLoader loader : snapshotExtraLoaders()) {
-      if (loader == null)
-        continue;
-      try {
-        cls = Class.forName(className, false, loader);
-        if (cls != null) {
-          classCache.put(className, cls);
-          Log.d(TAG, "Found and cached class (loader): " + className);
-          return cls;
-        }
-      } catch (ClassNotFoundException ignored) {
-        // Try next loader.
-      }
-    }
-
-    if (Log.isLoggable(TAG, Log.DEBUG)) {
-      Log.d(TAG, "Class not found: " + className);
-    }
-    return null;
-  }
-
-  // --- Convert boxed to primitive types for matching ---
-  private static Class<?> toPrimitive(Class<?> cls) {
-    if (cls == Integer.class)
-      return int.class;
-    if (cls == Boolean.class)
-      return boolean.class;
-    if (cls == Byte.class)
-      return byte.class;
-    if (cls == Character.class)
-      return char.class;
-    if (cls == Double.class)
-      return double.class;
-    if (cls == Float.class)
-      return float.class;
-    if (cls == Long.class)
-      return long.class;
-    if (cls == Short.class)
-      return short.class;
-    return cls;
-  }
-
-  private static int matchScore(Class<?> paramType, Class<?> argType) {
-    if (argType == null) {
-      return paramType.isPrimitive() ? -1 : 4;
-    }
-
-    if (paramType == argType)
-      return 0;
-
-    if (paramType.isPrimitive()) {
-      Class<?> prim = toPrimitive(argType);
-      if (paramType == prim)
-        return 1;
-      if (Number.class.isAssignableFrom(argType)
-          && (paramType == int.class || paramType == long.class || paramType == short.class
-              || paramType == byte.class || paramType == float.class || paramType == double.class)) {
-        return 2;
-      }
-      return -1;
-    }
-
-    if (Number.class.isAssignableFrom(paramType) && Number.class.isAssignableFrom(argType))
-      return 2;
-
-    if (paramType.isAssignableFrom(argType))
-      return 3;
-
-    return -1;
-  }
-
   // --- Check if arg type matches parameter type ---
   private static boolean isAssignable(Class<?> paramType, Class<?> argType) {
     if (paramType.isPrimitive()) {
       if (argType == null)
         return false;
-      Class<?> prim = toPrimitive(argType);
+      Class<?> prim = ReflectionFinder.toPrimitive(argType);
       if (paramType.equals(prim))
         return true;
 
@@ -587,84 +306,12 @@ public class JavaBridge {
     return arg;
   }
 
-  private static Object[] coerceArgs(Class<?>[] paramTypes, Object... args) {
+  public static Object[] coerceArgs(Class<?>[] paramTypes, Object... args) {
     Object[] out = new Object[args.length];
     for (int i = 0; i < args.length; i++) {
       out[i] = coerceArg(paramTypes[i], args[i]);
     }
     return out;
-  }
-
-  private static Object coerceFieldValue(Class<?> fieldType, Object value) {
-    if (value == null)
-      return null;
-
-    if ((fieldType == byte.class || fieldType == Byte.class) && value instanceof Number)
-      return ((Number) value).byteValue();
-    if ((fieldType == short.class || fieldType == Short.class) && value instanceof Number)
-      return ((Number) value).shortValue();
-    if ((fieldType == int.class || fieldType == Integer.class) && value instanceof Number)
-      return ((Number) value).intValue();
-    if ((fieldType == long.class || fieldType == Long.class) && value instanceof Number)
-      return ((Number) value).longValue();
-    if ((fieldType == float.class || fieldType == Float.class) && value instanceof Number)
-      return ((Number) value).floatValue();
-    if ((fieldType == double.class || fieldType == Double.class) && value instanceof Number)
-      return ((Number) value).doubleValue();
-    if ((fieldType == boolean.class || fieldType == Boolean.class) && value instanceof Number)
-      return ((Number) value).intValue() != 0;
-    if ((fieldType == boolean.class || fieldType == Boolean.class) && value instanceof Boolean)
-      return value;
-    if ((fieldType == char.class || fieldType == Character.class) && value instanceof String) {
-      String stringValue = (String) value;
-      return stringValue.isEmpty() ? value : stringValue.charAt(0);
-    }
-
-    return value;
-  }
-
-  // --- Find matching constructor ---
-  public static Constructor<?> findConstructor(Class<?> cls, Object... args) {
-    Object[] normalized = normalizeArgs(args);
-    Class<?>[] argTypes = new Class<?>[normalized.length];
-    for (int i = 0; i < args.length; i++) {
-      argTypes[i] = normalized[i] == null ? null : normalized[i].getClass();
-    }
-    ConstructorKey key = new ConstructorKey(cls, argTypes);
-    if (constructorCache.containsKey(key)) {
-      return constructorCache.get(key);
-    }
-
-    Constructor<?> best = null;
-    int bestScore = Integer.MAX_VALUE;
-    for (Constructor<?> ctor : cls.getConstructors()) {
-      Class<?>[] paramTypes = ctor.getParameterTypes();
-      if (paramTypes.length != normalized.length)
-        continue;
-
-      boolean match = true;
-      int score = 0;
-      for (int i = 0; i < paramTypes.length; i++) {
-        int s = matchScore(paramTypes[i], argTypes[i]);
-        if (s < 0) {
-          match = false;
-          break;
-        }
-        score += s;
-      }
-
-      if (match && score < bestScore) {
-        best = ctor;
-        bestScore = score;
-      }
-    }
-    if (best != null) {
-      constructorCache.put(key, best);
-      Log.d(TAG, "Cached constructor: " + best);
-      return best;
-    }
-    Log.e(TAG, "No matching constructor found for " + cls.getName());
-    return null;
   }
 
   private static Object createJavaObject(Class<?> cls, Object... args) {
@@ -673,8 +320,8 @@ public class JavaBridge {
       return null;
     }
 
-    Object[] normalized = normalizeArgs(args);
-    Constructor<?> ctor = findConstructor(cls, normalized);
+    Object[] normalized = ReflectionNormalizer.normalizeArgs(args);
+    Constructor<?> ctor = ReflectionFinder.findConstructor(cls, normalized);
     if (ctor == null) {
       logConstructorMismatch(cls, normalized);
       return null;
@@ -698,7 +345,7 @@ public class JavaBridge {
   public static Object createJavaObject(String fullClassName, Object... args) {
     Log.d(TAG, "Creating Java object: " + fullClassName);
     logArgsDebug("createJavaObject", args);
-    Class<?> cls = findClass(fullClassName);
+    Class<?> cls = ReflectionFinder.findClass(fullClassName);
     if (cls == null) {
       Log.e(TAG, "Failed to find class: " + fullClassName);
       return null;
@@ -719,11 +366,23 @@ public class JavaBridge {
     return null;
   }
 
+  public static void logMethodMismatch(Class<?> cls, String methodName, Object[] args) {
+    StringBuilder sb = new StringBuilder();
+    sb.append("No matching method found: ").append(cls.getName()).append(".").append(methodName).append("(");
+    for (int i = 0; i < args.length; i++) {
+      if (i > 0)
+        sb.append(", ");
+      sb.append(args[i] == null ? "null" : args[i].getClass().getSimpleName());
+    }
+    sb.append(")");
+    Log.e(TAG, sb.toString());
+  }
+
   private static Class<?> resolveClass(Object classOrName) {
     if (classOrName instanceof Class)
       return (Class<?>) classOrName;
     if (classOrName instanceof String)
-      return findClass((String) classOrName);
+      return ReflectionFinder.findClass((String) classOrName);
     if (classOrName != null)
       Log.e(TAG, "Unsupported class target: " + classOrName.getClass().getName());
     return null;
@@ -739,133 +398,6 @@ public class JavaBridge {
     return null;
   }
 
-  // --- Find matching method ---
-  public static Method findMethod(Class<?> cls, String methodName, Object... args) {
-    Object[] normalized = normalizeArgs(args);
-    Class<?>[] argTypes = new Class<?>[normalized.length];
-    for (int i = 0; i < normalized.length; i++) {
-      argTypes[i] = normalized[i] == null ? null : normalized[i].getClass();
-    }
-
-    String cacheName = cls.getName() + "#" + methodName;
-    if (normalized.length == 0) {
-      Method cached = voidMethodCache.get(cacheName);
-      if (cached != null) {
-        return cached;
-      }
-    } else if (normalized.length == 1) {
-      Object arg = normalized[0];
-      if (arg instanceof String) {
-        Method cached = stringMethodCache.get(cacheName);
-        if (cached != null) {
-          return cached;
-        }
-      } else if (arg instanceof Boolean) {
-        Method cached = boolMethodCache.get(cacheName);
-        if (cached != null) {
-          return cached;
-        }
-      } else if (arg instanceof Number) {
-        Method cached = (arg instanceof Integer || arg instanceof Long || arg instanceof Short || arg instanceof Byte)
-                            ? integerMethodCache.get(cacheName)
-                            : doubleMethodCache.get(cacheName);
-        if (cached != null) {
-          return cached;
-        }
-      }
-    }
-
-    MethodKey key = new MethodKey(cls, methodName, argTypes);
-    if (methodCache.containsKey(key)) {
-      return methodCache.get(key);
-    }
-    if (missingMethodCache.containsKey(key)) {
-      return null;
-    }
-
-    Method bestMatch = null;
-    int bestScore = Integer.MAX_VALUE;
-    for (Method method : getMethodsCached(cls)) {
-      if (!method.getName().equals(methodName))
-        continue;
-
-      Class<?>[] paramTypes = method.getParameterTypes();
-      boolean isVarArgs = method.isVarArgs();
-      if (!isVarArgs && paramTypes.length != normalized.length)
-        continue;
-
-      boolean match = true;
-      int score = 0;
-
-      if (!isVarArgs) {
-        for (int i = 0; i < paramTypes.length; i++) {
-          int s = matchScore(paramTypes[i], argTypes[i]);
-          if (s < 0) {
-            match = false;
-            break;
-          }
-          score += s;
-        }
-      } else {
-        int fixedCount = paramTypes.length - 1;
-        if (normalized.length < fixedCount) {
-          match = false;
-        } else {
-          for (int i = 0; i < fixedCount; i++) {
-            int s = matchScore(paramTypes[i], argTypes[i]);
-            if (s < 0) {
-              match = false;
-              break;
-            }
-            score += s;
-          }
-          if (match) {
-            Class<?> varType = paramTypes[fixedCount].getComponentType();
-            for (int i = fixedCount; i < normalized.length; i++) {
-              int s = matchScore(varType, argTypes[i]);
-              if (s < 0) {
-                match = false;
-                break;
-              }
-              score += s;
-            }
-          }
-        }
-      }
-
-      if (match && score < bestScore) {
-        bestMatch = method;
-        bestScore = score;
-      }
-    }
-
-    if (bestMatch != null) {
-      methodCache.put(key, bestMatch);
-      Log.d(TAG, "Cached method: " + bestMatch);
-
-      Class<?>[] params = bestMatch.getParameterTypes();
-      if (params.length == 0) {
-        voidMethodCache.put(cacheName, bestMatch);
-      } else if (params.length == 1) {
-        Class<?> p0 = params[0];
-        if (p0 == String.class || CharSequence.class.isAssignableFrom(p0)) {
-          stringMethodCache.put(cacheName, bestMatch);
-        } else if (p0 == boolean.class || p0 == Boolean.class) {
-          boolMethodCache.put(cacheName, bestMatch);
-        } else if (p0 == int.class || p0 == Integer.class || p0 == long.class || p0 == Long.class
-                   || p0 == short.class || p0 == Short.class || p0 == byte.class || p0 == Byte.class) {
-          integerMethodCache.put(cacheName, bestMatch);
-        } else if (p0 == float.class || p0 == Float.class || p0 == double.class
-                   || p0 == Double.class || Number.class.isAssignableFrom(p0)) {
-          doubleMethodCache.put(cacheName, bestMatch);
-        }
-      }
-    } else {
-      missingMethodCache.put(key, Boolean.TRUE);
-    }
-    return bestMatch;
-  }
-
   public static String resolveCallbackInterface(Object target, String methodName, int argc, int argIndex) {
     if (target == null || methodName == null || methodName.trim().isEmpty())
       return null;
@@ -873,7 +405,7 @@ public class JavaBridge {
       return null;
 
     Class<?> cls = (target instanceof Class) ? (Class<?>) target : target.getClass();
-    for (Method method : getMethodsCached(cls)) {
+    for (Method method : ReflectionFinder.getMethodsCached(cls)) {
       if (!method.getName().equals(methodName))
         continue;
 
@@ -921,18 +453,19 @@ public class JavaBridge {
   }
 
   // --- Call instance method ---
+  // it used in JNI, so it must be public
   public static Object callJavaMethod(Object javaObject, String methodName, Object... args) {
-    Object target = normalizeArg(javaObject);
+    Object target = ReflectionNormalizer.normalizeArg(javaObject);
     if (target == null) {
       Log.e(TAG, "Java object is null.");
       return null;
     }
 
-    Object[] normalized = normalizeArgs(args);
+    Object[] normalized = ReflectionNormalizer.normalizeArgs(args);
     logArgsDebug("callJavaMethod " + methodName, normalized);
 
     Class<?> cls = target.getClass();
-    Method method = findMethod(cls, methodName, normalized);
+    Method method = ReflectionFinder.findMethod(cls, methodName, normalized);
     if (method == null)
       return null;
 
@@ -940,7 +473,7 @@ public class JavaBridge {
       Object[] coercedArgs = method.isVarArgs() ? buildVarArgs(method.getParameterTypes(), normalized)
                                                 : coerceArgs(method.getParameterTypes(), normalized);
       Object ret = method.invoke(target, coercedArgs);
-      return normalizeReturn(ret);
+      return ReflectionNormalizer.normalizeReturn(ret);
     } catch (IllegalAccessException | InvocationTargetException | IllegalArgumentException e) {
       Log.e(TAG, "Error invoking method: " + methodName, e);
       return null;
@@ -949,14 +482,14 @@ public class JavaBridge {
 
   // --- Call static method ---
   public static Object callStaticJavaMethod(String className, String methodName, Object... args) {
-    Class<?> cls = findClass(className);
+    Class<?> cls = ReflectionFinder.findClass(className);
     if (cls == null)
       return null;
 
-    Object[] normalized = normalizeArgs(args);
+    Object[] normalized = ReflectionNormalizer.normalizeArgs(args);
     logArgsDebug("callStaticJavaMethod " + className + "." + methodName, normalized);
 
-    Method method = findMethod(cls, methodName, normalized);
+    Method method = ReflectionFinder.findMethod(cls, methodName, normalized);
     if (method == null)
       return null;
 
@@ -964,7 +497,7 @@ public class JavaBridge {
       Object[] coercedArgs = method.isVarArgs() ? buildVarArgs(method.getParameterTypes(), normalized)
                                                 : coerceArgs(method.getParameterTypes(), normalized);
       Object ret = method.invoke(null, coercedArgs);
-      return normalizeReturn(ret);
+      return ReflectionNormalizer.normalizeReturn(ret);
     } catch (IllegalAccessException | InvocationTargetException | IllegalArgumentException e) {
       Log.e(TAG, "Error invoking static method: " + methodName, e);
       return null;
@@ -1133,7 +666,7 @@ public class JavaBridge {
     }
   }
 
-  private static void logArgsDebug(String prefix, Object[] args) {
+  public static void logArgsDebug(String prefix, Object[] args) {
     if (!Log.isLoggable(TAG, Log.DEBUG))
       return;
     StringBuilder sb = new StringBuilder();
@@ -1157,22 +690,6 @@ public class JavaBridge {
       sb.append("]");
     }
     Log.d(TAG, sb.toString());
-  }
-
-  private static Object normalizeReturn(Object value) {
-    if (value == null)
-      return null;
-    // if (value instanceof SaynaaObject)
-    //   return ((SaynaaObject) value).getObject();
-    if (value instanceof CharSequence)
-      return value.toString();
-    if (value instanceof Character)
-      return (int) ((Character) value).charValue();
-    if (value instanceof Boolean)
-      return value;
-    if (value instanceof Number)
-      return value;
-    return value;
   }
 
   private static boolean pushNumberToSlot(Saynaa saynaa, int slot, Number numberValue) {
@@ -1234,7 +751,8 @@ public class JavaBridge {
     if (saynaa == null || saynaa.isClosed())
       return false;
 
-    Object normalized = normalizeReturn(value != null && value.length > 0 ? value[0] : null);
+    Object normalized = ReflectionNormalizer.normalizeReturn(
+        value != null && value.length > 0 ? value[0] : null);
     saynaa.reserveSlots(slot + 3);
 
     // log value details for debugging
@@ -1299,7 +817,7 @@ public class JavaBridge {
     if (saynaa == null || saynaa.isClosed())
       return false;
 
-    Object normalized = normalizeReturn(value);
+    Object normalized = ReflectionNormalizer.normalizeReturn(value);
     saynaa.reserveSlots(slot + 3);
 
     if (pushScalarToSlot(saynaa, slot, normalized))
@@ -1390,92 +908,6 @@ public class JavaBridge {
 
   public static boolean pushToSlotAsSaynaa(SaynaaState state, int slot, Object value) {
     return pushToSlotAsSaynaa(unwrapState(state), slot, value);
-  }
-
-  // --- Get field value (instance or static) ---
-  public static Object getFieldValue(Object objOrClass, String fieldName) {
-    Class<?> cls;
-    boolean isStaticAccess = false;
-    if (objOrClass instanceof Class) {
-      cls = (Class<?>) objOrClass;
-      isStaticAccess = true;
-    } else if (objOrClass != null) {
-      cls = objOrClass.getClass();
-    } else {
-      Log.e(TAG, "Object or Class is null for getFieldValue");
-      return null;
-    }
-
-    Field field = findFieldQuietly(cls, fieldName);
-    if (field == null)
-      return null;
-
-    try {
-      return normalizeReturn(field.get(isStaticAccess ? null : objOrClass));
-    } catch (IllegalAccessException e) {
-      Log.e(TAG, "Error accessing field: " + fieldName, e);
-      return null;
-    }
-  }
-
-  public static boolean getFieldFromSlots(Saynaa saynaa, int targetSlot, int fieldNameSlot, int outSlot) {
-    if (saynaa == null || saynaa.isClosed())
-      return false;
-
-    String fieldName = saynaa.getSlotString(fieldNameSlot);
-    Object target = slotToJava(saynaa, targetSlot);
-    Object ret = getFieldValue(target, fieldName);
-    return pushToSlot(saynaa, outSlot, ret);
-  }
-
-  public static boolean getFieldFromSlots(SaynaaState state, int targetSlot, int fieldNameSlot, int outSlot) {
-    return getFieldFromSlots(unwrapState(state), targetSlot, fieldNameSlot, outSlot);
-  }
-
-  // --- Set field value (instance or static) ---
-  public static boolean setFieldValue(Object objOrClass, String fieldName, Object value) {
-    Class<?> cls;
-    boolean isStaticAccess = false;
-    if (objOrClass instanceof Class) {
-      cls = (Class<?>) objOrClass;
-      isStaticAccess = true;
-    } else if (objOrClass != null) {
-      cls = objOrClass.getClass();
-    } else {
-      Log.e(TAG, "Object or Class is null for setFieldValue");
-      return false;
-    }
-
-    Field field = findFieldQuietly(cls, fieldName);
-    if (field == null)
-      return false;
-
-    try {
-      field.set(isStaticAccess ? null : objOrClass, coerceFieldValue(field.getType(), value));
-      return true;
-    } catch (IllegalAccessException | IllegalArgumentException e) {
-      Log.e(TAG, "Error setting field: " + fieldName, e);
-      return false;
-    }
-  }
-
-  public static boolean setFieldFromSlots(
-      Saynaa saynaa, int targetSlot, int fieldNameSlot, int valueSlot, int outSlot) {
-    if (saynaa == null || saynaa.isClosed())
-      return false;
-
-    String fieldName = saynaa.getSlotString(fieldNameSlot);
-    Object target = slotToJava(saynaa, targetSlot);
-    Object value = slotToJava(saynaa, valueSlot);
-    boolean ok = setFieldValue(target, fieldName, value);
-    saynaa.reserveSlots(outSlot + 1);
-    saynaa.setSlotBool(outSlot, ok);
-    return true;
-  }
-
-  public static boolean setFieldFromSlots(
-      SaynaaState state, int targetSlot, int fieldNameSlot, int valueSlot, int outSlot) {
-    return setFieldFromSlots(unwrapState(state), targetSlot, fieldNameSlot, valueSlot, outSlot);
   }
 
   public static Object createProxy(Saynaa saynaa, String interfaceName, String methodName, String script) {
@@ -1579,7 +1011,7 @@ public class JavaBridge {
     if (returnType == void.class || returnType == Void.class)
       return null;
 
-    Object normalized = normalizeReturn(callbackResult);
+    Object normalized = ReflectionNormalizer.normalizeReturn(callbackResult);
     if (normalized == null)
       return defaultReturnFor(returnType);
 
@@ -1645,7 +1077,7 @@ public class JavaBridge {
           Log.e(TAG, "createNativeCallbackProxy failed: invalid interface list: " + interfaceName);
           return null;
         }
-        Class<?> iface = findClass(n);
+        Class<?> iface = ReflectionFinder.findClass(n);
         if (iface == null) {
           Log.e(TAG, "createNativeCallbackProxy failed: class not found: " + n);
           return null;
@@ -1707,7 +1139,7 @@ public class JavaBridge {
         return "*";
       }
 
-      Class<?> iface = findClass(names[0].trim());
+      Class<?> iface = ReflectionFinder.findClass(names[0].trim());
       if (iface == null)
         return "*";
       Method[] methods = iface.getMethods();

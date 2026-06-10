@@ -2,6 +2,8 @@ package com.android.saynaa.saynaajava;
 
 import android.content.Context;
 import android.view.View;
+import com.android.saynaa.saynaajava.reflection.ReflectionFinder;
+import java.util.List;
 
 public class SaynaaState {
   private final Saynaa saynaa;
@@ -129,6 +131,22 @@ public class SaynaaState {
     }
     int functionId = saynaa.getGlobalFunctionId(name);
     return callFunctionById(functionId, args);
+  }
+
+  public synchronized void setExtraClassLoaders(List<ClassLoader> loaders) {
+    ReflectionFinder.setExtraClassLoaders(loaders);
+  }
+
+  public synchronized void addExtraClassLoader(ClassLoader loader) {
+    ReflectionFinder.addExtraClassLoader(loader);
+  }
+
+  public synchronized void removeExtraClassLoader(ClassLoader loader) {
+    ReflectionFinder.removeExtraClassLoader(loader);
+  }
+
+  public synchronized List<ClassLoader> getExtraClassLoaders() {
+    return ReflectionFinder.getExtraClassLoaders();
   }
 
   public synchronized boolean setGlobal(String name, Object value) throws SaynaaException {

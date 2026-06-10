@@ -30,6 +30,7 @@ import android.widget.TextView;
 import android.widget.Toast;
 import com.android.saynaa.saynaajava.*;
 import com.android.saynaa.saynaajava.JavaModule;
+import com.android.saynaa.saynaajava.reflection.ReflectionFinder;
 import com.android.saynaa.utils.FileUtil;
 import java.io.File;
 import java.io.FileNotFoundException;
@@ -132,7 +133,7 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
       initSaynaa();
       dexLoader = new SaynaaDexLoader(this);
       dexLoader.loadLibs();
-      JavaBridge.setExtraClassLoaders(dexLoader.getClassLoaders());
+      saynaaState.setExtraClassLoaders(dexLoader.getClassLoaders());
       File initFile = new File(saynaaDir == null ? localDir : saynaaDir, "init.sa");
       if (initFile.exists()) {
         int initResult = saynaaState.runFile(initFile.getAbsolutePath());
@@ -362,11 +363,12 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
   }
 
   public SaynaaDexClassLoader loadDex(String path) throws SaynaaException {
+    saynaaState = getOrCreateState();
     if (dexLoader == null) {
       dexLoader = new SaynaaDexLoader(this);
     }
     SaynaaDexClassLoader loader = dexLoader.loadDex(path);
-    JavaBridge.setExtraClassLoaders(dexLoader.getClassLoaders());
+    saynaaState.setExtraClassLoaders(dexLoader.getClassLoaders());
     return loader;
   }
 

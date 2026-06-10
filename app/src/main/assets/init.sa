@@ -10,6 +10,10 @@ import loadlayout
 # Classpath prefixes for fallback resolution
 classpath = ["java.lang."]
 
+function bindClass(name)
+    return java.bindClass(name)
+end
+
 package.searchers.append(function (name)
    # Support wildcard import: "java.util.*"
    if name.endswith(".*") then
@@ -24,17 +28,13 @@ package.searchers.append(function (name)
    end
 
    # Try direct class bind: "java.lang.String"
-   result = pcall(java.bindClass, name)
+   result = pcall(bindClass, name)
    if result[0] then
        return result[1]
    end
 
    return null  # not handled
 end)
-
-function bindClass(name)
-    return java.bindClass(name)
-end
 
 _module._missing = function(name)
     for path in classpath do

@@ -5,6 +5,7 @@ import android.view.View;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
+import com.android.saynaa.saynaajava.reflection.ReflectionFinder;
 
 public final class SaynaaProxyFactory {
   private static final String TAG = "SaynaaProxyFactory";
@@ -52,7 +53,7 @@ public final class SaynaaProxyFactory {
   public static Object createProxy(final Saynaa saynaa, final String interfaceName,
       final String methodName, final String functionName) {
     try {
-      final Class<?> iface = JavaBridge.findClass(interfaceName);
+      final Class<?> iface = ReflectionFinder.findClass(interfaceName);
       if (iface == null) {
         return null;
       }
