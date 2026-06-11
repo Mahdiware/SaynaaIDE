@@ -41,6 +41,7 @@ import java.util.Map;
 
 /**
  * SaynaaActivity is the main entry point for Saynaa scripts. It initializes the
+ * Saynaa runtime, loads the main script, and provides hooks for lifecycle events
  */
 public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.OnReceiveListener, SaynaaContext {
   public static final String ARG = "arg";
