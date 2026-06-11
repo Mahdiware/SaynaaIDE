@@ -37,6 +37,7 @@ import java.io.FileNotFoundException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
+import android.Manifest;
 
 /**
  * SaynaaActivity is the main entry point for Saynaa scripts. It initializes the
@@ -408,6 +409,20 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
     if (ret instanceof Boolean && (Boolean) ret)
       return true;
     return super.onKeyShortcut(keyCode, event);
+  }
+
+  @Override
+  public void onBackPressed() {
+    Object ret = runFunc("onBackPressed");
+    if (ret instanceof Boolean && (Boolean) ret)
+      return;
+    super.onBackPressed();
+  }
+
+  @Override
+  public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+    runFunc("onRequestPermissionsResult", requestCode, permissions, grantResults);
+    super.onRequestPermissionsResult(requestCode, permissions, grantResults);
   }
 
   @Override

@@ -64,5 +64,6 @@ android {
 dependencies {
     implementation fileTree(dir: "libs", include: ["*.jar"])
     implementation project(":sora-editor")
+    implementation 'org.eclipse.jdt:ecj:3.26.0'
 }
 

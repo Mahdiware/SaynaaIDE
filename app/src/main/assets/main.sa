@@ -10,6 +10,29 @@ function toast(msg)
 	Toast.makeText(activity, msg, Toast.LENGTH_SHORT).show()
 end
 
+# requestPermissions(
+#     new String[]{
+#         Manifest.permission.READ_EXTERNAL_STORAGE,
+#         Manifest.permission.WRITE_EXTERNAL_STORAGE
+#     },
+#     1001
+# );
+
+activity.requestPermissions(
+    ["android.permission.READ_EXTERNAL_STORAGE", "android.permission.WRITE_EXTERNAL_STORAGE"],
+    1001
+);
+
+function onRequestPermissionsResult(requestCode, permissions, grantResults)
+  if requestCode == 1001 then
+    if grantResults.length > 0 and grantResults[0] == PackageManager.PERMISSION_GRANTED then
+      toast("Storage permissions granted")
+    else
+      toast("Storage permissions denied")
+    end
+  end
+end
+
 function assert_pcall(result, label)
 	ok = result[0]
 	if ok == null then
