@@ -5,23 +5,19 @@ import "android.os.*"
 import "android.graphics.*"
 import "com.android.saynaa.*"
 import "com.android.saynaa.adapter.*"
+import "android.content.*"
+import "android.net.*"
+import "android.provider.Settings"
 
 function toast(msg)
 	Toast.makeText(activity, msg, Toast.LENGTH_SHORT).show()
 end
 
-# requestPermissions(
-#     new String[]{
-#         Manifest.permission.READ_EXTERNAL_STORAGE,
-#         Manifest.permission.WRITE_EXTERNAL_STORAGE
-#     },
-#     1001
-# );
-
-activity.requestPermissions(
-    ["android.permission.READ_EXTERNAL_STORAGE", "android.permission.WRITE_EXTERNAL_STORAGE"],
-    1001
-);
+if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R and !Environment.isExternalStorageManager())
+  intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION)
+  intent.setData(Uri.parse("package:" + activity.getPackageName()))
+  activity.startActivity(intent)
+end
 
 function onRequestPermissionsResult(requestCode, permissions, grantResults)
   if requestCode == 1001 then
