@@ -1,10 +1,13 @@
 package com.android.saynaa.saynaajava;
 
 import android.util.Log;
+import com.android.saynaa.saynaajava.reflection.FieldHelper;
 import com.android.saynaa.saynaajava.reflection.MethodHelper;
 import com.android.saynaa.saynaajava.reflection.ReflectionFinder;
 import com.android.saynaa.saynaajava.reflection.ReflectionNormalizer;
-import com.android.saynaa.saynaajava.reflection.FieldHelper;
+import java.lang.reflect.Array;
+import java.util.Collection;
+import java.util.Map;
 
 public class JavaModule {
   protected final SaynaaState state;
@@ -20,15 +23,14 @@ public class JavaModule {
       SaynaaModule module = state.newModule(module_name);
       state.moduleSetGlobal(module, "context", state.getContext());
       state.moduleSetGlobal(module, "saynaadir", state.getSaynaaDir());
-      state.moduleSetGlobal(module, "bindClass", JavaBridge.class, "findClass");
+      state.moduleSetGlobal(module, "bindClass", ReflectionFinder.class, "findClass");
       state.moduleSetGlobal(module, "new", this, "newJavaObject");
       state.moduleSetGlobal(module, "getField", FieldHelper.class, "getFieldValue");
       state.moduleSetGlobal(module, "setField", FieldHelper.class, "setFieldValue");
-      state.moduleSetGlobal(module, "tostring", JavaBridge.class, "javaToString");
+      state.moduleSetGlobal(module, "tostring", this, "javaToString");
       state.moduleSetGlobal(module, "call", MethodHelper.class, "call");
       state.moduleSetGlobal(module, "instanceof", this, "instanceOf");
-      state.moduleSetGlobal(module, "callStatic", JavaBridge.class, "callStaticJavaMethod");
-      state.moduleSetGlobal(module, "length", JavaBridge.class, "lengthOf");
+      state.moduleSetGlobal(module, "length", this, "lengthOf");
       state.moduleSetGlobal(module, "testing", this, "testing");
       state.registerModule(module);
     } catch (Exception e) {
@@ -61,6 +63,24 @@ public class JavaModule {
     }
 
     return false;
+  }
+
+  public String javaToString(Object value) {
+    return value == null ? "null" : String.valueOf(value);
+  }
+
+    public double lengthOf(Object value) {
+    if (value == null)
+      return 0;
+    if (value instanceof CharSequence)
+      return ((CharSequence) value).length();
+    if (value instanceof Collection)
+      return ((Collection<?>) value).size();
+    if (value instanceof Map)
+      return ((Map<?, ?>) value).size();
+    if (value.getClass().isArray())
+      return Array.getLength(value);
+    return -1;
   }
 
   public boolean testing(Object... args) {

@@ -37,22 +37,15 @@ typedef struct BridgeState {
   jmethodID mCreateJavaObject;
   jmethodID mCallJavaMethod;
   jmethodID mCallStaticJavaMethod;
-  jmethodID mCallFromSlots;
-  jmethodID mCallStaticFromSlots;
   jmethodID mGetFieldValue;
   jmethodID mSetFieldValue;
   jmethodID mResolveCallbackInterface;
   jmethodID mCreateProxy;
-  jmethodID mCreateProxyFromSlots;
-  jmethodID mResolveInterfaceNameFromSlots;
   jmethodID mCreateNativeCallbackProxy;
   jmethodID mGetDefaultInterfaceMethodName;
   jmethodID mPushToSlot;
   jmethodID mSlotToJava;
   jmethodID mArgsArrayFromSlots;
-  jmethodID mJavaLength;
-  jmethodID mJavaToString;
-  jmethodID mAstableToSlot;
   jmethodID mOnNativeError;
 
   int nextCallbackId;
@@ -160,9 +153,8 @@ extern bool invoke_registered_callback_from_slots(JNIEnv* env, VM* vm, BridgeSta
 extern jobject create_native_callback_proxy(JNIEnv* env, VM* vm, BridgeState* bridge,
     jstring jInterface, const char* methodName, int callbackId);
 extern void release_bridge_handle(VM* vm, Handle** handlePtr);
-extern jobjectArray create_singleton_array(JNIEnv* env, jobject obj, jclass objClass);
 extern bool object_to_slot(JNIEnv* env, VM* vm, BridgeState* bridge, int startSlot,
-    jobjectArray arr, const char* wrapErrorMessage);
+    jobject object, const char* wrapErrorMessage);
 
 extern void java_ref_destructor(void* ptr);
 extern JavaRef* clone_java_ref(JNIEnv* env, JavaRef* src);

@@ -119,8 +119,7 @@ void java_class_getter(VM* vm) {
     }
 
     if (fieldValue != NULL) {
-      object_to_slot(env, vm, bridge, 0, create_singleton_array(env, fieldValue, bridge->JavaObjectClass),
-          "Failed to wrap Java result object.");
+      object_to_slot(env, vm, bridge, 0, fieldValue, "Failed to wrap Java result object.");
       (*env)->DeleteLocalRef(env, fieldValue);
       return;
     }
@@ -318,8 +317,7 @@ void java_class_call(VM* vm) {
               return;
             }
 
-            object_to_slot(env, vm, bridge, 0, create_singleton_array(env, proxy, bridge->JavaObjectClass),
-                "Failed to wrap Java result object.");
+            object_to_slot(env, vm, bridge, 0, proxy, "Failed to wrap Java result object.");
             if (proxy != NULL)
               (*env)->DeleteLocalRef(env, proxy);
 
@@ -350,8 +348,7 @@ void java_class_call(VM* vm) {
             return;
           }
 
-          object_to_slot(env, vm, bridge, 0, create_singleton_array(env, proxy, bridge->JavaObjectClass),
-              "Failed to wrap Java result object.");
+          object_to_slot(env, vm, bridge, 0, proxy, "Failed to wrap Java result object.");
           (*env)->DeleteLocalRef(env, proxy);
           if (inferred != NULL)
             (*env)->ReleaseStringUTFChars(env, (jstring) inferredObj, inferred);
@@ -374,8 +371,7 @@ void java_class_call(VM* vm) {
       if (callbackType == vMAP && callbackId > 0) {
         jobject proxy = create_native_callback_proxy(env, vm, bridge, classNameObj, "*", callbackId);
         if (proxy != NULL) {
-          object_to_slot(env, vm, bridge, 0, create_singleton_array(env, proxy, bridge->JavaObjectClass),
-              "Failed to wrap Java result object.");
+          object_to_slot(env, vm, bridge, 0, proxy, "Failed to wrap Java result object.");
           (*env)->DeleteLocalRef(env, proxy);
           (*env)->DeleteLocalRef(env, classNameObj);
           (*env)->DeleteLocalRef(env, classObj);
@@ -428,8 +424,7 @@ void java_class_call(VM* vm) {
     (*env)->DeleteLocalRef(env, classNameObj);
   (*env)->DeleteLocalRef(env, classObj);
 
-  object_to_slot(env, vm, bridge, 0, create_singleton_array(env, obj, bridge->JavaObjectClass),
-      "Failed to wrap Java result object.");
+  object_to_slot(env, vm, bridge, 0, obj, "Failed to wrap Java result object.");
   if (obj != NULL)
     (*env)->DeleteLocalRef(env, obj);
 }
@@ -466,8 +461,7 @@ void java_object_getter(VM* vm) {
     }
 
     if (fieldValue != NULL) {
-      object_to_slot(env, vm, bridge, 0, create_singleton_array(env, fieldValue, bridge->JavaObjectClass),
-          "Failed to wrap Java result object.");
+      object_to_slot(env, vm, bridge, 0, fieldValue, "Failed to wrap Java result object.");
       (*env)->DeleteLocalRef(env, fieldValue);
       return;
     }
@@ -639,8 +633,7 @@ void java_method_call(VM* vm) {
           jobject proxy = create_native_callback_proxy(env, vm, bridge, (jstring) iface, "*", callbackId);
           (*env)->DeleteLocalRef(env, iface);
           if (proxy != NULL) {
-            object_to_slot(env, vm, bridge, slot, create_singleton_array(env, proxy, bridge->JavaObjectClass),
-                "Failed to wrap Java callback object.");
+            object_to_slot(env, vm, bridge, slot, proxy, "Failed to wrap Java callback object.");
             (*env)->DeleteLocalRef(env, proxy);
           }
         }
@@ -687,8 +680,7 @@ void java_method_call(VM* vm) {
     return;
   }
 
-  object_to_slot(env, vm, bridge, 0, create_singleton_array(env, ret, bridge->JavaObjectClass),
-      "Failed to wrap Java result object.");
+  object_to_slot(env, vm, bridge, 0, ret, "Failed to wrap Java result object.");
   if (ret != NULL)
     (*env)->DeleteLocalRef(env, ret);
 }

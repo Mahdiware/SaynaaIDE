@@ -52,4 +52,65 @@ public class ReflectionNormalizer {
       return value;
     return value;
   }
+
+  public static Object defaultReturnFor(Class<?> returnType) {
+    if (returnType == void.class || returnType == Void.class)
+      return null;
+    if (Number.class.isAssignableFrom(returnType))
+      return 0;
+    if (returnType == boolean.class || returnType == Boolean.class)
+      return false;
+    if (returnType == byte.class || returnType == Byte.class)
+      return (byte) 0;
+    if (returnType == short.class || returnType == Short.class)
+      return (short) 0;
+    if (returnType == int.class || returnType == Integer.class)
+      return 0;
+    if (returnType == long.class || returnType == Long.class)
+      return 0L;
+    if (returnType == float.class || returnType == Float.class)
+      return 0f;
+    if (returnType == double.class || returnType == Double.class)
+      return 0d;
+    if (returnType == char.class || returnType == Character.class)
+      return (char) 0;
+    return null;
+  }
+
+  private static Object defaultArgFor(Class<?> paramType) {
+    if (paramType == null)
+      return null;
+    if (paramType.isPrimitive())
+      return defaultReturnFor(paramType);
+    if (paramType == Boolean.class)
+      return Boolean.FALSE;
+    if (paramType == Character.class)
+      return Character.valueOf((char) 0);
+    if (Number.class.isAssignableFrom(paramType))
+      return Integer.valueOf(0);
+    return null;
+  }
+
+  public static Object[] normalizeCallbackArgs(Method method, Object[] args) {
+    if (method == null)
+      return args;
+    Class<?>[] paramTypes = method.getParameterTypes();
+    if (paramTypes == null || paramTypes.length == 0)
+      return args == null ? new Object[0] : args;
+
+    Object[] out = new Object[paramTypes.length];
+    int copyCount = args == null ? 0 : Math.min(args.length, paramTypes.length);
+    for (int i = 0; i < copyCount; i++) {
+      Object arg = args[i];
+      if (arg == null && paramTypes[i].isPrimitive()) {
+        out[i] = defaultArgFor(paramTypes[i]);
+      } else {
+        out[i] = arg;
+      }
+    }
+    for (int i = copyCount; i < paramTypes.length; i++) {
+      out[i] = defaultArgFor(paramTypes[i]);
+    }
+    return out;
+  }
 }

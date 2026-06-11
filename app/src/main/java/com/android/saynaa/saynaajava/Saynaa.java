@@ -4,6 +4,7 @@ import android.content.Context;
 import android.util.Log;
 import android.view.View;
 import com.android.saynaa.activity.SaynaaActivity;
+import com.android.saynaa.saynaajava.JavaMethodBinding;
 import com.android.saynaa.saynaajava.PCallResult;
 
 public class Saynaa {
@@ -167,7 +168,7 @@ public class Saynaa {
   }
 
   synchronized boolean moduleSetGlobal(SaynaaModule module, String name, Object clazz, String methodName) {
-    return saynaa_moduleSetGlobalMethod(module.getSlot(), name, clazz, methodName);
+    return saynaa_moduleSetGlobal(module.getSlot(), name, new JavaMethodBinding(clazz, methodName));
   }
 
   synchronized boolean registerModule(SaynaaModule module) {
@@ -306,8 +307,6 @@ public class Saynaa {
   private synchronized native void saynaa_newMap(int slot);
   private synchronized native Object saynaa_newModule(String name);
   private synchronized native boolean saynaa_moduleSetGlobal(int moduleSlot, String name, Object value);
-  private synchronized native boolean saynaa_moduleSetGlobalMethod(
-      int moduleSlot, String name, Object clazz, String methodName);
   private synchronized native boolean saynaa_registerModule(int moduleSlot);
   private synchronized native int saynaa_runFile(int moduleSlot, String path);
   private synchronized native boolean saynaa_listInsert(int listSlot, int index, int valueSlot);

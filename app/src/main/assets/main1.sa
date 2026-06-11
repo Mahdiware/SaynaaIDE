@@ -54,10 +54,10 @@ assert(java.length(testList) == 2, 'java.length failed')
 # assert(result[1] == 2, 'java.call size mismatch')
 
 result = pcall(function()
-	return java.callStatic('java.lang.Integer', 'parseInt', '123')
+	return java.call('java.lang.Integer', 'parseInt', '123')
 end)
-assert_pcall(result, 'java.callStatic failed')
-assert(result[1] == 123, 'java.callStatic parseInt mismatch')
+assert_pcall(result, 'java.call failed')
+assert(result[1] == 123, 'java.call parseInt mismatch')
 
 result = pcall(function()
 	pt = java.new('android.graphics.Point', 1, 2)
@@ -77,15 +77,6 @@ assert(result[1] == 7, 'java.getField x mismatch')
 # end)
 # assert_pcall(result, 'Runnable(function) failed')
 # assert(result[1] == true, 'Runnable(function) run mismatch')
-
-# result = pcall(function()
-# 	proxy = java.createProxy('java.lang.Runnable', "script_proxy_ok = true")
-# 	assert(proxy != null, 'java.createProxy script returned null')
-# 	java.call(proxy, 'run')
-# 	return true
-# end)
-# assert_pcall(result, 'java.createProxy script failed')
-# assert(result[1] == true, 'java.createProxy script mismatch')
 
 # result = pcall(function()
 # 	proxy_called = false

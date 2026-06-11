@@ -12,19 +12,7 @@ void release_bridge_handle(VM* vm, Handle** handle) {
   *handle = NULL;
 }
 
-jobjectArray create_singleton_array(JNIEnv* env, jobject obj, jclass objClass) {
-  if (objClass == NULL)
-    return NULL;
-
-  jobjectArray arr = (*env)->NewObjectArray(env, 1, objClass, NULL);
-  if (arr == NULL)
-    return NULL;
-
-  (*env)->SetObjectArrayElement(env, arr, 0, obj);
-  return arr;
-}
-
-bool object_to_slot(JNIEnv* env, VM* vm, BridgeState* bridge, int startSlot, jobjectArray arr,
+bool object_to_slot(JNIEnv* env, VM* vm, BridgeState* bridge, int startSlot, jobject object,
     const char* wrapErrorMessage) {
   if (env == NULL || vm == NULL || bridge == NULL) {
     SetRuntimeError(vm, "Invalid Java bridge state.");
@@ -43,7 +31,7 @@ bool object_to_slot(JNIEnv* env, VM* vm, BridgeState* bridge, int startSlot, job
   }
 
   jboolean ok = (*env)->CallStaticBooleanMethod(
-      env, bridge->javaBridgeClass, bridge->mPushToSlot, saynaaObj, (jint) startSlot, arr);
+      env, bridge->javaBridgeClass, bridge->mPushToSlot, saynaaObj, (jint) startSlot, object);
 
   (*env)->DeleteLocalRef(env, saynaaObj);
 

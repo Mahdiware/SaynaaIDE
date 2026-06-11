@@ -1,5 +1,6 @@
 package com.android.saynaa.activity;
 
+import android.Manifest;
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.content.Context;
@@ -37,7 +38,6 @@ import java.io.FileNotFoundException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
-import android.Manifest;
 
 /**
  * SaynaaActivity is the main entry point for Saynaa scripts. It initializes the
@@ -324,8 +324,7 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
   private void initSaynaa() {
     saynaaState = getOrCreateState();
     saynaa = saynaaState.getSaynaa();
-    JavaModule javamodule = new JavaModule(saynaaState);
-    javamodule.create();
+    new JavaModule(saynaaState).create();
     ArrayList<Object> javaList = new ArrayList<>();
     javaList.add("alpha");
     javaList.add(123);
@@ -338,12 +337,6 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
       saynaaState.setGlobalValue("java_pushed_list_saynaa", javaList, true);
       saynaaState.setGlobalValue("java_pushed_map_saynaa", javaMap, true);
       saynaaState.setGlobal("activity", this);
-
-      SaynaaModule module = saynaaState.newModule("mahdiware");
-      // saynaaState.moduleSetGlobal(module, "version", "1.0");
-      saynaaState.moduleSetGlobal(module, "printf", SaynaaActivity.class, "printf");
-      saynaaState.moduleSetGlobal(module, "testing", this, "testing");
-      saynaaState.registerModule(module);
     } catch (SaynaaException e) {
       sendMsg("initSaynaa error: " + e.getMessage());
     }

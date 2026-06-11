@@ -223,7 +223,7 @@ bool invoke_registered_callback(JNIEnv* env, VM* vm, BridgeState* bridge, Callba
   for (int i = 0; i < argc; i++) {
     jobject arg = (*env)->GetObjectArrayElement(env, argsArray, (jsize) i);
     bool ok = object_to_slot(env, vm, bridge, 2 + i,
-        create_singleton_array(env, arg, bridge->JavaObjectClass), "Failed to wrap Java argument object.");
+        arg, "Failed to wrap Java argument object.");
     if (arg != NULL)
       (*env)->DeleteLocalRef(env, arg);
     if (!ok)

@@ -80,8 +80,8 @@ assert_pcall(result, 'java.getField/setField failed')
 assert(result[1] == 7, 'java.getField x mismatch')
 
 
-# testing callStatic
-result = java.callStatic('java.lang.Math','abs',-10)
+# testing call
+result = java.call('java.lang.Math','abs',-10)
 assert(result == 10, 'Math.abs failed')
 
 # testing call
