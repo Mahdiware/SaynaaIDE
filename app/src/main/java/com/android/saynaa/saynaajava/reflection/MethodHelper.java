@@ -31,8 +31,11 @@ public class MethodHelper {
       return null;
     }
     try {
-      Object[] coercedArgs = JavaBridge.coerceArgs(method.getParameterTypes(), normalized);
-      return method.invoke(null, coercedArgs);
+      Object[] coercedArgs = method.isVarArgs() ? JavaBridge.buildVarArgs(method.getParameterTypes(), normalized)
+                              : JavaBridge.coerceArgs(method.getParameterTypes(), normalized);
+      Object result = method.invoke(null, coercedArgs);
+      Log.d(TAG, "Method call successful: " + method + ", result: " + result);
+      return result;
     } catch (IllegalAccessException | InvocationTargetException | IllegalArgumentException e) {
       Log.e(TAG, "Failed to invoke static method: " + method, e);
       return null;
@@ -52,33 +55,21 @@ public class MethodHelper {
       return null;
     }
     try {
-      Object[] coercedArgs = JavaBridge.coerceArgs(method.getParameterTypes(), normalized);
-      return method.invoke(instance, coercedArgs);
+      Object[] coercedArgs = method.isVarArgs() ? JavaBridge.buildVarArgs(method.getParameterTypes(), normalized)
+                              : JavaBridge.coerceArgs(method.getParameterTypes(), normalized);
+      Object result = method.invoke(instance, coercedArgs);
+      Log.d(TAG, "Method call successful: " + method + ", result: " + result);
+      return result;
+
     } catch (IllegalAccessException | InvocationTargetException | IllegalArgumentException e) {
       Log.e(TAG, "Failed to invoke instance method: " + method, e);
       return null;
     }
   }
 
-  private static Object callJavaMethod(String className, String methodName, Object... args) {
-    Class<?> cls = ReflectionFinder.findClass(className);
-    if (cls == null) {
-      Log.e(TAG, "Failed to find class: " + className);
-      return null;
-    }
-    return callJavaMethod(cls, methodName, args);
-  }
-
-  // Target                   Meaning           Dispatch
-  // String (class name)	    static call	      Class.method
-  // Class<?>	                static call	      Class.method
-  // Object instance	        instance call	    obj.method
   public static Object call(Object target, String methodName, Object... args) {
     if (target instanceof Class) {
       return callJavaMethod((Class<?>) target, methodName, args);
-    }
-    if (target instanceof String) {
-      return callJavaMethod((String) target, methodName, args);
     }
     if (target != null) {
       return callJavaMethod(target, methodName, args);

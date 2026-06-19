@@ -54,7 +54,7 @@ assert(java.length(testList) == 2, 'java.length failed')
 # assert(result[1] == 2, 'java.call size mismatch')
 
 result = pcall(function()
-	return java.call('java.lang.Integer', 'parseInt', '123')
+	return java.call(java.bindClass('java.lang.Integer'), 'parseInt', '123')
 end)
 assert_pcall(result, 'java.call failed')
 assert(result[1] == 123, 'java.call parseInt mismatch')
@@ -107,30 +107,6 @@ assert(result[1] == 7, 'java.getField x mismatch')
 # end)
 # assert_pcall(result, 'java.create(interface) failed')
 # assert(result[1] == true, 'java.create interface run mismatch')
-
-if java_pushed_number != null then
-	assert(java_pushed_number != null, 'java_pushed_number missing')
-end
-if java_pushed_list_obj != null then
-	java_pushed_list_obj.add('c')
-	assert(java.length(java_pushed_list_obj) >= 1, 'java_pushed_list_obj invalid')
-end
-if java_pushed_list_saynaa != null then
-	result = pcall(function()
-		java_pushed_list_saynaa.append('x')
-	end)
-	assert_pcall(result, 'java_pushed_list_saynaa append failed')
-	assert(java_pushed_list_saynaa.find('x') != -1, 'java_pushed_list_saynaa append missing')
-end
-if java_pushed_map_saynaa != null then
-	result = pcall(function()
-		java_pushed_map_saynaa.setattr('k', 'v')
-	end)
-	assert_pcall(result, 'java_pushed_map_saynaa put failed')
-  assert(java_pushed_map_saynaa.get('k') == 'v', 'java_pushed_map_saynaa put mismatch')
-end
-
-
 
 root = LinearLayout(activity)
 assert(root != null, 'LinearLayout construction failed')
@@ -235,7 +211,7 @@ textWatcher_cb = {
 	beforeTextChanged: function(s, start, count, after)
 	end,
 	onTextChanged: function(s, start, before, count)
-		status.setText('Typing: ' + s)
+		status.setText("Typing: $s")
 	end,
 	afterTextChanged: function(s)
 	end

@@ -378,6 +378,8 @@ JNIEXPORT jboolean JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1set
   if (vm == NULL || name == NULL)
     return JNI_FALSE;
 
+  LOGI("saynaa_setGlobal called with name=%s", (*env)->GetStringUTFChars(env, name, NULL));
+
   BridgeState* bridge = bridge_from_vm(vm);
   const char* key = (*env)->GetStringUTFChars(env, name, NULL);
   if (key == NULL)
@@ -589,6 +591,10 @@ JNIEXPORT jboolean JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1mod
   if (vm == NULL || name == NULL)
     return JNI_FALSE;
 
+  // print name
+  LOGI("saynaa_moduleSetGlobal called with moduleSlot=%d, name=%s", moduleSlot,
+      (*env)->GetStringUTFChars(env, name, NULL));
+
   BridgeState* bridge = bridge_from_vm(vm);
   const char* key = (*env)->GetStringUTFChars(env, name, NULL);
   if (key == NULL)
@@ -633,6 +639,23 @@ JNIEXPORT jboolean JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1mod
   return JNI_TRUE;
 }
 
+// saynaa_addSearchPath
+JNIEXPORT jboolean JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1addSearchPath(
+    JNIEnv* env, jobject thiz, jstring path) {
+  VM* vm = vm_from_saynaa(env, thiz);
+  if (vm == NULL || path == NULL)
+    return JNI_FALSE;
+
+  const char* pathChars = (*env)->GetStringUTFChars(env, path, NULL);
+  if (pathChars == NULL)
+    return JNI_FALSE;
+
+  AddSearchPath(vm, pathChars);
+  (*env)->ReleaseStringUTFChars(env, path, pathChars);
+
+  return JNI_TRUE;
+}
+
 JNIEXPORT jint JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1runFile(
     JNIEnv* env, jobject thiz, jint moduleSlot, jstring path) {
   VM* vm = vm_from_saynaa(env, thiz);
@@ -656,10 +679,8 @@ JNIEXPORT jint JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1runFile
     (*env)->ReleaseStringUTFChars(env, path, pathChars);
     return JNI_FALSE;
   }
-
   Module* module = (Module*) AS_OBJ(handle->value);
   jint result = (jint) RunFileWithModule(vm, module, pathChars);
-
   (*env)->ReleaseStringUTFChars(env, path, pathChars);
   return result;
 }
@@ -677,11 +698,24 @@ JNIEXPORT jboolean JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1lis
 JNIEXPORT jboolean JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1mapSet(
     JNIEnv* env, jobject thiz, jint mapSlot, jint keySlot, jint valueSlot) {
   VM* vm = vm_from_saynaa(env, thiz);
-  if (vm == NULL)
+  if (vm == NULL) {
     return JNI_FALSE;
-  reserveSlots(vm, mapSlot + 1);
-  reserveSlots(vm, keySlot + 1);
-  reserveSlots(vm, valueSlot + 1);
+  }
+
+  // Validate slots
+  if (mapSlot < 0 || keySlot < 0 || valueSlot < 0) {
+    return JNI_FALSE;
+  }
+
+  // Compute required size ONCE
+  int maxSlot = mapSlot;
+  if (keySlot > maxSlot)
+    maxSlot = keySlot;
+  if (valueSlot > maxSlot)
+    maxSlot = valueSlot;
+
+  reserveSlots(vm, maxSlot + 1);
+
   return MapSet(vm, mapSlot, keySlot, valueSlot) ? JNI_TRUE : JNI_FALSE;
 }
 

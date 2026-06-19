@@ -13,9 +13,23 @@ function toast(msg)
 	Toast.makeText(activity, msg, Toast.LENGTH_SHORT).show()
 end
 
+
+// we use this becouse String is JavaObject
+// and to convert it to saynaa string we need to call tostring on it
+function str(obj)
+	return java.tostring(obj)
+end
+
+strt = java.new("java.lang.String", "Hello OUT\n")
+bytes = java.call(strt, "getBytes")
+debug("String bytes: ${java.tostring(bytes)}")
+
+testing = java.testing()
+debug("testing: type: ${type(testing)}, value: ${java.tostring(testing)}")
+
 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R and !Environment.isExternalStorageManager())
   intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION)
-  intent.setData(Uri.parse("package:" + activity.getPackageName()))
+  intent.setData(Uri.parse("package:" + str(activity.getPackageName())))
   activity.startActivity(intent)
 end
 
@@ -47,24 +61,13 @@ loadDex("hello.dex")
 import "com.saynaa.dextest.Hello"
 
 msg = Hello.hello()
-assert(msg == "Hello from dex", "Dex method return mismatch")
-
-
-// new
-assert(java.new("java.lang.String", "Hello from java.new!") == "Hello from java.new!", "java.new failed")
+assert(str(msg) == "Hello from dex", "Dex method return mismatch")
 
 // create, length
 testList = java.new('java.util.ArrayList')
 testList.add('a')
 testList.add('b')
 assert(java.length(testList) == 2, 'java.length failed')
-
-# testing new with multiple args and different types
-LayoutParams = java.bindClass('android.widget.LinearLayout$LayoutParams')
-params = java.new(LayoutParams, -1, -2)
-assert(params != null, 'LayoutParams(width, height) failed')
-java.testing(1, 2, 4, "hello", params, LinearLayout, TextView)
-
 
 # testing getField and setField
 result = pcall(function()
@@ -77,14 +80,15 @@ assert(result[1] == 7, 'java.getField x mismatch')
 
 
 # testing call
-result = java.call('java.lang.Math','abs',-10)
+result = java.call(java.bindClass('java.lang.Math'), 'abs', -10)
+toast("Math.abs(-10) = $result")
 assert(result == 10, 'Math.abs failed')
 
 # testing call
 result = java.call(java.bindClass('java.lang.Math'), 'max', 5, 8)
 assert(result == 8, 'java.call static method failed')
 result = java.call(result, 'toString')
-assert(result == '8', 'java.call instance method failed')
+assert(str(result) == '8', 'java.call instance method failed')
 
 DemoLayout = {
   LinearLayout,

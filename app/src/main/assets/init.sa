@@ -1,8 +1,6 @@
 import java
 import package
-
 package.path.append(java.saynaadir)
-
 import loadlayout
 
 # Classpath prefixes for fallback resolution

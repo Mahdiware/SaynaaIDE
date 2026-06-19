@@ -5,6 +5,7 @@ import android.util.Log;
 import android.view.View;
 import com.android.saynaa.activity.SaynaaActivity;
 import com.android.saynaa.saynaajava.JavaMethodBinding;
+import com.android.saynaa.saynaajava.datatype.*;
 import com.android.saynaa.saynaajava.PCallResult;
 
 public class Saynaa {
@@ -110,19 +111,12 @@ public class Saynaa {
     return saynaa_setGlobal(name, value);
   }
 
-  public synchronized boolean setGlobalValue(String name, Object value, boolean asSaynaa) {
-    if (isClosed() || name == null)
-      return false;
-    int slot = 0;
-    boolean ok = asSaynaa ? JavaBridge.pushToSlotAsSaynaa(this, slot, value)
-                          : JavaBridge.pushToSlot(this, slot, value);
-    if (!ok)
-      return false;
-    return saynaa_setGlobalFromSlot(name, slot);
-  }
-
   synchronized void reserveSlots(int count) {
     saynaa_reserveSlots(count);
+  }
+
+  synchronized void addSearchPath(String path) {
+    saynaa_addSearchPath(path);
   }
 
   synchronized void setSlotNull(int slot) {
@@ -303,6 +297,7 @@ public class Saynaa {
   private synchronized native void saynaa_setSlotNumber(int slot, double value);
   private synchronized native void saynaa_setSlotString(int slot, String value);
   private synchronized native void saynaa_setSlotHandle(int slot, int handleId);
+  private synchronized native void saynaa_addSearchPath(String path);
   private synchronized native void saynaa_newList(int slot);
   private synchronized native void saynaa_newMap(int slot);
   private synchronized native Object saynaa_newModule(String name);

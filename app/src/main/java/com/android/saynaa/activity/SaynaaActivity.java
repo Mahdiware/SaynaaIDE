@@ -136,6 +136,7 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
       dexLoader = new SaynaaDexLoader(this);
       dexLoader.loadLibs();
       saynaaState.setExtraClassLoaders(dexLoader.getClassLoaders());
+      //saynaaState.addSearchPath(saynaaState.getSaynaaDir() + "/");
       File initFile = new File(saynaaDir == null ? localDir : saynaaDir, "init.sa");
       if (initFile.exists()) {
         int initResult = saynaaState.runFile(initFile.getAbsolutePath());
@@ -333,10 +334,6 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
     javaMap.put("flag", true);
     javaMap.put("count", 7);
     try {
-      saynaaState.setGlobalValue("java_pushed_number", 42, false);
-      saynaaState.setGlobalValue("java_pushed_list_obj", javaList, false);
-      saynaaState.setGlobalValue("java_pushed_list_saynaa", javaList, true);
-      saynaaState.setGlobalValue("java_pushed_map_saynaa", javaMap, true);
       saynaaState.setGlobal("activity", this);
     } catch (SaynaaException e) {
       sendMsg("initSaynaa error: " + e.getMessage());

@@ -3,6 +3,7 @@ package com.android.saynaa.saynaajava;
 import android.content.Context;
 import android.util.Log;
 import android.view.Menu;
+import com.android.saynaa.saynaajava.datatype.*;
 import com.android.saynaa.saynaajava.reflection.FieldHelper;
 import com.android.saynaa.saynaajava.reflection.ReflectionFinder;
 import com.android.saynaa.saynaajava.reflection.ReflectionKeys.ConstructorKey;
@@ -154,68 +155,6 @@ public class JavaBridge {
 
   public static Object[] argsFromSlots(SaynaaState state, int startSlot, int argc) {
     return argsFromSlots(unwrapState(state), startSlot, argc);
-  }
-
-  // TODO: add this into java module
-  public static boolean asListToSlot(Saynaa saynaa, int listSlot, Object value) {
-    if (saynaa == null || saynaa.isClosed())
-      return false;
-
-    saynaa.newList(listSlot);
-    if (value == null)
-      return true;
-
-    int elemSlot = listSlot + 1;
-    saynaa.reserveSlots(elemSlot + 1);
-    IdentityHashMap<Object, Boolean> visiting = new IdentityHashMap<>();
-
-    if (value.getClass().isArray()) {
-      int len = Array.getLength(value);
-      for (int i = 0; i < len; i++) {
-        Object item = Array.get(value, i);
-        if (!pushToSlotAsSaynaaInternal(saynaa, elemSlot, item, visiting, 0))
-          return false;
-        if (!saynaa.listInsert(listSlot, -1, elemSlot))
-          return false;
-      }
-      return true;
-    }
-
-    if (value instanceof Iterable) {
-      for (Object item : (Iterable<?>) value) {
-        if (!pushToSlotAsSaynaaInternal(saynaa, elemSlot, item, visiting, 0))
-          return false;
-        if (!saynaa.listInsert(listSlot, -1, elemSlot))
-          return false;
-      }
-      return true;
-    }
-
-    if (value instanceof Iterator) {
-      Iterator<?> it = (Iterator<?>) value;
-      while (it.hasNext()) {
-        Object item = it.next();
-        if (!pushToSlotAsSaynaaInternal(saynaa, elemSlot, item, visiting, 0))
-          return false;
-        if (!saynaa.listInsert(listSlot, -1, elemSlot))
-          return false;
-      }
-      return true;
-    }
-
-    if (value instanceof Enumeration) {
-      Enumeration<?> en = (Enumeration<?>) value;
-      while (en.hasMoreElements()) {
-        Object item = en.nextElement();
-        if (!pushToSlotAsSaynaaInternal(saynaa, elemSlot, item, visiting, 0))
-          return false;
-        if (!saynaa.listInsert(listSlot, -1, elemSlot))
-          return false;
-      }
-      return true;
-    }
-
-    return false;
   }
 
   // --- Check if arg type matches parameter type ---
@@ -395,7 +334,7 @@ public class JavaBridge {
     return null;
   }
 
-  private static Object[] buildVarArgs(Class<?>[] paramTypes, Object[] normalized) {
+  public static Object[] buildVarArgs(Class<?>[] paramTypes, Object[] normalized) {
     int fixedCount = paramTypes.length - 1;
     Class<?> varType = paramTypes[fixedCount].getComponentType();
     int varCount = Math.max(0, normalized.length - fixedCount);
@@ -624,7 +563,14 @@ public class JavaBridge {
       return pushNumberToSlot(saynaa, slot, (Number) normalized);
     }
 
-    if (normalized instanceof CharSequence) {
+    // if (normalized instanceof CharSequence) {
+    //   Log.d(TAG, "type of class: " + normalized.getClass().getName());
+    //   saynaa.setSlotString(slot, normalized.toString());
+    //   return true;
+    // }
+
+    if (normalized instanceof SaynaaString) {
+      Log.d(TAG, "Pushing SaynaaString to slot: " + normalized.toString());
       saynaa.setSlotString(slot, normalized.toString());
       return true;
     }
@@ -666,110 +612,8 @@ public class JavaBridge {
     return pushToSlot(unwrapState(state), slot, value);
   }
 
-  public static boolean pushToSlotAsSaynaa(Saynaa saynaa, int slot, Object value) {
-    return pushToSlotAsSaynaaInternal(saynaa, slot, value, null, 0);
-  }
-
   private static IdentityHashMap<Object, Boolean> ensureVisitingMap(IdentityHashMap<Object, Boolean> visiting) {
     return visiting != null ? visiting : new IdentityHashMap<Object, Boolean>();
-  }
-
-  private static boolean pushToSlotAsSaynaaInternal(
-      Saynaa saynaa, int slot, Object value, IdentityHashMap<Object, Boolean> visiting, int depth) {
-    if (saynaa == null || saynaa.isClosed())
-      return false;
-
-    Object normalized = ReflectionNormalizer.normalizeReturn(value);
-    saynaa.reserveSlots(slot + 3);
-
-    if (pushScalarToSlot(saynaa, slot, normalized))
-      return true;
-
-    if (depth >= MAX_BRIDGE_RECURSION_DEPTH) {
-      Log.w(TAG, "pushToSlotAsSaynaa depth limit reached; wrapping Java object.");
-      return saynaa.bindJavaObject(slot, normalized);
-    }
-
-    if (normalized instanceof Map) {
-      visiting = ensureVisitingMap(visiting);
-      if (visiting.containsKey(normalized)) {
-        Log.w(TAG, "pushToSlotAsSaynaa cycle detected in Map; wrapping Java object.");
-        return saynaa.bindJavaObject(slot, normalized);
-      }
-
-      visiting.put(normalized, Boolean.TRUE);
-      try {
-        saynaa.newMap(slot);
-        int keySlot = slot + 1;
-        int valueSlot = slot + 2;
-        for (Map.Entry<?, ?> entry : ((Map<?, ?>) normalized).entrySet()) {
-          if (!pushToSlotAsSaynaaInternal(saynaa, keySlot, entry.getKey(), visiting, depth + 1))
-            return false;
-          if (!pushToSlotAsSaynaaInternal(saynaa, valueSlot, entry.getValue(), visiting, depth + 1))
-            return false;
-          if (!saynaa.mapSet(slot, keySlot, valueSlot))
-            return false;
-        }
-        return true;
-      } finally {
-        visiting.remove(normalized);
-      }
-    }
-
-    if (normalized instanceof Iterable) {
-      visiting = ensureVisitingMap(visiting);
-      if (visiting.containsKey(normalized)) {
-        Log.w(TAG, "pushToSlotAsSaynaa cycle detected in Iterable; wrapping Java object.");
-        return saynaa.bindJavaObject(slot, normalized);
-      }
-
-      visiting.put(normalized, Boolean.TRUE);
-      try {
-        saynaa.newList(slot);
-        int elemSlot = slot + 1;
-        for (Object elem : (Iterable<?>) normalized) {
-          if (!pushToSlotAsSaynaaInternal(saynaa, elemSlot, elem, visiting, depth + 1))
-            return false;
-          if (!saynaa.listInsert(slot, -1, elemSlot))
-            return false;
-        }
-        return true;
-      } finally {
-        visiting.remove(normalized);
-      }
-    }
-
-    Class<?> cls = normalized.getClass();
-    if (cls.isArray()) {
-      visiting = ensureVisitingMap(visiting);
-      if (visiting.containsKey(normalized)) {
-        Log.w(TAG, "pushToSlotAsSaynaa cycle detected in array; wrapping Java object.");
-        return saynaa.bindJavaObject(slot, normalized);
-      }
-
-      visiting.put(normalized, Boolean.TRUE);
-      try {
-        saynaa.newList(slot);
-        int elemSlot = slot + 1;
-        int len = Array.getLength(normalized);
-        for (int i = 0; i < len; i++) {
-          Object elem = Array.get(normalized, i);
-          if (!pushToSlotAsSaynaaInternal(saynaa, elemSlot, elem, visiting, depth + 1))
-            return false;
-          if (!saynaa.listInsert(slot, -1, elemSlot))
-            return false;
-        }
-        return true;
-      } finally {
-        visiting.remove(normalized);
-      }
-    }
-
-    return saynaa.bindJavaObject(slot, normalized);
-  }
-
-  public static boolean pushToSlotAsSaynaa(SaynaaState state, int slot, Object value) {
-    return pushToSlotAsSaynaa(unwrapState(state), slot, value);
   }
 
   public static Object createProxy(Saynaa saynaa, String interfaceName, String methodName, String script) {

@@ -69,10 +69,42 @@ public class ReflectionFinder {
       }
     }
 
-    if (Log.isLoggable(TAG, Log.DEBUG)) {
-      Log.d(TAG, "Class not found: " + className);
+    switch (className) {
+    case "String":
+      cls = String.class;
+      break;
+    case "Integer":
+      cls = Integer.class;
+      break;
+    case "Long":
+      cls = Long.class;
+      break;
+    case "Short":
+      cls = Short.class;
+      break;
+    case "Byte":
+      cls = Byte.class;
+      break;
+    case "Character":
+      cls = Character.class;
+      break;
+    case "Boolean":
+      cls = Boolean.class;
+      break;
+    case "Float":
+      cls = Float.class;
+      break;
+    case "Double":
+      cls = Double.class;
+      break;
+    default:
+      if (Log.isLoggable(TAG, Log.DEBUG)) {
+        Log.d(TAG, "Class not found: " + className);
+      }
+      return null;
     }
-    return null;
+    classCache.put(className, cls);
+    return cls;
   }
 
   // --- Find matching method ---

@@ -2,6 +2,7 @@ package com.android.saynaa.saynaajava;
 
 import android.content.Context;
 import android.view.View;
+import com.android.saynaa.saynaajava.datatype.*;
 import com.android.saynaa.saynaajava.reflection.ReflectionFinder;
 import java.util.List;
 
@@ -149,18 +150,18 @@ public class SaynaaState {
     return ReflectionFinder.getExtraClassLoaders();
   }
 
+  public synchronized void addSearchPath(String path) throws SaynaaException {
+    if (isClosed()) {
+      throw new SaynaaException("SaynaaState is closed.");
+    }
+    saynaa.addSearchPath(path);
+  }
+
   public synchronized boolean setGlobal(String name, Object value) throws SaynaaException {
     if (isClosed()) {
       throw new SaynaaException("SaynaaState is closed.");
     }
     return saynaa.setGlobal(name, value);
-  }
-
-  public synchronized boolean setGlobalValue(String name, Object value, boolean asSaynaa) throws SaynaaException {
-    if (isClosed()) {
-      throw new SaynaaException("SaynaaState is closed.");
-    }
-    return saynaa.setGlobalValue(name, value, asSaynaa);
   }
 
   public synchronized void reserveSlots(int count) throws SaynaaException {

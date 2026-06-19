@@ -1,4 +1,6 @@
-package com.android.saynaa.saynaajava;
+package com.android.saynaa.saynaajava.datatype;
+
+import com.android.saynaa.saynaajava.*;
 
 public class SaynaaObject {
   // private final Object value;

@@ -1,13 +1,13 @@
 package com.android.saynaa.saynaajava;
 
 import android.util.Log;
-import com.android.saynaa.saynaajava.reflection.FieldHelper;
-import com.android.saynaa.saynaajava.reflection.MethodHelper;
-import com.android.saynaa.saynaajava.reflection.ReflectionFinder;
-import com.android.saynaa.saynaajava.reflection.ReflectionNormalizer;
+import com.android.saynaa.saynaajava.datatype.*;
+import com.android.saynaa.saynaajava.reflection.*;
 import java.lang.reflect.Array;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.Map;
+import java.util.function.Function;
 
 public class JavaModule {
   protected final SaynaaState state;
@@ -22,7 +22,7 @@ public class JavaModule {
     try {
       SaynaaModule module = state.newModule(module_name);
       state.moduleSetGlobal(module, "context", state.getContext());
-      state.moduleSetGlobal(module, "saynaadir", state.getSaynaaDir());
+      state.moduleSetGlobal(module, "saynaadir", getsaynaaDir());
       state.moduleSetGlobal(module, "bindClass", ReflectionFinder.class, "findClass");
       state.moduleSetGlobal(module, "new", this, "newJavaObject");
       state.moduleSetGlobal(module, "getField", FieldHelper.class, "getFieldValue");
@@ -37,6 +37,10 @@ public class JavaModule {
       return false;
     }
     return true;
+  }
+
+  public Object getsaynaaDir() {
+    return new SaynaaString(state.getSaynaaDir());
   }
 
   public Object newJavaObject(Object classOrName, Object... args) {
@@ -65,11 +69,41 @@ public class JavaModule {
     return false;
   }
 
-  public String javaToString(Object value) {
-    return value == null ? "null" : String.valueOf(value);
+  private final Map<Class<?>, Function<Object, String>> stringConverters = new HashMap<>();
+
+  {
+    stringConverters.put(byte[].class, obj -> new String((byte[]) obj));
+    stringConverters.put(char[].class, obj -> new String((char[]) obj));
+    stringConverters.put(int[].class, obj -> {
+      int[] arr = (int[]) obj;
+      StringBuilder sb = new StringBuilder();
+      sb.append("[");
+      for (int i = 0; i < arr.length; i++) {
+        sb.append(arr[i]);
+        if (i < arr.length - 1) {
+          sb.append(", ");
+        }
+      }
+      sb.append("]");
+      return sb.toString();
+    });
   }
 
-    public double lengthOf(Object value) {
+  public SaynaaString javaToString(Object value) {
+    if (value == null) {
+      return new SaynaaString("null");
+    }
+
+    Function<Object, String> converter = stringConverters.get(value.getClass());
+
+    if (converter != null) {
+      return new SaynaaString(converter.apply(value));
+    }
+
+    return new SaynaaString(String.valueOf(value));
+  }
+
+  public double lengthOf(Object value) {
     if (value == null)
       return 0;
     if (value instanceof CharSequence)
@@ -83,10 +117,7 @@ public class JavaModule {
     return -1;
   }
 
-  public boolean testing(Object... args) {
-    for (Object arg : args) {
-      Log.d(TAG, "testing arg: " + arg);
-    }
-    return true;
+  public byte[] testing() {
+    return new byte[] {'H', 'e', 'l', 'l', 'o'};
   }
 }
