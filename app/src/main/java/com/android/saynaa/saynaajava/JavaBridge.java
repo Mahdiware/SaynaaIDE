@@ -563,14 +563,7 @@ public class JavaBridge {
       return pushNumberToSlot(saynaa, slot, (Number) normalized);
     }
 
-    // if (normalized instanceof CharSequence) {
-    //   Log.d(TAG, "type of class: " + normalized.getClass().getName());
-    //   saynaa.setSlotString(slot, normalized.toString());
-    //   return true;
-    // }
-
-    if (normalized instanceof SaynaaString) {
-      Log.d(TAG, "Pushing SaynaaString to slot: " + normalized.toString());
+    if (normalized instanceof String) {
       saynaa.setSlotString(slot, normalized.toString());
       return true;
     }

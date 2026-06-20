@@ -11,7 +11,6 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 
 // Target                   Meaning           Dispatch
-// String (class name)	    static call	      Class.method
 // Class<?>	                static call	      Class.method
 // Object instance	        instance call	    obj.method
 
@@ -34,7 +33,6 @@ public class MethodHelper {
       Object[] coercedArgs = method.isVarArgs() ? JavaBridge.buildVarArgs(method.getParameterTypes(), normalized)
                               : JavaBridge.coerceArgs(method.getParameterTypes(), normalized);
       Object result = method.invoke(null, coercedArgs);
-      Log.d(TAG, "Method call successful: " + method + ", result: " + result);
       return result;
     } catch (IllegalAccessException | InvocationTargetException | IllegalArgumentException e) {
       Log.e(TAG, "Failed to invoke static method: " + method, e);

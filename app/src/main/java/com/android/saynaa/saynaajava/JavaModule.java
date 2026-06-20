@@ -8,6 +8,7 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.function.Function;
+import com.android.saynaa.saynaajava.tests.EcjTest;
 
 public class JavaModule {
   protected final SaynaaState state;
@@ -22,7 +23,8 @@ public class JavaModule {
     try {
       SaynaaModule module = state.newModule(module_name);
       state.moduleSetGlobal(module, "context", state.getContext());
-      state.moduleSetGlobal(module, "saynaadir", getsaynaaDir());
+      state.moduleSetGlobal(module, "EjsTest", this, "EcjCompile");
+      state.moduleSetGlobal(module, "saynaadir", state.getSaynaaDir());
       state.moduleSetGlobal(module, "bindClass", ReflectionFinder.class, "findClass");
       state.moduleSetGlobal(module, "new", this, "newJavaObject");
       state.moduleSetGlobal(module, "getField", FieldHelper.class, "getFieldValue");
@@ -39,8 +41,8 @@ public class JavaModule {
     return true;
   }
 
-  public Object getsaynaaDir() {
-    return new SaynaaString(state.getSaynaaDir());
+  public void EcjCompile() {
+    EcjTest.compileHello(state.getSaynaaDir());
   }
 
   public Object newJavaObject(Object classOrName, Object... args) {
@@ -89,18 +91,18 @@ public class JavaModule {
     });
   }
 
-  public SaynaaString javaToString(Object value) {
+  public String javaToString(Object value) {
     if (value == null) {
-      return new SaynaaString("null");
+      return new String("null");
     }
 
     Function<Object, String> converter = stringConverters.get(value.getClass());
 
     if (converter != null) {
-      return new SaynaaString(converter.apply(value));
+      return new String(converter.apply(value));
     }
 
-    return new SaynaaString(String.valueOf(value));
+    return new String(String.valueOf(value));
   }
 
   public double lengthOf(Object value) {
