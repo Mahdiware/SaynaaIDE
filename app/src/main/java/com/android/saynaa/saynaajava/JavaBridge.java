@@ -268,7 +268,6 @@ public class JavaBridge {
 
   // --- Create Java object dynamically ---
   public static Object createJavaObject(String fullClassName, Object... args) {
-    //Log.d(TAG, "Creating Java object: " + fullClassName);
     logArgsDebug("createJavaObject", args);
     Class<?> cls = ReflectionFinder.findClass(fullClassName);
     if (cls == null) {

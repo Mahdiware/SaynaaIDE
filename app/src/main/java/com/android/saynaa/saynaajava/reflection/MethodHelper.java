@@ -56,7 +56,6 @@ public class MethodHelper {
       Object[] coercedArgs = method.isVarArgs() ? JavaBridge.buildVarArgs(method.getParameterTypes(), normalized)
                               : JavaBridge.coerceArgs(method.getParameterTypes(), normalized);
       Object result = method.invoke(instance, coercedArgs);
-      Log.d(TAG, "Method call successful: " + method + ", result: " + result);
       return result;
 
     } catch (IllegalAccessException | InvocationTargetException | IllegalArgumentException e) {

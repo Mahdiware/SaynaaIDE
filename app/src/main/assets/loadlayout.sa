@@ -818,14 +818,13 @@ function apply_attrs(view, node, data)
     view.setAdapter(adapter)
   end
 
-  // here
-  debug("apply_attrs: view=${view}, node=${node}, data=${data}")
+  # debug("apply_attrs: view=${view}, node=${node}, data=${data}")
   node_id = node.get('id')
   if node_id != null and data != null and type(data) == 'Map' then
     value = data.get(node_id)
     if value != null then
       if java.instanceof(view, TextView) then
-        view.setText("updated: " +value)
+        view.setText(value)
       elif java.instanceof(view, ImageView) then
         apply_image(view, value)
       end

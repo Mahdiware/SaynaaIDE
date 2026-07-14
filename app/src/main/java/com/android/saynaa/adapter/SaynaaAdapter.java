@@ -336,8 +336,6 @@ public class SaynaaAdapter extends BaseAdapter implements Filterable {
   }
 
   private static List<Map<String, Object>> coerceDataList(Object data) {
-    Log.d("SaynaaAdapter", "coerceDataList called with data of type: "
-                               + (data != null ? data.getClass().getName() : "null"));
     if (data == null) {
       return new ArrayList<>();
     }

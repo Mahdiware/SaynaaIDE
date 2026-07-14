@@ -48,7 +48,6 @@ public class ReflectionFinder {
     try {
       cls = Class.forName(className);
       classCache.put(className, cls);
-      Log.d(TAG, "Found and cached class: " + className);
       return cls;
     } catch (ClassNotFoundException e) {
       // Fall through to custom loaders.
@@ -61,7 +60,6 @@ public class ReflectionFinder {
         cls = Class.forName(className, false, loader);
         if (cls != null) {
           classCache.put(className, cls);
-          Log.d(TAG, "Found and cached class (loader): " + className);
           return cls;
         }
       } catch (ClassNotFoundException ignored) {
@@ -209,7 +207,6 @@ public class ReflectionFinder {
 
     if (bestMatch != null) {
       methodCache.put(key, bestMatch);
-      Log.d(TAG, "Cached method: " + bestMatch);
 
       Class<?>[] params = bestMatch.getParameterTypes();
       if (params.length == 0) {
@@ -271,7 +268,6 @@ public class ReflectionFinder {
     }
     if (best != null) {
       constructorCache.put(key, best);
-      Log.d(TAG, "Cached constructor: " + best);
       return best;
     }
     Log.e(TAG, "No matching constructor found for " + cls.getName());
@@ -295,7 +291,6 @@ public class ReflectionFinder {
       // direct lookup (fast path)
       Field field = cls.getField(fieldName);
       fieldCache.put(key, field);
-      Log.d(TAG, "Cached field: " + field);
       return field;
 
     } catch (NoSuchFieldException ignored) {
@@ -305,7 +300,6 @@ public class ReflectionFinder {
         field.setAccessible(true);
 
         fieldCache.put(key, field);
-        Log.d(TAG, "Cached declared field: " + field);
 
         return field;
 
