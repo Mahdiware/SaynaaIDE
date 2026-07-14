@@ -1182,56 +1182,66 @@ Var vmImportModule(VM* vm, String* from, String* path) {
 }
 
 void vmEnsureStackSize(VM* vm, Fiber* fiber, int size) {
+  // Prevent the stack from growing beyond the VM's maximum allowed size.
   if (size >= (MAX_STACK_SIZE / sizeof(Var))) {
     VM_SET_ERROR(vm, newString(vm, "Maximum stack limit reached."));
     return;
   }
 
+  // The current stack is already large enough.
   if (fiber->stack_size >= size)
     return;
 
+  // Grow the stack capacity to the next power of two.
   int new_size = utilPowerOf2Ceil(size);
 
-  Var* old_rbp = fiber->stack; //< Old stack base pointer.
+  // Keep the previous stack base address so we can remap pointers if the
+  // allocation moves to a different memory location.
+  Var* old_rbp = fiber->stack;
+
   fiber->stack = (Var*) vmRealloc(vm, fiber->stack, sizeof(Var) * fiber->stack_size,
                                   sizeof(Var) * new_size);
+
   fiber->stack_size = new_size;
 
-  // If the old stack base pointer is the same as the current, that means the
-  // stack hasn't been moved by the reallocation. In that case we're done.
+  // If realloc() returned the same address, the stack wasn't moved and all
+  // existing pointers remain valid.
   if (old_rbp == fiber->stack)
     return;
 
-  // If we reached here that means the stack is moved by the reallocation and
-  // we have to update all the pointers that pointing to the old stack slots.
-
+  // The stack has moved to a new address. Every pointer into the old stack
+  // must be remapped to the corresponding location in the new stack.
   //
   //                                     '        '
   //             '        '              '        '
-  //             '        '              |        | <new_rsp
-  //    old_rsp> |        |              |        |
-  //             |        |       .----> | value  | <new_ptr
+  //             '        '              |        | < new_sp
+  //    old_sp > |        |              |        |
+  //             |        |       .----> | value  | < new_ptr
   //             |        |       |      |        |
-  //    old_ptr> | value  | ------'      |________| <new_rbp
-  //             |        | ^            new stack
-  //    old_rbp> |________| | height
+  //   old_ptr > | value  | ------'      |________| < new_rbp
+  //             |        | ^             new stack
+  //   old_rbp > |________| | offset
   //             old stack
   //
-  //            new_ptr = new_rbp      + height
-  //                    = fiber->stack + ( old_ptr  - old_rbp )
+  // Every pointer keeps the same offset from the stack base:
+  //
+  //     offset  = old_ptr - old_rbp
+  //     new_ptr = new_rbp + offset
+  //
 #define MAP_PTR(old_ptr) (fiber->stack + ((old_ptr) - old_rbp))
 
-  // Update the stack top pointer and the return pointer.
+  // Update the current stack pointer and the return value slot.
   fiber->sp = MAP_PTR(fiber->sp);
   fiber->ret = MAP_PTR(fiber->ret);
 
-  // Update the stack base pointer of the call frames.
+  // Update every call frame's base pointer.
   for (int i = 0; i < fiber->frame_count; i++) {
     CallFrame* frame = fiber->frames + i;
     frame->rbp = MAP_PTR(frame->rbp);
   }
-}
 
+#undef MAP_PTR
+}
 // The return address for the next call frame (rbp) has to be set to the
 // fiber's ret (fiber->ret == next rbp).
 static inline void pushCallFrame(VM* vm, const Closure* closure) {

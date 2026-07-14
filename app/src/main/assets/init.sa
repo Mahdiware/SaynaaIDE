@@ -1,7 +1,9 @@
 import java
+import os
 import package
 package.path.append(java.saynaadir)
-import loadlayout
+from loadlayout import loadlayout
+
 
 # Classpath prefixes for fallback resolution
 classpath = ["java.lang."]
@@ -9,6 +11,7 @@ classpath = ["java.lang."]
 function bindClass(name)
     return java.bindClass(name)
 end
+
 
 package.searchers.append(function (name)
    # Support wildcard import: "java.util.*"

@@ -239,7 +239,7 @@ types = {
 
 
 function as_numeric(value)
-  result = pcall(function(data) return Number(data) end, value)
+  result = pcall(function(numb) return Number(numb) end, value)
   if result[0] then
     return result[1]
   else
@@ -568,10 +568,42 @@ function apply_layout(view, params, node)
     end
   end
 
+  debug("type: $view")
   view.setLayoutParams(params)
 end
 
-function apply_attrs(view, node)
+
+function apply_image(view, src)
+  if type(src) == 'String' and src.startswith('?') then
+    res_id = get_identifier(src.sub(1))
+    if res_id != 0 then
+      view.setImageResource(res_id)
+    end
+  else
+    // Load image from saynaadir + file path
+    bitmap = BitmapFactory.decodeFile(java.saynaadir + "/" + src)
+    if (bitmap != null)
+      // Convert to drawable
+      drawable = BitmapDrawable(context.getResources(), bitmap)
+      view.setImageDrawable(drawable)
+    else
+      // Load image from file path
+      bitmap = BitmapFactory.decodeFile(src)
+      if (bitmap != null)
+        // Convert to drawable
+        drawable = BitmapDrawable(context.getResources(), bitmap)
+        view.setImageDrawable(drawable)
+      end
+    end
+  end
+
+  if type(src) == 'Number' then
+    view.setImageResource(src)
+  end
+
+end
+
+function apply_attrs(view, node, data)
   orientation = node.get('orientation')
   if orientation != null and java.instanceof(view, LinearLayout) then
     if orientation == 'vertical' then
@@ -707,6 +739,7 @@ function apply_attrs(view, node)
   end
 
   src = node.get('src')
+  
   if src != null and java.instanceof(view, ImageView) then
     if type(src) == 'String' and src.startswith('?') then
       res_id = get_identifier(src.sub(1))
@@ -780,10 +813,25 @@ function apply_attrs(view, node)
 
   items = node.get('items')
   if items != null then
-    list = java.new('java.util.ArrayList', items)
-    adapter = ArrayAdapter(context, AndroidRLayout.simple_list_item_1, list)
+    //list = java.new('java.util.ArrayList', items)
+    adapter = ArrayAdapter(context, AndroidRLayout.simple_list_item_1, items)
     view.setAdapter(adapter)
   end
+
+  // here
+  debug("apply_attrs: view=${view}, node=${node}, data=${data}")
+  node_id = node.get('id')
+  if node_id != null and data != null and type(data) == 'Map' then
+    value = data.get(node_id)
+    if value != null then
+      if java.instanceof(view, TextView) then
+        view.setText("updated: " +value)
+      elif java.instanceof(view, ImageView) then
+        apply_image(view, value)
+      end
+    end
+  end
+
 end
 
 function apply_auto_attrs(view, node)
@@ -791,11 +839,14 @@ function apply_auto_attrs(view, node)
   if keys == null then
     return
   end
+  if (type(keys) == "JavaMethod") then
+    debug("${keys.getName()}")
+  end
   i = 0
   while i < keys.length do
     key = keys[i]
     if type(key) == 'String' then
-      if key != 'type' and key != 'id' and key != 'style' and !key.startswith('layout_') and !key.startswith('padding') and key != 'orientation' and key != 'text' and key != 'textSize' and key != 'textStyle' and key != 'textColor' and key != 'textAppearance' and key != 'hint' and key != 'singleLine' and key != 'checked' and key != 'backgroundColor' and key != 'background' and key != 'src' and key != 'scaleType' and key != 'visibility' and key != 'textAlignment' and key != 'ellipsize' and key != 'autoLink' and key != 'inputType' and key != 'imeOptions' and key != 'password' and key != 'onClick' and key != 'items' then
+      if key != 'id' and key != 'style' and !key.startswith('layout_') and !key.startswith('padding') and key != 'orientation' and key != 'text' and key != 'textSize' and key != 'textStyle' and key != 'textColor' and key != 'textAppearance' and key != 'hint' and key != 'singleLine' and key != 'checked' and key != 'backgroundColor' and key != 'background' and key != 'src' and key != 'scaleType' and key != 'visibility' and key != 'textAlignment' and key != 'ellipsize' and key != 'autoLink' and key != 'inputType' and key != 'imeOptions' and key != 'password' and key != 'onClick' and key != 'items' then
         value = node.get(key)
         setter = 'set' + capitalize_first(key)
         called = pcall(function(v, s, val)
@@ -811,7 +862,7 @@ function apply_auto_attrs(view, node)
   end
 end
 
-function create_view(node, parent)
+function create_view(node, parent, data)
   node_type = node.get('type')
   child_start = null
   if node_type == null then
@@ -855,7 +906,7 @@ function create_view(node, parent)
   height = parse_size(node.get('layout_height') or -2)
   params = new_layout_params(parent, width, height)
   apply_layout(view, params, node)
-  apply_attrs(view, node)
+  apply_attrs(view, node, data)
   apply_auto_attrs(view, node)
 
   node_id = node.get('id')
@@ -872,7 +923,7 @@ function create_view(node, parent)
     i = 0
     while i < children.length do
       child = children[i]
-      child_view = create_view(child, view)
+      child_view = create_view(child, view, data)
       view.addView(child_view)
       i = i + 1
     end
@@ -881,8 +932,17 @@ function create_view(node, parent)
   return view
 end
 
-function loadlayout(activity, node)
-  assert(java.instanceof(activity, Context), 'loadlayout: activity is null')
+function loadlayout(activity, node, data)
+  if (!java.instanceof(activity, Context)) then
+    activity = java.context
+  end
+
+  if data != null then
+    debug("data: ${str(data)}, type: ${type(node)}, node is: ${str(node)}")
+  else
+    debug("data: null, type: ${type(node)}, node is: ${str(node)}")
+  end
+
   ids = {}
   idmap = {}
   next_id = 0x7f000000
@@ -898,7 +958,7 @@ function loadlayout(activity, node)
   H = out.heightPixels
   target_module.define('ids', ids)
   target_module.define('idmap', idmap)
-  return create_view(node, null)
+  return create_view(node, null, data)
 end
 
 

@@ -19,6 +19,7 @@ VM* vm_from_saynaa(JNIEnv* env, jobject saynaaObject) {
   return (VM*) (intptr_t) ptr;
 }
 
+
 void set_vm_ptr_on_saynaa(JNIEnv* env, jobject saynaaObject, jlong ptr) {
   jclass saynaaCls = (*env)->GetObjectClass(env, saynaaObject);
   jfieldID vmField = (*env)->GetFieldID(env, saynaaCls, "vm", "Lcom/android/saynaa/saynaajava/CPtr;");

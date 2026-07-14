@@ -9,6 +9,7 @@ import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
 import android.os.Handler;
 import android.os.Message;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -33,7 +34,7 @@ import java.util.Set;
 
 public class SaynaaAdapter extends BaseAdapter implements Filterable {
   public interface SaynaaViewFactory {
-    View createView(LayoutInflater inflater, ViewGroup parent);
+    View createView(LayoutInflater inflater, ViewGroup parent, Map<String, Object> row);
   }
 
   public interface SaynaaRowFilter {
@@ -59,7 +60,6 @@ public class SaynaaAdapter extends BaseAdapter implements Filterable {
   private CharSequence mPrefix;
   private SaynaaAnimationFactory mAnimationFactory;
   private final Map<View, Animation> mAnimationCache = new HashMap<>();
-  private final Map<View, Boolean> mStyleCache = new HashMap<>();
   private final Map<String, Boolean> mLoadedImages = new HashMap<>();
 
   private boolean mNotifyOnChange = true;
@@ -108,9 +108,8 @@ public class SaynaaAdapter extends BaseAdapter implements Filterable {
     this(context, 0, data, viewFactory);
   }
 
-  public SaynaaAdapter(Context context, Object data, Object layoutSpec) {
-    this(context, resolveLayoutResId(layoutSpec), coerceDataList(data),
-        resolveViewFactory(context, layoutSpec));
+  public SaynaaAdapter(Context context, Object layoutSpec, Object data) {
+    this(context, resolveLayoutResId(layoutSpec), coerceDataList(data), resolveViewFactory(context, layoutSpec));
   }
 
   private SaynaaAdapter(Context context, int layoutResId, List<Map<String, Object>> data,
@@ -143,7 +142,6 @@ public class SaynaaAdapter extends BaseAdapter implements Filterable {
   }
 
   public void setTheme(Map<String, Object> theme) {
-    mStyleCache.clear();
     mTheme = theme;
   }
 
@@ -258,13 +256,17 @@ public class SaynaaAdapter extends BaseAdapter implements Filterable {
   public View getView(int position, View convertView, ViewGroup parent) {
     View view;
     ViewHolder holder;
+    Map<String, Object> row = mData.get(position);
 
     if (convertView == null) {
       try {
-        view = createRowView(parent);
+        view = createRowView(parent, row);
         holder = new ViewHolder(view);
         view.setTag(holder);
       } catch (RuntimeException e) {
+        // FIXED: Expose why the row view creation dropped down here
+        Log.e("SaynaaAdapter", "Failed to compile row layout inside getView()", e);
+        e.printStackTrace();
         return new View(mContext);
       }
     } else {
@@ -280,17 +282,9 @@ public class SaynaaAdapter extends BaseAdapter implements Filterable {
       return view;
     }
 
-    Map<String, Object> row = mData.get(position);
     if (row == null) {
       return view;
     }
-
-    boolean firstBind = !mStyleCache.containsKey(view);
-    if (firstBind) {
-      mStyleCache.put(view, Boolean.TRUE);
-    }
-
-    applyEntries(holder, row, firstBind);
 
     if (mUpdating) {
       return view;
@@ -342,6 +336,8 @@ public class SaynaaAdapter extends BaseAdapter implements Filterable {
   }
 
   private static List<Map<String, Object>> coerceDataList(Object data) {
+    Log.d("SaynaaAdapter", "coerceDataList called with data of type: "
+                               + (data != null ? data.getClass().getName() : "null"));
     if (data == null) {
       return new ArrayList<>();
     }
@@ -417,6 +413,38 @@ public class SaynaaAdapter extends BaseAdapter implements Filterable {
     return out;
   }
 
+  private static Object cleanValue(Object val) {
+    if (val == null)
+      return null;
+
+    if (val instanceof String || val instanceof Number || val instanceof Boolean
+        || val instanceof Bitmap || val instanceof Drawable) {
+      return val;
+    }
+
+    if (val instanceof Map) {
+      Map<?, ?> m = (Map<?, ?>) val;
+      Map<String, Object> cleanMap = new HashMap<>();
+      for (Map.Entry<?, ?> entry : m.entrySet()) {
+        if (entry.getKey() != null) {
+          cleanMap.put(String.valueOf(entry.getKey()), cleanValue(entry.getValue()));
+        }
+      }
+      return cleanMap;
+    }
+
+    if (val instanceof List) {
+      List<?> l = (List<?>) val;
+      List<Object> cleanList = new ArrayList<>();
+      for (Object item : l) {
+        cleanList.add(cleanValue(item));
+      }
+      return cleanList;
+    }
+
+    return String.valueOf(val);
+  }
+
   private static Map<String, Object> coerceRow(Object item) {
     if (item instanceof Map) {
       Map<String, Object> row = new HashMap<>();
@@ -425,36 +453,41 @@ public class SaynaaAdapter extends BaseAdapter implements Filterable {
         if (entry.getKey() == null) {
           continue;
         }
-        row.put(String.valueOf(entry.getKey()), entry.getValue());
+        row.put(String.valueOf(entry.getKey()), cleanValue(entry.getValue()));
       }
       return row;
     }
 
     if (item != null) {
       Map<String, Object> row = new HashMap<>();
-      row.put("text", item);
+      row.put("text", cleanValue(item));
       return row;
     }
     return null;
   }
 
   private static Long toNumericKey(Object key) {
+    if (key == null)
+      return null;
     if (key instanceof Number) {
       return ((Number) key).longValue();
     }
-    if (key instanceof String) {
-      try {
-        return Long.parseLong((String) key);
-      } catch (NumberFormatException ignored) {
-        return null;
-      }
+
+    String str = String.valueOf(key).trim();
+    if (str.endsWith(".0")) {
+      str = str.substring(0, str.length() - 2);
     }
-    return null;
+
+    try {
+      return Long.parseLong(str);
+    } catch (NumberFormatException ignored) {
+      return null;
+    }
   }
 
-  private View createRowView(ViewGroup parent) {
+  private View createRowView(ViewGroup parent, Map<String, Object> row) {
     if (mViewFactory != null) {
-      View view = mViewFactory.createView(mInflater, parent);
+      View view = mViewFactory.createView(mInflater, parent, row);
       if (view == null) {
         throw new IllegalStateException("SaynaaViewFactory returned null.");
       }
@@ -464,7 +497,7 @@ public class SaynaaAdapter extends BaseAdapter implements Filterable {
   }
 
   private static final class SaynaaLayoutFactory implements SaynaaViewFactory {
-    private static final String LOADLAYOUT_ALIAS = "__saynaa_loadlayout";
+    private static final String LOADLAYOUT_ALIAS = "loadlayout";
     private final Object layoutSpec;
     private final SaynaaActivity activity;
     private final SaynaaState saynaaState;
@@ -477,24 +510,26 @@ public class SaynaaAdapter extends BaseAdapter implements Filterable {
     }
 
     @Override
-    public View createView(LayoutInflater inflater, ViewGroup parent) {
+    public View createView(LayoutInflater inflater, ViewGroup parent, Map<String, Object> row) {
       if (activity == null || saynaaState == null) {
         throw new IllegalStateException("SaynaaActivity is required to use loadlayout.");
       }
-      Object result = callLoadlayout(layoutSpec);
+      Object result = callLoadlayout(layoutSpec, row);
       if (result instanceof View) {
         return (View) result;
       }
-      throw new IllegalStateException("loadlayout did not return a View.");
+      throw new IllegalStateException("loadlayout did not return a View object. Got: " + result);
     }
 
-    private Object callLoadlayout(Object layoutSpec) {
+    private Object callLoadlayout(Object layoutSpec, Map<String, Object> row) {
       if (!ensureLoadlayout()) {
         return null;
       }
       try {
-        return saynaaState.callGlobalFunction(LOADLAYOUT_ALIAS, activity, layoutSpec);
+        return saynaaState.callGlobalFunction(LOADLAYOUT_ALIAS, activity, layoutSpec, row);
       } catch (SaynaaException e) {
+        Log.e("SaynaaAdapter", "SaynaaException triggered during callGlobalFunction('loadlayout')", e);
+        e.printStackTrace();
         return null;
       }
     }
@@ -508,282 +543,10 @@ public class SaynaaAdapter extends BaseAdapter implements Filterable {
           loadlayoutReady = true;
           return true;
         }
-        saynaaState.doString(LOADLAYOUT_ALIAS + " = loadlayout.loadlayout");
         loadlayoutReady = saynaaState.getGlobalFunctionId(LOADLAYOUT_ALIAS) >= 0;
         return loadlayoutReady;
       } catch (SaynaaException e) {
         return false;
-      }
-    }
-  }
-
-  private void applyEntries(ViewHolder holder, Map<String, Object> row, boolean firstBind) {
-    Set<Map.Entry<String, Object>> entries = row.entrySet();
-    List<TextView> textViews = new ArrayList<>();
-    holder.collectTextViews(textViews);
-    int textViewIndex = 0;
-
-    for (Map.Entry<String, Object> entry : entries) {
-      String key = entry.getKey();
-      Object value = entry.getValue();
-      if (key == null || value == null) {
-        continue;
-      }
-
-      // Try to find view by exact ID / tag match first
-      View target = holder.find(key);
-      if (target != null) {
-        // Found by ID / tag
-        if (mTheme != null && firstBind) {
-          applyValue(target, mTheme.get(key));
-        }
-        applyValue(target, value);
-        continue;
-      }
-
-      // Fallback : for text fields without matching views, apply to TextViews in order
-      if (isTextProperty(key) && !textViews.isEmpty() && textViewIndex < textViews.size()) {
-        if (mTheme != null && firstBind) {
-          applyValue(textViews.get(textViewIndex), mTheme.get(key));
-        }
-        applyValue(textViews.get(textViewIndex), value);
-        textViewIndex++;
-      }
-    }
-  }
-
-  private boolean isTextProperty(String key) {
-    if (key == null) {
-      return false;
-    }
-    String lower = key.toLowerCase();
-    return lower.equals("text") || lower.equals("title") || lower.equals("subtitle")
-        || lower.equals("content") || lower.equals("label") || lower.equals("name")
-        || lower.equals("description") || lower.equals("message");
-  }
-
-  private void applyValue(View view, Object value) {
-    try {
-      if (value instanceof Map) {
-        @SuppressWarnings("unchecked") Map<String, Object> fields = (Map<String, Object>) value;
-        applyFields(view, fields);
-        return;
-      }
-
-      if (view instanceof TextView) {
-        applyTextValue((TextView) view, value);
-        return;
-      }
-
-      if (view instanceof ImageView) {
-        applyImageValue((ImageView) view, value);
-        return;
-      }
-
-      if (applyGenericSetter(view, "value", value)) {
-        return;
-      }
-
-      if (value instanceof View) {
-        return;
-      }
-    } catch (Exception e) {
-      // Keep adapter resilient; ignore one bad field instead of killing the row.
-      e.printStackTrace();
-    }
-  }
-
-  private void applyFields(View view, Map<String, Object> fields) throws Exception {
-    Set<Map.Entry<String, Object>> entries = fields.entrySet();
-    for (Map.Entry<String, Object> entry : entries) {
-      String key = entry.getKey();
-      Object value = entry.getValue();
-      if (key == null) {
-        continue;
-      }
-      if (key.toLowerCase().startsWith("on") && value instanceof View.OnClickListener) {
-        applyGenericSetter(view, key, value);
-      } else if ("src".equalsIgnoreCase(key)) {
-        applyValue(view, value);
-      } else {
-        applyGenericSetter(view, key, value);
-      }
-    }
-  }
-
-  private void applyTextValue(TextView textView, Object value) {
-    if (value == null) {
-      textView.setText("");
-    } else if (value instanceof CharSequence) {
-      textView.setText((CharSequence) value);
-    } else {
-      textView.setText(String.valueOf(value));
-    }
-  }
-
-  private void applyImageValue(ImageView imageView, Object value) {
-    if (value == null) {
-      return;
-    }
-
-    if (value instanceof Bitmap) {
-      imageView.setImageBitmap((Bitmap) value);
-      return;
-    }
-
-    if (value instanceof Drawable) {
-      imageView.setImageDrawable((Drawable) value);
-      return;
-    }
-
-    if (value instanceof Number) {
-      imageView.setImageResource(((Number) value).intValue());
-      return;
-    }
-
-    if (value instanceof String) {
-      String path = (String) value;
-      if (path.length() == 0) {
-        return;
-      }
-      if (path.startsWith("http://") || path.startsWith("https://")) {
-        return;
-      }
-      File file = new File(path);
-      if (file.exists()) {
-        Bitmap bitmap = BitmapFactory.decodeFile(file.getAbsolutePath());
-        if (bitmap != null) {
-          imageView.setImageDrawable(new BitmapDrawable(mResources, bitmap));
-        }
-        return;
-      }
-      int resId = mResources.getIdentifier(path, "drawable", mContext.getPackageName());
-      if (resId != 0) {
-        imageView.setImageResource(resId);
-      }
-    }
-  }
-
-  private boolean applyGenericSetter(Object target, String propertyName, Object value) throws Exception {
-    if (target == null || propertyName == null || propertyName.length() == 0) {
-      return false;
-    }
-
-    String methodName = propertyName;
-    if (Character.isLowerCase(methodName.charAt(0))) {
-      methodName = Character.toUpperCase(methodName.charAt(0)) + methodName.substring(1);
-    }
-    methodName = "set" + methodName;
-
-    Method[] methods = target.getClass().getMethods();
-    for (Method method : methods) {
-      if (!method.getName().equals(methodName) || method.getParameterTypes().length != 1) {
-        continue;
-      }
-
-      Class<?> parameterType = method.getParameterTypes()[0];
-      Object argument = coerceValue(parameterType, value);
-      if (argument == COERCION_FAILED) {
-        continue;
-      }
-      method.invoke(target, argument);
-      return true;
-    }
-    return false;
-  }
-
-  private static final Object COERCION_FAILED = new Object();
-
-  private Object coerceValue(Class<?> parameterType, Object value) {
-    if (value == null) {
-      return parameterType.isPrimitive() ? COERCION_FAILED : null;
-    }
-
-    if (parameterType.isInstance(value)) {
-      return value;
-    }
-
-    if (parameterType == CharSequence.class || parameterType == String.class) {
-      return String.valueOf(value);
-    }
-
-    if (parameterType == int.class || parameterType == Integer.class) {
-      if (value instanceof Number) {
-        return ((Number) value).intValue();
-      }
-      if (value instanceof String) {
-        try {
-          return Integer.parseInt((String) value);
-        } catch (NumberFormatException ignored) {
-          return COERCION_FAILED;
-        }
-      }
-    }
-
-    if (parameterType == long.class || parameterType == Long.class) {
-      if (value instanceof Number) {
-        return ((Number) value).longValue();
-      }
-      if (value instanceof String) {
-        try {
-          return Long.parseLong((String) value);
-        } catch (NumberFormatException ignored) {
-          return COERCION_FAILED;
-        }
-      }
-    }
-
-    if (parameterType == float.class || parameterType == Float.class) {
-      if (value instanceof Number) {
-        return ((Number) value).floatValue();
-      }
-    }
-
-    if (parameterType == double.class || parameterType == Double.class) {
-      if (value instanceof Number) {
-        return ((Number) value).doubleValue();
-      }
-    }
-
-    if (parameterType == boolean.class || parameterType == Boolean.class) {
-      if (value instanceof Boolean) {
-        return value;
-      }
-      if (value instanceof String) {
-        return Boolean.parseBoolean((String) value);
-      }
-    }
-
-    if (parameterType == Drawable.class && value instanceof Bitmap) {
-      return new BitmapDrawable(mResources, (Bitmap) value);
-    }
-
-    if (parameterType.isEnum() && value instanceof String) {
-      @SuppressWarnings({"unchecked", "rawtypes"})
-      Class<? extends Enum> enumType = (Class<? extends Enum>) parameterType;
-      try {
-        return Enum.valueOf(enumType, (String) value);
-      } catch (IllegalArgumentException ignored) {
-        return COERCION_FAILED;
-      }
-    }
-
-    return COERCION_FAILED;
-  }
-
-  private void collectTextViews(View view, List<TextView> out) {
-    if (view == null || out == null) {
-      return;
-    }
-
-    if (view instanceof TextView) {
-      out.add((TextView) view);
-    }
-
-    if (view instanceof ViewGroup) {
-      ViewGroup group = (ViewGroup) view;
-      for (int i = 0; i < group.getChildCount(); i++) {
-        collectTextViews(group.getChildAt(i), out);
       }
     }
   }
@@ -817,12 +580,9 @@ public class SaynaaAdapter extends BaseAdapter implements Filterable {
             views.put(name, view);
           }
         } catch (Resources.NotFoundException ignored) {
-          // Ignore anonymous IDs.
         }
       }
 
-      // Fallback: allow views to be indexed by a String tag so programmatically
-      // created rows (without resource ids) can be targeted by map keys.
       try {
         Object tag = view.getTag();
         if (tag != null) {
@@ -832,7 +592,6 @@ public class SaynaaAdapter extends BaseAdapter implements Filterable {
           }
         }
       } catch (Exception ignored) {
-        // Ignore tag lookup failures.
       }
 
       if (view instanceof ViewGroup) {
@@ -841,13 +600,6 @@ public class SaynaaAdapter extends BaseAdapter implements Filterable {
           indexView(group.getChildAt(i));
         }
       }
-    }
-
-    void collectTextViews(List<TextView> out) {
-      if (out == null) {
-        return;
-      }
-      out.addAll(textViews);
     }
   }
 

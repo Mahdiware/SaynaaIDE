@@ -436,6 +436,23 @@ PUBLIC bool ValidateSlotInstanceOf(VM* vm, int slot, int cls);
 // and return false.
 PUBLIC bool IsSlotInstanceOf(VM* vm, int inst, int cls, bool* val);
 
+// Returns the next available slot index to use. If [use_temporary] is true
+// the slot will be temporary and will be released after the function returns.
+PUBLIC int nextSlot(VM* vm, bool use_temporary);
+
+// Allocate [count] number of slots and return the first slot index. The slots
+// will be available for reuse after the function returns. Note that the slots
+// will be allocated only if the [count] is valid and less than the next slot
+// index. Otherwise it'll be ignored.
+PUBLIC int allocSlot(VM* vm, uint32_t count);
+
+// Free the slot at [index] and make it available for reuse. The [count]
+// number of slots will be freed starting from the [index] slot. The slots
+// will be available for reuse after the function returns. Note that the slots
+// will be freed only if the [count] is valid and less than the next slot
+// index. Otherwise it'll be ignored.
+PUBLIC void freeSlot(VM* vm, uint32_t index, uint32_t count);
+
 // Make sure the fiber has [count] number of slots to work with (including the
 // arguments).
 PUBLIC void reserveSlots(VM* vm, int count);

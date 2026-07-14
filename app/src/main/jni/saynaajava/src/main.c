@@ -1,7 +1,5 @@
 #include "saynaa_internal.h"
 
-// Entry translation unit for the saynaajava module.
-
 jstring get_java_object_name(JNIEnv* env, VM* vm, BridgeState* bridge, jobject target,
     const char* errorPrefix, const char* nullMessage) {
   if (target == NULL) {
@@ -47,41 +45,6 @@ jstring get_java_object_name(JNIEnv* env, VM* vm, BridgeState* bridge, jobject t
   }
 
   return (jstring) classNameObj;
-}
-
-bool wrap_bridge_global(VM* vm, jobject globalRef, int outSlot) {
-  if (!ensure_wrapper_classes(vm)) {
-    SetRuntimeError(vm, "Java wrappers are not initialized.");
-    return false;
-  }
-
-  BridgeState* bridge = bridge_from_vm(vm);
-  if (bridge == NULL || globalRef == NULL) {
-    setSlotNull(vm, outSlot);
-    return true;
-  }
-
-  JNIEnv* env = env_from_jvm(bridge->jvm);
-  if (env == NULL) {
-    SetRuntimeError(vm, "Invalid JNI Environment.");
-    return false;
-  }
-
-  jobject localRef = (*env)->NewLocalRef(env, globalRef);
-  if (localRef == NULL) {
-    setSlotNull(vm, outSlot);
-    return true;
-  }
-
-  JavaRef* ref = make_java_ref(env, bridge->jvm, localRef);
-  if (ref == NULL) {
-    setSlotNull(vm, outSlot);
-  } else {
-    create_java_instance(vm, &bridge->clsJavaObject, ref, outSlot);
-  }
-
-  (*env)->DeleteLocalRef(env, localRef);
-  return true;
 }
 
 void clear_callbacks(VM* vm) {
@@ -220,10 +183,11 @@ bool invoke_registered_callback(JNIEnv* env, VM* vm, BridgeState* bridge, Callba
 
   reserveSlots(vm, argc + 8);
 
+  int argStart = allocSlot(vm, argc);
+
   for (int i = 0; i < argc; i++) {
     jobject arg = (*env)->GetObjectArrayElement(env, argsArray, (jsize) i);
-    bool ok = object_to_slot(env, vm, bridge, 2 + i,
-        arg, "Failed to wrap Java argument object.");
+    bool ok = object_to_slot(env, vm, bridge, argStart + i, arg, "Failed to wrap Java argument object.");
     if (arg != NULL)
       (*env)->DeleteLocalRef(env, arg);
     if (!ok)
@@ -231,14 +195,13 @@ bool invoke_registered_callback(JNIEnv* env, VM* vm, BridgeState* bridge, Callba
   }
 
   bool ok = false;
-  int argStart = 2;
-  int argEnd = 1 + argc;
-  int resultSlot = 0;
+  int resultSlot = nextSlot(vm, false);
+
+  int slot1 = nextSlot(vm, false);
 
   if (entry->fnHandle != NULL) {
-    setSlotHandle(vm, 1, entry->fnHandle);
-    ok = CallFunction(vm, 1, argc, argStart, argEnd);
-    resultSlot = 1;
+    setSlotHandle(vm, slot1, entry->fnHandle);
+    ok = CallFunction(vm, slot1, argc, argStart, resultSlot);
   } else if (entry->mapHandle != NULL) {
     const char* methodKey = runtimeMethodName;
     if (methodKey == NULL || methodKey[0] == '\0')
@@ -249,14 +212,16 @@ bool invoke_registered_callback(JNIEnv* env, VM* vm, BridgeState* bridge, Callba
       return false;
     }
 
-    int keySlot = argEnd + 1;
-    int fnSlot = argEnd + 2;
-    setSlotHandle(vm, 1, entry->mapHandle);
+    int keySlot = nextSlot(vm, false);
+    int fnSlot = nextSlot(vm, false);
+
+    int slot5 = nextSlot(vm, false);
+
+    setSlotHandle(vm, slot5, entry->mapHandle);
     setSlotString(vm, keySlot, methodKey);
 
-    if (CallMethod(vm, 1, "get", 1, keySlot, fnSlot) && GetSlotType(vm, fnSlot) == vCLOSURE) {
-      ok = CallFunction(vm, fnSlot, argc, argStart, argEnd);
-      resultSlot = fnSlot;
+    if (CallMethod(vm, slot5, "get", 1, keySlot, fnSlot) && GetSlotType(vm, fnSlot) == vCLOSURE) {
+      ok = CallFunction(vm, fnSlot, argc, argStart, resultSlot);
     } else {
       // If the callback method is absent in the map/table, do nothing.
       ok = true;
@@ -287,12 +252,12 @@ bool invoke_registered_callback_from_slots(JNIEnv* env, VM* vm, BridgeState* bri
   reserveSlots(vm, argEnd + 8);
 
   bool ok = false;
-  int resultSlot = 0;
+  int resultSlot = nextSlot(vm, false);
 
   if (entry->fnHandle != NULL) {
-    setSlotHandle(vm, 1, entry->fnHandle);
-    ok = CallFunction(vm, 1, argCount, argStart, argEnd);
-    resultSlot = 1;
+    int slot1 = nextSlot(vm, false);
+    setSlotHandle(vm, slot1, entry->fnHandle);
+    ok = CallFunction(vm, slot1, argCount, argStart, resultSlot);
   } else if (entry->mapHandle != NULL) {
     const char* methodKey = runtimeMethodName;
     if (methodKey == NULL || methodKey[0] == '\0')
@@ -303,14 +268,15 @@ bool invoke_registered_callback_from_slots(JNIEnv* env, VM* vm, BridgeState* bri
       return false;
     }
 
-    int keySlot = argEnd + 1;
-    int fnSlot = argEnd + 2;
-    setSlotHandle(vm, 1, entry->mapHandle);
+    int keySlot = nextSlot(vm, false);
+    int fnSlot = nextSlot(vm, false);
+    int slot5 = nextSlot(vm, false);
+
+    setSlotHandle(vm, slot5, entry->mapHandle);
     setSlotString(vm, keySlot, methodKey);
 
-    if (CallMethod(vm, 1, "get", 1, keySlot, fnSlot) && GetSlotType(vm, fnSlot) == vCLOSURE) {
-      ok = CallFunction(vm, fnSlot, argCount, argStart, argEnd);
-      resultSlot = fnSlot;
+    if (CallMethod(vm, slot5, "get", 1, keySlot, fnSlot) && GetSlotType(vm, fnSlot) == vCLOSURE) {
+      ok = CallFunction(vm, fnSlot, argCount, argStart, resultSlot);
     } else {
       ok = true;
     }
@@ -403,18 +369,6 @@ char* str_dup_c(const char* s) {
   return out;
 }
 
-char* massage_java_classname(const char* name) {
-  char* out = str_dup_c(name == NULL ? "" : name);
-  if (out == NULL)
-    return NULL;
-
-  for (char* p = out; *p != '\0'; p++) {
-    if (*p == '_')
-      *p = '$';
-  }
-  return out;
-}
-
 jobject bridge_find_class_exact(JNIEnv* env, VM* vm, BridgeState* bridge, const char* className) {
   jstring jName = (*env)->NewStringUTF(env, className == NULL ? "" : className);
   jobject cls = (*env)->CallStaticObjectMethod(env, bridge->javaBridgeClass, bridge->mFindClass, jName);
@@ -426,50 +380,6 @@ jobject bridge_find_class_exact(JNIEnv* env, VM* vm, BridgeState* bridge, const 
   }
 
   return cls;
-}
-
-jobject bridge_find_class(JNIEnv* env, VM* vm, BridgeState* bridge, const char* requestedName,
-    bool searchPackages, char** resolvedNameOut) {
-  if (resolvedNameOut != NULL)
-    *resolvedNameOut = NULL;
-
-  if (bridge == NULL || requestedName == NULL || requestedName[0] == '\0')
-    return NULL;
-
-  char* massaged = massage_java_classname(requestedName);
-  if (massaged == NULL) {
-    SetRuntimeError(vm, "Out of memory while resolving Java class name.");
-    return NULL;
-  }
-
-  bool qualified = strchr(massaged, '.') != NULL;
-  if (!searchPackages || qualified) {
-    jobject cls = bridge_find_class_exact(env, vm, bridge, massaged);
-    if (cls != NULL && resolvedNameOut != NULL)
-      *resolvedNameOut = str_dup_c(massaged);
-    free(massaged);
-    return cls;
-  }
-
-  // Package registry support removed; only exact class names are allowed.
-  jobject cls = bridge_find_class_exact(env, vm, bridge, massaged);
-  if (cls != NULL && resolvedNameOut != NULL)
-    *resolvedNameOut = str_dup_c(massaged);
-  free(massaged);
-  return cls;
-}
-
-bool inject_java_global(VM* vm, const char* alias, int slot) {
-  if (alias == NULL || alias[0] == '\0')
-    return true;
-
-  Module* module = current_module_from_vm(vm);
-  Handle* imported = GetSlotHandle(vm, slot);
-  if (module == NULL || imported == NULL)
-    return false;
-
-  moduleSetGlobal(vm, module, alias, (uint32_t) strlen(alias), imported->value);
-  return true;
 }
 
 JNIEnv* env_from_jvm(JavaVM* jvm) {
@@ -569,16 +479,29 @@ bool create_java_instance(VM* vm, Handle** clsHandlePtr, JavaRef* ref, int outSl
     return false;
   }
 
-  reserveSlots(vm, 8);
-  setSlotHandle(vm, 1, *clsHandlePtr);
-  setSlotPointer(vm, 2, ref, NULL);
+  int slot1 = nextSlot(vm, true);
+  int slot2 = nextSlot(vm, true);
 
-  if (!NewInstance(vm, 1, outSlot, 1, 2)) {
+  LOGI("Creating Java instance: clsHandle=%p, ref=%p, outSlot=%d, slot1=%d, slot2=%d",
+      (void*) *clsHandlePtr, (void*) ref, outSlot, slot1, slot2);
+
+  setSlotHandle(vm, slot1, *clsHandlePtr);
+  setSlotPointer(vm, slot2, ref, NULL);
+
+  bool state = true;
+
+  if (!NewInstance(vm, slot1, outSlot, 1, slot2)) {
     java_ref_destructor(ref);
-    return false;
+    state = false;
+    goto L_return;
   }
 
-  return true;
+L_return:
+
+  freeSlot(vm, slot1, 1);
+  freeSlot(vm, slot2, 1);
+
+  return state;
 }
 
 bool create_java_method_instance(VM* vm, JavaRef* target, const char* method_name, bool is_static, int outSlot) {
@@ -598,17 +521,38 @@ bool create_java_method_instance(VM* vm, JavaRef* target, const char* method_nam
   }
 
   reserveSlots(vm, 6);
-  setSlotHandle(vm, 1, bridge->clsJavaMethod);
-  setSlotPointer(vm, 2, target, NULL);
-  setSlotString(vm, 3, method_name);
-  setSlotBool(vm, 4, is_static);
 
-  if (!NewInstance(vm, 1, outSlot, 3, 2)) {
+  int slot1 = nextSlot(vm, true);
+  int slot2 = nextSlot(vm, false);
+  int slot3 = nextSlot(vm, false);
+  int slot4 = nextSlot(vm, false);
+
+  LOGI("Creating Java method instance: clsshndle: %p, target: %p, method: %s, is_static: %d, "
+       "outSlot: %d, slot1: %d, slot2: %d, slot3: %d, slot4: %d",
+      (void*) bridge->clsJavaMethod, (void*) target, method_name == NULL ? "" : method_name,
+      is_static ? 1 : 0, outSlot, slot1, slot2, slot3, slot4);
+
+  setSlotHandle(vm, slot1, bridge->clsJavaMethod);
+  setSlotPointer(vm, slot2, target, NULL);
+  setSlotString(vm, slot3, method_name);
+  setSlotBool(vm, slot4, is_static);
+
+  bool state = true;
+
+  if (!NewInstance(vm, slot1, outSlot, 3, slot2)) {
     java_ref_destructor(target);
-    return false;
+    state = false;
+    goto L_return;
   }
 
-  return true;
+L_return:
+
+  freeSlot(vm, slot1, 1);
+  freeSlot(vm, slot2, 1);
+  freeSlot(vm, slot3, 1);
+  freeSlot(vm, slot4, 1);
+
+  return state;
 }
 
 jobject slot_to_java(JNIEnv* env, VM* vm, BridgeState* bridge, int slot) {
@@ -655,20 +599,6 @@ jobject make_args_array(JNIEnv* env, VM* vm, BridgeState* bridge, int startSlot,
   return args;
 }
 
-const char* java_simple_name(const char* className) {
-  if (className == NULL)
-    return NULL;
-
-  const char* lastDot = strrchr(className, '.');
-  const char* base = (lastDot == NULL) ? className : (lastDot + 1);
-
-  const char* lastDollar = strrchr(base, '$');
-  if (lastDollar != NULL && *(lastDollar + 1) != '\0')
-    return lastDollar + 1;
-
-  return base;
-}
-
 // Best-effort resolve of the currently executing module for global injection.
 Module* current_module_from_vm(VM* vm) {
   if (vm == NULL || vm->fiber == NULL)
@@ -685,333 +615,6 @@ Module* current_module_from_vm(VM* vm) {
     return NULL;
 
   return frame->closure->fn->owner;
-}
-
-bool ensure_slot_java_class(JNIEnv* env, VM* vm, BridgeState* bridge, int slot, jobject* classObj) {
-  if (classObj == NULL)
-    return false;
-
-  *classObj = NULL;
-
-  if (GetSlotType(vm, slot) == vSTRING) {
-    const char* className = GetSlotString(vm, slot, NULL);
-    jobject resolved = bridge_find_class(env, vm, bridge, className, true, NULL);
-    if (VM_HAS_ERROR(vm))
-      return false;
-    if (resolved == NULL) {
-      SetRuntimeErrorFmt(vm, "Java class not found: %s", className == NULL ? "" : className);
-      return false;
-    }
-    *classObj = resolved;
-    return true;
-  }
-
-  if (GetSlotType(vm, slot) != vPOINTER) {
-    SetRuntimeError(vm, "Expected a Java class string or class object.");
-    return false;
-  }
-
-  jobject candidate = slot_to_java(env, vm, bridge, slot);
-  if (candidate == NULL)
-    return false;
-
-  jclass clsClass = (*env)->FindClass(env, "java/lang/Class");
-  if (clsClass == NULL) {
-    (*env)->DeleteLocalRef(env, candidate);
-    return false;
-  }
-
-  jboolean isClass = (*env)->IsInstanceOf(env, candidate, clsClass);
-  (*env)->DeleteLocalRef(env, clsClass);
-  if (isClass != JNI_TRUE) {
-    (*env)->DeleteLocalRef(env, candidate);
-    SetRuntimeError(vm, "Expected a Java Class object.");
-    return false;
-  }
-
-  *classObj = candidate;
-  return true;
-}
-
-jstring class_name_from_slot(JNIEnv* env, VM* vm, BridgeState* bridge, int slot) {
-  if (GetSlotType(vm, slot) == vSTRING) {
-    const char* className = GetSlotString(vm, slot, NULL);
-    return (*env)->NewStringUTF(env, className == NULL ? "" : className);
-  }
-
-  if (GetSlotType(vm, slot) != vPOINTER) {
-    SetRuntimeError(vm, "Expected a Java class string or class object.");
-    return NULL;
-  }
-
-  jobject classObj = slot_to_java(env, vm, bridge, slot);
-  if (classObj == NULL)
-    return NULL;
-  jstring className = get_java_object_name(
-      env, vm, bridge, classObj, "class.getName() failed", "Failed to resolve Java class name.");
-  (*env)->DeleteLocalRef(env, classObj);
-  return className;
-}
-
-static jobject make_empty_args(JNIEnv* env) {
-  jclass objClass = (*env)->FindClass(env, "java/lang/Object");
-  if (objClass == NULL)
-    return NULL;
-  jobjectArray args = (*env)->NewObjectArray(env, 0, objClass, NULL);
-  (*env)->DeleteLocalRef(env, objClass);
-  return args;
-}
-
-static bool build_java_array_from_list(
-    JNIEnv* env, VM* vm, BridgeState* bridge, jobject classObj, int listSlot, jobject* outArray) {
-  if (outArray == NULL)
-    return false;
-  *outArray = NULL;
-
-  if (GetSlotType(vm, listSlot) != vLIST) {
-    SetRuntimeError(vm, "java.create array expects a Saynaa List.");
-    return false;
-  }
-
-  Handle* listHandle = GetSlotHandle(vm, listSlot);
-  if (listHandle == NULL)
-    return false;
-
-  List* list = (List*) AS_OBJ(listHandle->value);
-  releaseHandle(vm, listHandle);
-
-  jclass classClass = (*env)->FindClass(env, "java/lang/Class");
-  jmethodID mGetComponentType = (*env)->GetMethodID(env, classClass, "getComponentType", "()Ljava/lang/Class;");
-  (*env)->DeleteLocalRef(env, classClass);
-  if (mGetComponentType == NULL) {
-    SetRuntimeError(vm, "Failed to resolve Class.getComponentType.");
-    return false;
-  }
-
-  jobject componentType = (*env)->CallObjectMethod(env, classObj, mGetComponentType);
-  if ((*env)->ExceptionCheck(env)) {
-    throw_if_exception(vm, env, "Class.getComponentType failed");
-    return false;
-  }
-  if (componentType == NULL) {
-    SetRuntimeError(vm, "Failed to resolve array component type.");
-    return false;
-  }
-
-  jclass arrayClass = (*env)->FindClass(env, "java/lang/reflect/Array");
-  if (arrayClass == NULL) {
-    (*env)->DeleteLocalRef(env, componentType);
-    return false;
-  }
-
-  jmethodID mNewInstance = (*env)->GetStaticMethodID(
-      env, arrayClass, "newInstance", "(Ljava/lang/Class;I)Ljava/lang/Object;");
-  jmethodID mSet = (*env)->GetStaticMethodID(env, arrayClass, "set", "(Ljava/lang/Object;ILjava/lang/Object;)V");
-  if (mNewInstance == NULL || mSet == NULL) {
-    (*env)->DeleteLocalRef(env, arrayClass);
-    (*env)->DeleteLocalRef(env, componentType);
-    SetRuntimeError(vm, "Failed to resolve Array.newInstance/set.");
-    return false;
-  }
-
-  jint size = (jint) list->elements.count;
-  jobject arrayObj = (*env)->CallStaticObjectMethod(env, arrayClass, mNewInstance, componentType, size);
-  if ((*env)->ExceptionCheck(env) || arrayObj == NULL) {
-    if ((*env)->ExceptionCheck(env))
-      throw_if_exception(vm, env, "Array.newInstance failed");
-    (*env)->DeleteLocalRef(env, arrayClass);
-    (*env)->DeleteLocalRef(env, componentType);
-    return false;
-  }
-
-  reserveSlots(vm, listSlot + 2);
-  int elemSlot = listSlot + 1;
-  for (jint i = 0; i < size; i++) {
-    Handle* elemHandle = vmNewHandle(vm, list->elements.data[i]);
-    if (elemHandle == NULL)
-      continue;
-    setSlotHandle(vm, elemSlot, elemHandle);
-    jobject elemObj = slot_to_java(env, vm, bridge, elemSlot);
-    releaseHandle(vm, elemHandle);
-
-    (*env)->CallStaticVoidMethod(env, arrayClass, mSet, arrayObj, i, elemObj);
-    if ((*env)->ExceptionCheck(env)) {
-      if (elemObj != NULL)
-        (*env)->DeleteLocalRef(env, elemObj);
-      (*env)->DeleteLocalRef(env, arrayObj);
-      (*env)->DeleteLocalRef(env, arrayClass);
-      (*env)->DeleteLocalRef(env, componentType);
-      throw_if_exception(vm, env, "Array.set failed");
-      return false;
-    }
-
-    if (elemObj != NULL)
-      (*env)->DeleteLocalRef(env, elemObj);
-  }
-
-  (*env)->DeleteLocalRef(env, arrayClass);
-  (*env)->DeleteLocalRef(env, componentType);
-  *outArray = arrayObj;
-  return true;
-}
-
-static bool populate_java_list(JNIEnv* env, VM* vm, BridgeState* bridge, jobject target, int listSlot) {
-  if (GetSlotType(vm, listSlot) != vLIST)
-    return true;
-
-  Handle* listHandle = GetSlotHandle(vm, listSlot);
-  if (listHandle == NULL)
-    return false;
-  List* list = (List*) AS_OBJ(listHandle->value);
-  releaseHandle(vm, listHandle);
-
-  jclass targetClass = (*env)->GetObjectClass(env, target);
-  jmethodID mAdd = (*env)->GetMethodID(env, targetClass, "add", "(Ljava/lang/Object;)Z");
-  if (mAdd == NULL) {
-    (*env)->DeleteLocalRef(env, targetClass);
-    SetRuntimeError(vm, "java.create list missing add(Object).");
-    return false;
-  }
-
-  reserveSlots(vm, listSlot + 2);
-  int elemSlot = listSlot + 1;
-  for (uint32_t i = 0; i < list->elements.count; i++) {
-    Handle* elemHandle = vmNewHandle(vm, list->elements.data[i]);
-    if (elemHandle == NULL)
-      continue;
-    setSlotHandle(vm, elemSlot, elemHandle);
-    jobject elemObj = slot_to_java(env, vm, bridge, elemSlot);
-    releaseHandle(vm, elemHandle);
-
-    (*env)->CallBooleanMethod(env, target, mAdd, elemObj);
-    if ((*env)->ExceptionCheck(env)) {
-      if (elemObj != NULL)
-        (*env)->DeleteLocalRef(env, elemObj);
-      (*env)->DeleteLocalRef(env, targetClass);
-      throw_if_exception(vm, env, "java.create list add failed");
-      return false;
-    }
-
-    if (elemObj != NULL)
-      (*env)->DeleteLocalRef(env, elemObj);
-  }
-
-  (*env)->DeleteLocalRef(env, targetClass);
-  return true;
-}
-
-static bool populate_java_map(JNIEnv* env, VM* vm, BridgeState* bridge, jobject target, int mapSlot) {
-  if (GetSlotType(vm, mapSlot) != vMAP)
-    return true;
-
-  Handle* mapHandle = GetSlotHandle(vm, mapSlot);
-  if (mapHandle == NULL)
-    return false;
-  Map* map = (Map*) AS_OBJ(mapHandle->value);
-  releaseHandle(vm, mapHandle);
-
-  jclass targetClass = (*env)->GetObjectClass(env, target);
-  jmethodID mPut = (*env)->GetMethodID(
-      env, targetClass, "put", "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;");
-  if (mPut == NULL) {
-    (*env)->DeleteLocalRef(env, targetClass);
-    SetRuntimeError(vm, "java.create map missing put(Object,Object).");
-    return false;
-  }
-
-  reserveSlots(vm, mapSlot + 3);
-  int keySlot = mapSlot + 1;
-  int valueSlot = mapSlot + 2;
-  for (uint32_t i = 0; i < map->capacity; i++) {
-    MapEntry* entry = &map->entries[i];
-    if (IS_UNDEF(entry->key))
-      continue;
-
-    Handle* keyHandle = vmNewHandle(vm, entry->key);
-    Handle* valueHandle = vmNewHandle(vm, entry->value);
-    if (keyHandle == NULL || valueHandle == NULL) {
-      if (keyHandle != NULL)
-        releaseHandle(vm, keyHandle);
-      if (valueHandle != NULL)
-        releaseHandle(vm, valueHandle);
-      continue;
-    }
-
-    setSlotHandle(vm, keySlot, keyHandle);
-    setSlotHandle(vm, valueSlot, valueHandle);
-    jobject keyObj = slot_to_java(env, vm, bridge, keySlot);
-    jobject valueObj = slot_to_java(env, vm, bridge, valueSlot);
-    releaseHandle(vm, keyHandle);
-    releaseHandle(vm, valueHandle);
-
-    (*env)->CallObjectMethod(env, target, mPut, keyObj, valueObj);
-    if ((*env)->ExceptionCheck(env)) {
-      if (keyObj != NULL)
-        (*env)->DeleteLocalRef(env, keyObj);
-      if (valueObj != NULL)
-        (*env)->DeleteLocalRef(env, valueObj);
-      (*env)->DeleteLocalRef(env, targetClass);
-      throw_if_exception(vm, env, "java.create map put failed");
-      return false;
-    }
-
-    if (keyObj != NULL)
-      (*env)->DeleteLocalRef(env, keyObj);
-    if (valueObj != NULL)
-      (*env)->DeleteLocalRef(env, valueObj);
-  }
-
-  (*env)->DeleteLocalRef(env, targetClass);
-  return true;
-}
-
-
-
-
-// Resolve interface slot into Java class name string expected by JavaBridge APIs.
-// Accepts either:
-// - string class name: "android.view.View$OnClickListener"
-// - Java class object wrapper: bind("android.view.View$OnClickListener")
-jstring resolve_proxy_interface_name(
-    VM* vm, JNIEnv* env, BridgeState* bridge, int interfaceSlot, const char* errorPrefix) {
-  VarType interfaceType = GetSlotType(vm, interfaceSlot);
-  if (interfaceType == vSTRING) {
-    const char* interfaceName = GetSlotString(vm, interfaceSlot, NULL);
-    char* resolvedName = NULL;
-    jobject cls = bridge_find_class(env, vm, bridge, interfaceName, true, &resolvedName);
-    if (VM_HAS_ERROR(vm))
-      return NULL;
-
-    if (cls != NULL) {
-      if (cls != NULL)
-        (*env)->DeleteLocalRef(env, cls);
-      jstring result = (*env)->NewStringUTF(env, resolvedName == NULL ? interfaceName : resolvedName);
-      if (resolvedName != NULL)
-        free(resolvedName);
-      return result;
-    }
-
-    if (resolvedName != NULL)
-      free(resolvedName);
-    return (*env)->NewStringUTF(env, interfaceName == NULL ? "" : interfaceName);
-  }
-
-  if (interfaceType != vPOINTER) {
-    SetRuntimeError(vm, "createProxy interface must be class object or string.");
-    return NULL;
-  }
-
-  jobject ifaceObj = slot_to_java(env, vm, bridge, interfaceSlot);
-  if (ifaceObj == NULL)
-    return NULL;
-
-  jstring classNameObj = get_java_object_name(
-      env, vm, bridge, ifaceObj, errorPrefix, "createProxy failed to resolve interface name.");
-  (*env)->DeleteLocalRef(env, ifaceObj);
-  if (classNameObj == NULL)
-    return NULL;
-
-  return classNameObj;
 }
 
 bool register_java_wrapper_classes(VM* vm) {

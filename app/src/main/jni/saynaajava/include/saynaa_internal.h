@@ -102,7 +102,6 @@ typedef struct JavaExport {
 extern BridgeState* bridge_from_vm(VM* vm);
 extern void throw_if_exception(VM* vm, JNIEnv* env, const char* prefix);
 extern char* str_dup_c(const char* s);
-extern char* massage_java_classname(const char* name);
 extern Module* current_module_from_vm(VM* vm);
 extern JNIEnv* env_from_jvm(JavaVM* jvm);
 extern JavaRef* make_java_ref(JNIEnv* env, JavaVM* jvm, jobject obj);
@@ -153,15 +152,14 @@ extern bool invoke_registered_callback_from_slots(JNIEnv* env, VM* vm, BridgeSta
 extern jobject create_native_callback_proxy(JNIEnv* env, VM* vm, BridgeState* bridge,
     jstring jInterface, const char* methodName, int callbackId);
 extern void release_bridge_handle(VM* vm, Handle** handlePtr);
-extern bool object_to_slot(JNIEnv* env, VM* vm, BridgeState* bridge, int startSlot,
-    jobject object, const char* wrapErrorMessage);
+extern bool object_to_slot(JNIEnv* env, VM* vm, BridgeState* bridge, int startSlot, jobject object,
+    const char* wrapErrorMessage);
 
 extern void java_ref_destructor(void* ptr);
 extern JavaRef* clone_java_ref(JNIEnv* env, JavaRef* src);
 extern bool create_java_method_instance(
     VM* vm, JavaRef* target_ref, const char* method_name, bool is_static, int outSlot);
 extern jobjectArray make_args_array(JNIEnv* env, VM* vm, BridgeState* bridge, int startSlot, int argc);
-extern bool wrap_bridge_global(VM* vm, jobject globalRef, int outSlot);
 extern jstring get_java_object_name(JNIEnv* env, VM* vm, BridgeState* bridge, jobject target,
     const char* errorPrefix, const char* nullMessage);
 extern Result saynaa_run_in_main_module(VM* vm, const char* source, const char* path_label);

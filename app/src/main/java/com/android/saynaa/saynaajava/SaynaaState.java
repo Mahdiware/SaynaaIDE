@@ -49,13 +49,6 @@ public class SaynaaState {
     return saynaa.runString(source);
   }
 
-  public synchronized void invokeCallback(int callbackId, Object arg0) throws SaynaaException {
-    if (isClosed()) {
-      throw new SaynaaException("SaynaaState is closed.");
-    }
-    saynaa.invokeCallback(callbackId, arg0);
-  }
-
   public synchronized void invokeCallbackMethod(int callbackId, String methodName, Object[] args)
       throws SaynaaException {
     if (isClosed()) {

@@ -2,6 +2,9 @@
 #include "saynaa_internal.h"
 #include "saynaa_jni.h"
 
+// Macro to access a slot in the fiber's return array
+#define SLOT(n) (vm->fiber->ret[n])
+
 static Result run_string_pcall(VM* vm, const char* code) {
   if (vm == NULL || code == NULL)
     return RESULT_RUNTIME_ERROR;
@@ -156,15 +159,24 @@ JNIEXPORT jobject JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1getM
   if (module == NULL)
     return NULL;
 
-  reserveSlots(vm, 1);
   Handle* handle = vmNewHandle(vm, VAR_OBJ(module));
   if (handle == NULL)
     return NULL;
 
-  setSlotHandle(vm, 0, handle);
-  jobject result = slot_to_java(env, vm, bridge, 0);
+  int slot = nextSlot(vm, true);
+  setSlotHandle(vm, slot, handle);
+  jobject result = slot_to_java(env, vm, bridge, slot);
   releaseHandle(vm, handle);
   return result;
+}
+
+// saynaa_getSlotCount
+JNIEXPORT jint JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1getSlotCount(JNIEnv* env, jobject thiz) {
+  VM* vm = vm_from_saynaa(env, thiz);
+  if (vm == NULL)
+    return 0;
+
+  return (jint) (vm->fiber->sp - vm->fiber->ret);
 }
 
 JNIEXPORT jobject JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1pcall(
@@ -212,12 +224,16 @@ JNIEXPORT jobject JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1pcal
 
   // ===== PREPARE CALL =====
   reserveSlots(vm, argc + 1);
-  vm->fiber->ret[0] = module->globals.data[fnIndex];
+
+  int tempslot1 = nextSlot(vm, true);
+  int slots = allocSlot(vm, argc + 1);
+
+  vm->fiber->ret[tempslot1] = module->globals.data[fnIndex];
 
   for (int i = 0; i < argc; i++) {
     jobject arg = (*env)->GetObjectArrayElement(env, args, i);
 
-    if (!object_to_slot(env, vm, bridge, i + 1, arg, "Failed to wrap Java argument object.")) {
+    if (!object_to_slot(env, vm, bridge, i + slots, arg, "Failed to wrap Java argument object.")) {
       (*env)->DeleteLocalRef(env, arg);
       success = JNI_FALSE;
       message = "Argument conversion failed";
@@ -228,7 +244,7 @@ JNIEXPORT jobject JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1pcal
   }
 
   // ===== EXECUTE =====
-  if (!CallFunction(vm, 0, argc, 1, 0)) {
+  if (!CallFunction(vm, tempslot1, argc, slots, tempslot1)) {
     success = JNI_FALSE;
     message = "CallFunction failed";
     goto L_cleanup;
@@ -248,7 +264,7 @@ JNIEXPORT jobject JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1pcal
       vm->fiber->error = NULL;
     }
   } else {
-    resultValue = slot_to_java(env, vm, bridge, 0);
+    resultValue = slot_to_java(env, vm, bridge, tempslot1);
     if (VM_HAS_ERROR(vm)) {
       success = JNI_FALSE;
       message = "Return value conversion failed";
@@ -311,12 +327,14 @@ JNIEXPORT jobject JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1getG
     return NULL;
 
   reserveSlots(vm, 2);
+  int slot1 = nextSlot(vm, true);
+
   Handle* handle = vmNewHandle(vm, module->globals.data[idx]);
   if (handle == NULL)
     return NULL;
 
-  setSlotHandle(vm, 1, handle);
-  jobject resultValue = slot_to_java(env, vm, bridge, 1);
+  setSlotHandle(vm, slot1, handle);
+  jobject resultValue = slot_to_java(env, vm, bridge, slot1);
   releaseHandle(vm, handle);
   return resultValue;
 }
@@ -366,8 +384,10 @@ JNIEXPORT jboolean JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1cal
     needed = 1;
   reserveSlots(vm, needed);
 
-  vm->fiber->ret[0] = module->globals.data[functionId];
-  if (!CallFunction(vm, 0, (int) argCount, (int) argStart, (int) retSlot))
+  int slot1 = nextSlot(vm, true);
+
+  vm->fiber->ret[slot1] = module->globals.data[functionId];
+  if (!CallFunction(vm, slot1, (int) argCount, (int) argStart, (int) retSlot))
     return JNI_FALSE;
   return JNI_TRUE;
 }
@@ -393,7 +413,9 @@ JNIEXPORT jboolean JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1set
   }
 
   reserveSlots(vm, 2);
-  if (!object_to_slot(env, vm, bridge, 1, value, "Failed to wrap Java value object.")) {
+  int slot1 = nextSlot(vm, true);
+
+  if (!object_to_slot(env, vm, bridge, slot1, value, "Failed to wrap Java value object.")) {
     (*env)->ReleaseStringUTFChars(env, name, key);
     return JNI_FALSE;
   }
@@ -406,7 +428,7 @@ JNIEXPORT jboolean JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1set
     bridge->activity = (*env)->NewGlobalRef(env, value);
   }
 
-  Handle* handle = GetSlotHandle(vm, 1);
+  Handle* handle = GetSlotHandle(vm, slot1);
   if (handle == NULL) {
     (*env)->ReleaseStringUTFChars(env, name, key);
     return JNI_FALSE;
@@ -508,7 +530,6 @@ JNIEXPORT void JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1setSlot
   (*env)->ReleaseStringUTFChars(env, value, text);
 }
 
-// Todo: saynaa_setSlotHandle(int slot, int slot);
 JNIEXPORT void JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1setSlotHandle(
     JNIEnv* env, jobject thiz, jint slot, jint handleId) {
   VM* vm = vm_from_saynaa(env, thiz);
@@ -531,6 +552,38 @@ JNIEXPORT void JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1newList
   NewList(vm, slot);
 }
 
+JNIEXPORT jint JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1nextSlot(JNIEnv* env, jobject thiz) {
+  VM* vm = vm_from_saynaa(env, thiz);
+  if (vm == NULL)
+    return -1;
+  int slot = nextSlot(vm, false);
+  if (slot < 0)
+    return -1;
+  return slot;
+}
+
+JNIEXPORT jint JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1allocSlot(
+    JNIEnv* env, jobject thiz, jint count) {
+  VM* vm = vm_from_saynaa(env, thiz);
+  if (vm == NULL)
+    return -1;
+  if (count <= 0)
+    return -1;
+  int slot = allocSlot(vm, count);
+  if (slot < 0)
+    return -1;
+  return slot;
+}
+
+JNIEXPORT void JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1freeSlot(
+    JNIEnv* env, jobject thiz, jint slot, jint count) {
+  VM* vm = vm_from_saynaa(env, thiz);
+  if (vm == NULL)
+    return;
+
+  freeSlot(vm, slot, count);
+}
+
 JNIEXPORT void JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1newMap(
     JNIEnv* env, jobject thiz, jint slot) {
   VM* vm = vm_from_saynaa(env, thiz);
@@ -538,6 +591,8 @@ JNIEXPORT void JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1newMap(
     return;
   reserveSlots(vm, slot + 1);
   NewMap(vm, slot);
+
+  LOGI("saynaa_newMap called with Slot=%d, type=%d", slot, GetSlotType(vm, slot));
 }
 
 JNIEXPORT jobject JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1newModule(
@@ -556,8 +611,9 @@ JNIEXPORT jobject JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1newM
     return NULL;
 
   registerModule(vm, module);
-  setSlotHandle(vm, 0, module);
-  jobject result = slot_to_java(env, vm, bridge, 0);
+  int slot = nextSlot(vm, true);
+  setSlotHandle(vm, slot, module);
+  jobject result = slot_to_java(env, vm, bridge, slot);
 
   // TODO: i think this will cause a leak,
   // we need to track module handles and release them when the module is GC'd in java
@@ -621,12 +677,14 @@ JNIEXPORT jboolean JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1mod
   }
 
   reserveSlots(vm, moduleSlot + 2);
-  if (!object_to_slot(env, vm, bridge, moduleSlot + 1, value, "Failed to wrap Java value object.")) {
+  int slot1 = nextSlot(vm, true);
+
+  if (!object_to_slot(env, vm, bridge, slot1, value, "Failed to wrap Java value object.")) {
     (*env)->ReleaseStringUTFChars(env, name, key);
     return JNI_FALSE;
   }
 
-  Handle* valueHandle = GetSlotHandle(vm, moduleSlot + 1);
+  Handle* valueHandle = GetSlotHandle(vm, slot1);
   if (valueHandle == NULL) {
     (*env)->ReleaseStringUTFChars(env, name, key);
     return JNI_FALSE;
@@ -690,8 +748,12 @@ JNIEXPORT jboolean JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1lis
   VM* vm = vm_from_saynaa(env, thiz);
   if (vm == NULL)
     return JNI_FALSE;
-  reserveSlots(vm, listSlot + 1);
-  reserveSlots(vm, valueSlot + 1);
+
+  int maxSlot = listSlot;
+  if (valueSlot > maxSlot)
+    maxSlot = valueSlot;
+  reserveSlots(vm, maxSlot + 1);
+
   return ListInsert(vm, listSlot, index, valueSlot) ? JNI_TRUE : JNI_FALSE;
 }
 
@@ -706,6 +768,8 @@ JNIEXPORT jboolean JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1map
   if (mapSlot < 0 || keySlot < 0 || valueSlot < 0) {
     return JNI_FALSE;
   }
+
+  LOGI("saynaa_mapSet called with Slot=%d, type=%s", mapSlot, varTypeName(SLOT(mapSlot)));
 
   // Compute required size ONCE
   int maxSlot = mapSlot;
@@ -819,39 +883,6 @@ JNIEXPORT jboolean JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1bin
   return JNI_TRUE;
 }
 
-/*
-bool create_java_method_instance(VM* vm, JavaRef* target, const char* method_name, bool is_static, int outSlot) {
-  BridgeState* bridge = bridge_from_vm(vm);
-  if (bridge != NULL && bridge->clsJavaMethod == NULL) {
-    if (!ensure_wrapper_classes(vm)) {
-      if (target != NULL)
-        java_ref_destructor(target);
-      return false;
-    }
-  }
-  if (bridge == NULL || bridge->clsJavaMethod == NULL || target == NULL || method_name == NULL) {
-    SetRuntimeError(vm, "Internal error creating JavaMethod instance.");
-    if (target != NULL)
-      java_ref_destructor(target);
-    return false;
-  }
-
-  reserveSlots(vm, 6);
-  setSlotHandle(vm, 1, bridge->clsJavaMethod);
-  setSlotPointer(vm, 2, target, NULL);
-  setSlotString(vm, 3, method_name);
-  setSlotBool(vm, 4, is_static);
-
-  if (!NewInstance(vm, 1, outSlot, 3, 2)) {
-    java_ref_destructor(target);
-    return false;
-  }
-
-  return true;
-}
-
-*/
-
 JNIEXPORT jint JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1getSlotType(
     JNIEnv* env, jobject thiz, jint slot) {
   VM* vm = vm_from_saynaa(env, thiz);
@@ -910,23 +941,34 @@ JNIEXPORT jobject JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1getS
   if (type != vINSTANCE || bridge == NULL)
     return NULL;
 
-  int clsSlot = slot + 4;
-  int objSlot = slot + 5;
-  int methodSlot = slot + 6;
+  int clsSlot = slot + 5;
+  int objSlot = slot + 10;
+  int methodSlot = slot + 7;
   reserveSlots(vm, methodSlot + 1);
+
+  int slot1 = clsSlot;
+  int slot2 = objSlot;
+  int slot3 = methodSlot;
+
+  // int slot1 = nextSlot(vm, false);
+  // int slot2 = nextSlot(vm, false);
+  // int slot3 = nextSlot(vm, false);
+
+  LOGI("saynaa_getSlotJavaObject called with Slot=%d, type=%s", slot, varTypeName(SLOT(slot)));
+  LOGI("saynaa_getSlotJavaObject: clsSlot=%d, objSlot=%d, methodSlot=%d", slot1, slot2, slot3);
 
   bool isClass = false, isObject = false, isMethod = false;
   if (bridge->clsJavaClass != NULL) {
-    setSlotHandle(vm, clsSlot, bridge->clsJavaClass);
-    IsSlotInstanceOf(vm, slot, clsSlot, &isClass);
+    setSlotHandle(vm, slot1, bridge->clsJavaClass);
+    IsSlotInstanceOf(vm, slot, slot1, &isClass);
   }
   if (bridge->clsJavaObject != NULL) {
-    setSlotHandle(vm, objSlot, bridge->clsJavaObject);
-    IsSlotInstanceOf(vm, slot, objSlot, &isObject);
+    setSlotHandle(vm, slot2, bridge->clsJavaObject);
+    IsSlotInstanceOf(vm, slot, slot2, &isObject);
   }
   if (bridge->clsJavaMethod != NULL) {
-    setSlotHandle(vm, methodSlot, bridge->clsJavaMethod);
-    IsSlotInstanceOf(vm, slot, methodSlot, &isMethod);
+    setSlotHandle(vm, slot3, bridge->clsJavaMethod);
+    IsSlotInstanceOf(vm, slot, slot3, &isMethod);
   }
 
   if (isClass) {
@@ -1011,9 +1053,14 @@ JNIEXPORT jboolean JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1map
   VM* vm = vm_from_saynaa(env, thiz);
   if (vm == NULL || entryIndex < 0)
     return JNI_FALSE;
-  reserveSlots(vm, valueSlot + 1);
-  reserveSlots(vm, keySlot + 1);
-  reserveSlots(vm, mapSlot + 1);
+
+  int maxSlot = mapSlot;
+  if (keySlot > maxSlot)
+    maxSlot = keySlot;
+  if (valueSlot > maxSlot)
+    maxSlot = valueSlot;
+  reserveSlots(vm, maxSlot + 1);
+
   if (GetSlotType(vm, mapSlot) != vMAP)
     return JNI_FALSE;
   Handle* handle = GetSlotHandle(vm, mapSlot);
@@ -1091,46 +1138,6 @@ JNIEXPORT jint JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1doStrin
   Result ret = run_string_pcall(vm, code);
   (*env)->ReleaseStringUTFChars(env, codeString, code);
   return (jint) ret;
-}
-
-JNIEXPORT void JNICALL Java_com_android_saynaa_saynaajava_Saynaa_invokeCallbackNative(
-    JNIEnv* env, jobject thiz, jint callbackId, jobject arg0) {
-  VM* vm = vm_from_saynaa(env, thiz);
-  if (vm == NULL || callbackId <= 0)
-    return;
-
-  BridgeState* bridge = bridge_from_vm(vm);
-  if (bridge == NULL)
-    return;
-
-  CallbackEntry* entry = find_callback(vm, (int) callbackId);
-  if (entry == NULL)
-    return;
-
-  if (!ensure_wrapper_classes(vm))
-    return;
-
-  if (vm->fiber != NULL)
-    vm->fiber->error = NULL;
-
-  jclass objClass = (*env)->FindClass(env, "java/lang/Object");
-  jobjectArray args = (*env)->NewObjectArray(env, arg0 == NULL ? 0 : 1, objClass, NULL);
-  (*env)->DeleteLocalRef(env, objClass);
-  if (arg0 != NULL)
-    (*env)->SetObjectArrayElement(env, args, 0, arg0);
-
-  bool ok = invoke_registered_callback(env, vm, bridge, entry, NULL, args, NULL);
-  if (args != NULL)
-    (*env)->DeleteLocalRef(env, args);
-
-  if (!ok) {
-    const char* err = (vm->fiber != NULL && vm->fiber->error != NULL) ? vm->fiber->error->data : "<unknown>";
-    LOGE("invokeCallbackNative failed for callbackId=%d err=%s", (int) callbackId, err);
-    if (vm->fiber != NULL)
-      vm->fiber->error = NULL;
-  } else {
-    LOGI("invokeCallbackNative succeeded for callbackId=%d", (int) callbackId);
-  }
 }
 
 JNIEXPORT void JNICALL Java_com_android_saynaa_saynaajava_Saynaa_invokeCallbackMethodNative(
@@ -1213,7 +1220,7 @@ JNIEXPORT jobject JNICALL Java_com_android_saynaa_saynaajava_Saynaa_invokeCallba
   return result;
 }
 
-JNIEXPORT jobject JNICALL Java_com_android_saynaa_saynaajava_Saynaa_invokeCallbackMethodWithResultFromSlotsNative(
+JNIEXPORT jobject JNICALL Java_com_android_saynaa_saynaajava_Saynaa_invokeCallbackWithResultFromSlots(
     JNIEnv* env, jobject thiz, jint callbackId, jstring methodName, jint argStart, jint argCount) {
   VM* vm = vm_from_saynaa(env, thiz);
   if (vm == NULL || callbackId <= 0)
@@ -1249,7 +1256,7 @@ JNIEXPORT jobject JNICALL Java_com_android_saynaa_saynaajava_Saynaa_invokeCallba
 
   if (!ok) {
     const char* err = (vm->fiber != NULL && vm->fiber->error != NULL) ? vm->fiber->error->data : "<unknown>";
-    LOGE("invokeCallbackMethodWithResultFromSlotsNative failed for callbackId=%d err=%s", (int) callbackId, err);
+    LOGE("invokeCallbackWithResultFromSlots failed for callbackId=%d err=%s", (int) callbackId, err);
     if (vm->fiber != NULL)
       vm->fiber->error = NULL;
     return NULL;

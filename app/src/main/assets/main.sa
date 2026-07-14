@@ -8,32 +8,16 @@ import "com.android.saynaa.adapter.*"
 import "android.content.*"
 import "android.net.*"
 import "android.provider.Settings"
+
 function toast(msg)
 	Toast.makeText(activity, msg, Toast.LENGTH_SHORT).show()
 end
 
-strt = java.new("java.lang.String", "Hello OUT\n")
-bytes = java.call(strt, "getBytes")
-debug("bytes: ${bytes}")
-
-testing = java.testing()
-debug("testing: type: ${type(testing)}, value: ${java.tostring(testing)}")
-
-if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R and !Environment.isExternalStorageManager())
-  intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION)
-  intent.setData(Uri.parse("package:" + activity.getPackageName()))
-  activity.startActivity(intent)
-end
-
-function onRequestPermissionsResult(requestCode, permissions, grantResults)
-  if requestCode == 1001 then
-    if grantResults.length > 0 and grantResults[0] == PackageManager.PERMISSION_GRANTED then
-      toast("Storage permissions granted")
-    else
-      toast("Storage permissions denied")
-    end
-  end
-end
+# if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R and !Environment.isExternalStorageManager())
+#   intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION)
+#   intent.setData(Uri.parse("package:" + activity.getPackageName()))
+#   activity.startActivity(intent)
+# end
 
 function assert_pcall(result, label)
 	ok = result[0]
@@ -55,12 +39,6 @@ import "com.saynaa.dextest.Hello"
 msg = Hello.hello()
 assert(msg == "Hello from dex", "Dex method return mismatch")
 
-// create, length
-testList = java.new('java.util.ArrayList')
-testList.add('a')
-testList.add('b')
-assert(java.length(testList) == 2, 'java.length failed')
-
 # testing getField and setField
 result = pcall(function()
 	pt = java.new('android.graphics.Point', 1, 2)
@@ -73,7 +51,6 @@ assert(result[1] == 7, 'java.getField x mismatch')
 
 # testing call
 result = java.call(java.bindClass('java.lang.Math'), 'abs', -10)
-toast("Math.abs(-10) = $result")
 assert(result == 10, 'Math.abs failed')
 
 # testing call
@@ -125,28 +102,35 @@ DemoLayout = {
   }
 }
 
-# FIXME: SaynaaAdapter don't work now, need to fix the adapter first
-# AdapterData = [
-#   { text: 'Mahdi' },
-#   { text: 'Ahmed' }
-# ]
+AdapterData = [
+  { text: 'Mahdi', icon: 'image1.png' },
+  { text: 'Ahmed', icon: 'image2.png' },
+  { text: 'Ali', icon: 'image3.png' },
+]
 
-# AdapterItem = {
-#   LinearLayout,
-#   orientation: 'horizontal',
-#   padding: '8dp',
-#   layout_width: 'match_parent',
-#   layout_height: 'wrap_content',
-
-#   {
-#     TextView,
-#     id: 'text',
-#     textSize: '16sp',
-#     textColor: '#111111',
-#     layout_width: 'wrap_content',
-#     layout_height: 'wrap_content'
-#   }
-# }
+AdapterItem = {
+  LinearLayout,
+  orientation: 'horizontal',
+  padding: '8dp',
+  layout_width: 'match_parent',
+  layout_height: 'wrap_content',
+  {
+    ImageView,
+    id: "icon",
+    layout_width: "32dp",
+    layout_height: "32dp",
+    layout_marginRight: "12dp",
+    scaleType: "fitXY"
+  },
+  {
+    TextView,
+    id: 'text',
+    textSize: '16sp',
+    textColor: '#111111',
+    layout_width: 'wrap_content',
+    layout_height: 'wrap_content'
+  }
+}
 
 assert(activity != null, 'activity is null')
 
@@ -167,11 +151,21 @@ result = load("${java.saynaadir}/loadtest.sa")
 debug("loadtest: ${result}")
 
 function onCreate(arg1)
-  root = loadlayout.loadlayout(activity, DemoLayout)
+  debug("onCreate ${os.system("echo $DemoLayout >> ${java.saynaadir}/hi")}")
+  root = loadlayout(activity, DemoLayout)
+  
   assert(root != null, 'loadlayout returned null')
   activity.setContentView(root)
-  # adapter = SaynaaAdapter(activity, AdapterData, AdapterItem)
-  # DemoList.setAdapter(adapter)
+  adapter = SaynaaAdapter(activity, AdapterItem, AdapterData)
+  DemoList.setAdapter(adapter)
+
+  DemoList.setOnItemClickListener(AdapterView.OnItemClickListener({
+    onItemClick: function(parent, view, position, id)
+      toast("clicked: $position")
+      debug("Item clicked at position: $position, parent: $parent, view: $view, id: $id")
+    end
+  }))
+
   nextpage.setOnClickListener(View.OnClickListener({
     onClick: function(v)
       print('next page button clicked')

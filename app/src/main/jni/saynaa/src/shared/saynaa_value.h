@@ -312,11 +312,11 @@ typedef struct {
 struct Map {
   Object _super;
 
-  uint32_t capacity; //< Allocated entry's count.
-  uint32_t count;    //< Number of entries in the map.
-  MapEntry* entries; //< Pointer to the contiguous array.
+  uint32_t capacity;    //< Allocated entry's count.
+  uint32_t count;       //< Number of entries in the map.
+  MapEntry* entries;    //< Pointer to the contiguous array.
   VarBuffer order_keys; //< Keys in insertion order.
-  int64_t next_index; //< Next auto key for value-only entries.
+  int64_t next_index;   //< Next auto key for value-only entries.
 };
 
 struct Range {
@@ -532,49 +532,55 @@ typedef enum {
 struct Fiber {
   Object _super;
 
+  // Current execution state of the fiber.
   FiberState state;
 
-  // The root closure of the fiber.
+  // Entry closure executed by this fiber.
   Closure* closure;
 
-  // The stack of the execution holding locals and temps. A heap will be
-  // allocated and grow as needed.
+  // Stack containing local variables and temporary values.
+  // The storage is heap allocated and grows as needed.
   Var* stack;
-  int stack_size; //< Capacity of the allocated stack.
+  int stack_size; //< Capacity of the stack in number of Var entries.
 
-  // The stack pointer (%rsp) pointing to the stack top.
+  // Stack pointer (%rsp). Points one past the top-most value.
   Var* sp;
 
-  // Heap allocated array of call frames will grow as needed.
+  // Next available temporary slot reserved by reserveSlots().
+  // Updated by nextSlot().
+  int slot_next;
+
+  // One past the last reserved temporary slot.
+  // slot_next must never exceed slot_end.
+  int slot_end;
+
+  // Buffer of free temporary slots.
+  UintBuffer free_slots;
+
+  // Heap allocated array of call frames. Grows as needed.
   CallFrame* frames;
   int frame_capacity; //< Capacity of the frames array.
-  int frame_count;    //< Number of frame entry in frames.
+  int frame_count;    //< Number of active call frames.
 
-  // All the open upvalues will form a linked list in the fiber and the
-  // upvalues are sorted in the same order their locals in the stack. The
-  // bellow pointer is the head of those upvalues near the stack top.
+  // Linked list of open upvalues. The list is sorted by descending stack
+  // address (nearest to the stack top first).
   Upvalue* open_upvalues;
 
-  // The stack base pointer of the current frame. It'll be updated before
-  // calling a native function. (`fiber->ret` === `curr_call_frame->rbp`).
-  // Return value of the callee fiber will be passed and return value of the
-  // the function that started the fiber will also be set.
+  // Base slot of the current call frame. Before invoking a native function,
+  // this is updated to point at the current frame's base. It is also the
+  // location where the function's return value is written.
   Var* ret;
 
-  // The this pointer to of the current method. It'll be updated before
-  // calling a native method. (Because native methods doesn't have a call
-  // frame we're doing it this way). Also updated just before calling a
-  // script method, and will be captured by the next allocated callframe
-  // and reset to VAR_UNDEFINED.
+  // Receiver ('this') of the currently executing method. Native methods do
+  // not have call frames, so the VM stores it here temporarily. Script
+  // methods copy this value into their call frame before execution.
   Var thiz;
 
-  // [caller] is the caller of the fiber that was created by invoking the
-  // concurency model. Where [native] is the native fiber which
-  // started this fiber. If a native function wants to call function
-  // it needs to create a new fiber, so we keep track of both.
+  // Fiber that resumed this fiber, and the native (root) fiber that started
+  // its execution.
   Fiber *caller, *native;
 
-  // Runtime error initially NULL, heap allocated.
+  // Runtime error object, or NULL if no error has occurred.
   String* error;
 };
 

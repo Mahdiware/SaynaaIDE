@@ -43,34 +43,34 @@ DEFINE_BUFFER(Closure, Closure*)
 
 const char* saynaa_status_message(Result status) {
   switch (status) {
-    case RESULT_SUCCESS:
-      return "OK";
-    case RESULT_UNEXPECTED_EOF:
-      return "Unexpected EOF";
-    case RESULT_COMPILE_ERROR:
-      return "Compile error";
-    case RESULT_RUNTIME_ERROR:
-      return "Runtime error";
-    case RESULT_BYTECODE_INVALID_ARGUMENT:
-      return "Invalid argument";
-    case RESULT_BYTECODE_INCOMPLETE_HEADER:
-      return "Incomplete bytecode header";
-    case RESULT_BYTECODE_INVALID_MAGIC:
-      return "Invalid bytecode magic";
-    case RESULT_BYTECODE_VERSION_MISMATCH:
-      return "Incompatible bytecode version";
-    case RESULT_BYTECODE_SIZE_MISMATCH:
-      return "Bytecode size mismatch";
-    case RESULT_BYTECODE_CHECKSUM_MISMATCH:
-      return "Bytecode checksum mismatch";
-    case RESULT_BYTECODE_INVALID_FORMAT:
-      return "Invalid bytecode format";
-    case RESULT_BYTECODE_UNSUPPORTED_CONST:
-      return "Unsupported constant type";
-    case RESULT_BYTECODE_TRUNCATED:
-      return "Truncated bytecode payload";
-    case RESULT_BYTECODE_IO_ERROR:
-      return "Bytecode IO error";
+  case RESULT_SUCCESS:
+    return "OK";
+  case RESULT_UNEXPECTED_EOF:
+    return "Unexpected EOF";
+  case RESULT_COMPILE_ERROR:
+    return "Compile error";
+  case RESULT_RUNTIME_ERROR:
+    return "Runtime error";
+  case RESULT_BYTECODE_INVALID_ARGUMENT:
+    return "Invalid argument";
+  case RESULT_BYTECODE_INCOMPLETE_HEADER:
+    return "Incomplete bytecode header";
+  case RESULT_BYTECODE_INVALID_MAGIC:
+    return "Invalid bytecode magic";
+  case RESULT_BYTECODE_VERSION_MISMATCH:
+    return "Incompatible bytecode version";
+  case RESULT_BYTECODE_SIZE_MISMATCH:
+    return "Bytecode size mismatch";
+  case RESULT_BYTECODE_CHECKSUM_MISMATCH:
+    return "Bytecode checksum mismatch";
+  case RESULT_BYTECODE_INVALID_FORMAT:
+    return "Invalid bytecode format";
+  case RESULT_BYTECODE_UNSUPPORTED_CONST:
+    return "Unsupported constant type";
+  case RESULT_BYTECODE_TRUNCATED:
+    return "Truncated bytecode payload";
+  case RESULT_BYTECODE_IO_ERROR:
+    return "Bytecode IO error";
   }
   return "Unknown result";
 }
@@ -154,183 +154,159 @@ static void popMarkedObjectsInternal(Object* obj, VM* vm) {
   // TODO: trace here.
 
   switch (obj->type) {
-    case OBJ_STRING:
-      {
-        vm->bytes_allocated += sizeof(String);
-        vm->bytes_allocated += ((size_t) ((String*) obj)->capacity);
-      }
-      break;
+  case OBJ_STRING: {
+    vm->bytes_allocated += sizeof(String);
+    vm->bytes_allocated += ((size_t) ((String*) obj)->capacity);
+  } break;
 
-    case OBJ_LIST:
-      {
-        List* list = (List*) obj;
-        markVarBuffer(vm, &list->elements);
-        vm->bytes_allocated += sizeof(List);
-        vm->bytes_allocated += sizeof(Var) * list->elements.capacity;
-      }
-      break;
+  case OBJ_LIST: {
+    List* list = (List*) obj;
+    markVarBuffer(vm, &list->elements);
+    vm->bytes_allocated += sizeof(List);
+    vm->bytes_allocated += sizeof(Var) * list->elements.capacity;
+  } break;
 
-    case OBJ_MAP:
-      {
-        Map* map = (Map*) obj;
-        for (uint32_t i = 0; i < map->capacity; i++) {
-          if (IS_UNDEF(map->entries[i].key))
-            continue;
-          markValue(vm, map->entries[i].key);
-          markValue(vm, map->entries[i].value);
-        }
-        vm->bytes_allocated += sizeof(Map);
-        vm->bytes_allocated += sizeof(MapEntry) * map->capacity;
-      }
-      break;
+  case OBJ_MAP: {
+    Map* map = (Map*) obj;
+    for (uint32_t i = 0; i < map->capacity; i++) {
+      if (IS_UNDEF(map->entries[i].key))
+        continue;
+      markValue(vm, map->entries[i].key);
+      markValue(vm, map->entries[i].value);
+    }
+    vm->bytes_allocated += sizeof(Map);
+    vm->bytes_allocated += sizeof(MapEntry) * map->capacity;
+  } break;
 
-    case OBJ_RANGE:
-      {
-        vm->bytes_allocated += sizeof(Range);
-      }
-      break;
+  case OBJ_RANGE: {
+    vm->bytes_allocated += sizeof(Range);
+  } break;
 
-    case OBJ_MODULE:
-      {
-        Module* module = (Module*) obj;
-        vm->bytes_allocated += sizeof(Module);
+  case OBJ_MODULE: {
+    Module* module = (Module*) obj;
+    vm->bytes_allocated += sizeof(Module);
 
-        markObject(vm, &module->path->_super);
-        markObject(vm, &module->name->_super);
+    markObject(vm, &module->path->_super);
+    markObject(vm, &module->name->_super);
 
-        if (module->global_indices != NULL) {
-          markObject(vm, &module->global_indices->_super);
-        }
+    if (module->global_indices != NULL) {
+      markObject(vm, &module->global_indices->_super);
+    }
 
-        markVarBuffer(vm, &module->globals);
-        vm->bytes_allocated += sizeof(Var) * module->globals.capacity;
+    markVarBuffer(vm, &module->globals);
+    vm->bytes_allocated += sizeof(Var) * module->globals.capacity;
 
-        // Integer buffer has no mark call.
-        vm->bytes_allocated += sizeof(uint32_t) * module->global_names.capacity;
+    // Integer buffer has no mark call.
+    vm->bytes_allocated += sizeof(uint32_t) * module->global_names.capacity;
 
-        markVarBuffer(vm, &module->constants);
-        vm->bytes_allocated += sizeof(Var) * module->constants.capacity;
+    markVarBuffer(vm, &module->constants);
+    vm->bytes_allocated += sizeof(Var) * module->constants.capacity;
 
-        markObject(vm, &module->body->_super);
-      }
-      break;
+    markObject(vm, &module->body->_super);
+  } break;
 
-    case OBJ_FUNC:
-      {
-        Function* func = (Function*) obj;
-        vm->bytes_allocated += sizeof(Function);
+  case OBJ_FUNC: {
+    Function* func = (Function*) obj;
+    vm->bytes_allocated += sizeof(Function);
 
-        markObject(vm, &func->owner->_super);
+    markObject(vm, &func->owner->_super);
 
-        // If a garbage collection is triggered when allocating a name string
-        // for this function, it's [fn] property will be NULL.
-        if (!func->is_native && func->fn != NULL) {
-          Fn* fn = func->fn;
-          vm->bytes_allocated += sizeof(Fn);
+    // If a garbage collection is triggered when allocating a name string
+    // for this function, it's [fn] property will be NULL.
+    if (!func->is_native && func->fn != NULL) {
+      Fn* fn = func->fn;
+      vm->bytes_allocated += sizeof(Fn);
 
-          vm->bytes_allocated += sizeof(uint8_t) * fn->opcodes.capacity;
-          vm->bytes_allocated += sizeof(uint32_t) * fn->oplines.capacity;
-        }
-      }
-      break;
+      vm->bytes_allocated += sizeof(uint8_t) * fn->opcodes.capacity;
+      vm->bytes_allocated += sizeof(uint32_t) * fn->oplines.capacity;
+    }
+  } break;
 
-    case OBJ_CLOSURE:
-      {
-        Closure* closure = (Closure*) obj;
-        markObject(vm, &closure->fn->_super);
-        for (int i = 0; i < closure->fn->upvalue_count; i++) {
-          markObject(vm, &(closure->upvalues[i]->_super));
-        }
+  case OBJ_CLOSURE: {
+    Closure* closure = (Closure*) obj;
+    markObject(vm, &closure->fn->_super);
+    for (int i = 0; i < closure->fn->upvalue_count; i++) {
+      markObject(vm, &(closure->upvalues[i]->_super));
+    }
 
-        vm->bytes_allocated += sizeof(Closure);
-        vm->bytes_allocated += sizeof(Upvalue*) * closure->fn->upvalue_count;
-      }
-      break;
+    vm->bytes_allocated += sizeof(Closure);
+    vm->bytes_allocated += sizeof(Upvalue*) * closure->fn->upvalue_count;
+  } break;
 
-    case OBJ_METHOD_BIND:
-      {
-        MethodBind* mb = (MethodBind*) obj;
-        markObject(vm, &mb->method->_super);
-        markValue(vm, mb->instance);
+  case OBJ_METHOD_BIND: {
+    MethodBind* mb = (MethodBind*) obj;
+    markObject(vm, &mb->method->_super);
+    markValue(vm, mb->instance);
 
-        vm->bytes_allocated += sizeof(MethodBind);
-      }
-      break;
+    vm->bytes_allocated += sizeof(MethodBind);
+  } break;
 
-    case OBJ_UPVALUE:
-      {
-        Upvalue* upvalue = (Upvalue*) obj;
+  case OBJ_UPVALUE: {
+    Upvalue* upvalue = (Upvalue*) obj;
 
-        // We don't have to mark upvalue->ptr since the [ptr] points to a local
-        // in the stack, however we need to mark upvalue->closed incase if it's
-        // closed.
-        markValue(vm, upvalue->closed);
+    // We don't have to mark upvalue->ptr since the [ptr] points to a local
+    // in the stack, however we need to mark upvalue->closed incase if it's
+    // closed.
+    markValue(vm, upvalue->closed);
 
-        vm->bytes_allocated += sizeof(Upvalue);
-      }
-      break;
+    vm->bytes_allocated += sizeof(Upvalue);
+  } break;
 
-    case OBJ_FIBER:
-      {
-        Fiber* fiber = (Fiber*) obj;
-        vm->bytes_allocated += sizeof(Fiber);
+  case OBJ_FIBER: {
+    Fiber* fiber = (Fiber*) obj;
+    vm->bytes_allocated += sizeof(Fiber);
 
-        markObject(vm, &fiber->closure->_super);
+    markObject(vm, &fiber->closure->_super);
 
-        // Mark the stack.
-        for (Var* local = fiber->stack; local < fiber->sp; local++) {
-          markValue(vm, *local);
-        }
-        vm->bytes_allocated += sizeof(Var) * fiber->stack_size;
+    // Mark the stack.
+    for (Var* local = fiber->stack; local < fiber->sp; local++) {
+      markValue(vm, *local);
+    }
+    vm->bytes_allocated += sizeof(Var) * fiber->stack_size;
 
-        // Mark call frames.
-        for (int i = 0; i < fiber->frame_count; i++) {
-          markObject(vm, (Object*) &fiber->frames[i].closure->_super);
-          markValue(vm, fiber->frames[i].thiz);
-        }
-        vm->bytes_allocated += sizeof(CallFrame) * fiber->frame_capacity;
+    // Mark call frames.
+    for (int i = 0; i < fiber->frame_count; i++) {
+      markObject(vm, (Object*) &fiber->frames[i].closure->_super);
+      markValue(vm, fiber->frames[i].thiz);
+    }
+    vm->bytes_allocated += sizeof(CallFrame) * fiber->frame_capacity;
 
-        markObject(vm, &fiber->caller->_super);
-        markObject(vm, &fiber->native->_super);
-        markObject(vm, &fiber->error->_super);
+    markObject(vm, &fiber->caller->_super);
+    markObject(vm, &fiber->native->_super);
+    markObject(vm, &fiber->error->_super);
 
-        markValue(vm, fiber->thiz);
-      }
-      break;
+    markValue(vm, fiber->thiz);
+  } break;
 
-    case OBJ_CLASS:
-      {
-        Class* cls = (Class*) obj;
-        vm->bytes_allocated += sizeof(Class);
-        markObject(vm, &cls->owner->_super);
-        markObject(vm, &cls->name->_super);
-        if (cls->method_lookup != NULL)
-          markObject(vm, &cls->method_lookup->_super);
-        markObject(vm, &cls->static_attribs->_super);
-        // don't need to mark magic_methods, they are all in cls->methods.
+  case OBJ_CLASS: {
+    Class* cls = (Class*) obj;
+    vm->bytes_allocated += sizeof(Class);
+    markObject(vm, &cls->owner->_super);
+    markObject(vm, &cls->name->_super);
+    if (cls->method_lookup != NULL)
+      markObject(vm, &cls->method_lookup->_super);
+    markObject(vm, &cls->static_attribs->_super);
+    // don't need to mark magic_methods, they are all in cls->methods.
 
-        markClosureBuffer(vm, &cls->methods);
-        vm->bytes_allocated += sizeof(Closure) * cls->methods.capacity;
-      }
-      break;
+    markClosureBuffer(vm, &cls->methods);
+    vm->bytes_allocated += sizeof(Closure) * cls->methods.capacity;
+  } break;
 
-    case OBJ_INST:
-      {
-        Instance* inst = (Instance*) obj;
-        markObject(vm, &inst->cls->_super);
+  case OBJ_INST: {
+    Instance* inst = (Instance*) obj;
+    markObject(vm, &inst->cls->_super);
 
-        for (uint8_t i = 0; i < inst->inline_attrib_count; i++) {
-          if (inst->inline_attrib_names[i] != NULL)
-            markObject(vm, &inst->inline_attrib_names[i]->_super);
-          markValue(vm, inst->inline_attrib_values[i]);
-        }
+    for (uint8_t i = 0; i < inst->inline_attrib_count; i++) {
+      if (inst->inline_attrib_names[i] != NULL)
+        markObject(vm, &inst->inline_attrib_names[i]->_super);
+      markValue(vm, inst->inline_attrib_values[i]);
+    }
 
-        if (inst->attribs != NULL)
-          markObject(vm, &inst->attribs->_super);
+    if (inst->attribs != NULL)
+      markObject(vm, &inst->attribs->_super);
 
-        vm->bytes_allocated += sizeof(Instance);
-      }
-      break;
+    vm->bytes_allocated += sizeof(Instance);
+  } break;
   }
 }
 
@@ -470,8 +446,8 @@ Module* newModule(VM* vm) {
   return module;
 }
 
-Function* newFunction(VM* vm, const char* name, int length, Module* owner,
-                      bool is_native, const char* docstring, int* fn_index) {
+Function* newFunction(VM* vm, const char* name, int length, Module* owner, bool is_native,
+    const char* docstring, int* fn_index) {
   Function* func = ALLOCATE(vm, Function);
   memset(func, 0, sizeof(Function));
   varInitObject(&func->_super, vm, OBJ_FUNC);
@@ -514,8 +490,8 @@ Function* newFunction(VM* vm, const char* name, int length, Module* owner,
   return func;
 }
 
-Function* newFunctionRaw(VM* vm, Module* owner, String* name, String* docstring,
-                         int arity, bool is_method, int upvalue_count) {
+Function* newFunctionRaw(VM* vm, Module* owner, String* name, String* docstring, int arity,
+    bool is_method, int upvalue_count) {
   Function* func = ALLOCATE(vm, Function);
   memset(func, 0, sizeof(Function));
   varInitObject(&func->_super, vm, OBJ_FUNC);
@@ -626,6 +602,9 @@ Fiber* newFiber(VM* vm, Closure* closure) {
     fiber->frames[0].rbp = fiber->ret;
   }
 
+  UintBufferInit(&fiber->free_slots);
+  fiber->slot_end = 0;
+  fiber->slot_next = 1;
   fiber->open_upvalues = NULL;
   fiber->thiz = VAR_UNDEFINED;
 
@@ -638,8 +617,8 @@ Fiber* newFiber(VM* vm, Closure* closure) {
   return fiber;
 }
 
-Class* newClass(VM* vm, const char* name, int length, Class* super,
-                Module* module, const char* docstring, int* cls_index) {
+Class* newClass(VM* vm, const char* name, int length, Class* super, Module* module,
+    const char* docstring, int* cls_index) {
   Class* cls = ALLOCATE(vm, Class);
 
   // If the garbage collection trigged bellow while allocating for
@@ -714,8 +693,7 @@ Pointer* newPointer(VM* vm, void* native_ptr, Destructor destructor) {
   return pointer;
 }
 
-Closure* newNativeClosure(VM* vm, const char* name, nativeFn fptr, int arity,
-                          const char* docstring) {
+Closure* newNativeClosure(VM* vm, const char* name, nativeFn fptr, int arity, const char* docstring) {
   Function* fn = newFunction(vm, name, (int) strlen(name), NULL, true, docstring, NULL);
   fn->arity = arity;
   fn->native = fptr;
@@ -868,8 +846,7 @@ String* stringStrip(VM* vm, String* thiz) {
   return newStringLength(vm, start, (uint32_t) (end - start + 1));
 }
 
-static const char* _memFind(const char* haystack, uint32_t haystack_len,
-                            const char* needle, uint32_t needle_len) {
+static const char* _memFind(const char* haystack, uint32_t haystack_len, const char* needle, uint32_t needle_len) {
   if (needle_len == 0)
     return haystack;
   if (haystack_len < needle_len)
@@ -918,8 +895,7 @@ String* stringReplace(VM* vm, String* thiz, String* old, String* new_, int32_t c
   // Validate that the new string length will not overflow.
   int64_t diff = (int64_t) new_->length - (int64_t) old->length;
   uint64_t est_len = (uint64_t) thiz->length + diff * count;
-  ASSERT(est_len <= UINT32_MAX,
-         "String replacement results in length overflow.");
+  ASSERT(est_len <= UINT32_MAX, "String replacement results in length overflow.");
   uint32_t length = _MAX(thiz->length, (uint32_t) est_len);
 
   String* replaced = thiz; // Will be allocated if any match found.
@@ -1017,8 +993,7 @@ List* stringSplit(VM* vm, String* thiz, String* sep) {
   } else {
     const char* s = thiz->data; // Current position in thiz.
     do {
-      const char* match = (char*) _memmem(s, thiz->length - (s - thiz->data),
-                                          sep->data, sep->length);
+      const char* match = (char*) _memmem(s, thiz->length - (s - thiz->data), sep->data, sep->length);
 
       if (match == NULL) {
         // Add the tail string from [s] till the end. Optimize case: if
@@ -1059,16 +1034,16 @@ String* stringFormat(VM* vm, const char* fmt, ...) {
   size_t total_length = 0;
   for (const char* c = fmt; *c != '\0'; c++) {
     switch (*c) {
-      case '$':
-        total_length += strlen(va_arg(arg_list, const char*));
-        break;
+    case '$':
+      total_length += strlen(va_arg(arg_list, const char*));
+      break;
 
-      case '@':
-        total_length += va_arg(arg_list, String*)->length;
-        break;
+    case '@':
+      total_length += va_arg(arg_list, String*)->length;
+      break;
 
-      default:
-        total_length++;
+    default:
+      total_length++;
     }
   }
   va_end(arg_list);
@@ -1079,28 +1054,22 @@ String* stringFormat(VM* vm, const char* fmt, ...) {
   char* buff = result->data;
   for (const char* c = fmt; *c != '\0'; c++) {
     switch (*c) {
-      case '$':
-        {
-          const char* string = va_arg(arg_list, const char*);
-          size_t length = strlen(string);
-          memcpy(buff, string, length);
-          buff += length;
-        }
-        break;
+    case '$': {
+      const char* string = va_arg(arg_list, const char*);
+      size_t length = strlen(string);
+      memcpy(buff, string, length);
+      buff += length;
+    } break;
 
-      case '@':
-        {
-          String* string = va_arg(arg_list, String*);
-          memcpy(buff, string->data, string->length);
-          buff += string->length;
-        }
-        break;
+    case '@': {
+      String* string = va_arg(arg_list, String*);
+      memcpy(buff, string->data, string->length);
+      buff += string->length;
+    } break;
 
-      default:
-        {
-          *buff++ = *c;
-        }
-        break;
+    default: {
+      *buff++ = *c;
+    } break;
     }
   }
   va_end(arg_list);
@@ -1147,8 +1116,7 @@ void listInsert(VM* vm, List* thiz, uint32_t index, Var value) {
 
   // Shift the existing elements down.
   if (index < old_count) {
-    memmove(&thiz->elements.data[index + 1], &thiz->elements.data[index],
-            (old_count - index) * sizeof(Var));
+    memmove(&thiz->elements.data[index + 1], &thiz->elements.data[index], (old_count - index) * sizeof(Var));
   }
 
   // Insert the new element.
@@ -1167,9 +1135,8 @@ void listShrink(VM* vm, List* thiz) {
   if (new_capacity < MIN_CAPACITY)
     new_capacity = MIN_CAPACITY;
 
-  thiz->elements.data = (Var*) vmRealloc(vm, thiz->elements.data,
-                                         sizeof(Var) * thiz->elements.capacity,
-                                         sizeof(Var) * new_capacity);
+  thiz->elements.data = (Var*) vmRealloc(
+      vm, thiz->elements.data, sizeof(Var) * thiz->elements.capacity, sizeof(Var) * new_capacity);
   thiz->elements.capacity = new_capacity;
 }
 
@@ -1183,8 +1150,7 @@ Var listRemoveAt(VM* vm, List* thiz, uint32_t index) {
   // Shift the rest of the elements up.
   uint32_t last = thiz->elements.count - 1;
   if (index < last) {
-    memmove(&thiz->elements.data[index], &thiz->elements.data[index + 1],
-            (last - index) * sizeof(Var));
+    memmove(&thiz->elements.data[index], &thiz->elements.data[index + 1], (last - index) * sizeof(Var));
   }
 
   thiz->elements.count--;
@@ -1221,25 +1187,22 @@ List* listAdd(VM* vm, List* l1, List* l2) {
 // Return a hash value for the object. Only String and Range objects can be
 // hashable.
 static uint32_t _hashObject(Object* obj) {
-  ASSERT(isObjectHashable(obj->type),
-         "Check if it's hashable before calling this method.");
+  ASSERT(isObjectHashable(obj->type), "Check if it's hashable before calling this method.");
 
   switch (obj->type) {
-    case OBJ_STRING:
-      return ((String*) obj)->hash;
+  case OBJ_STRING:
+    return ((String*) obj)->hash;
 
-    case OBJ_RANGE:
-      {
-        Range* range = (Range*) obj;
-        return utilHashNumber(range->from) ^ utilHashNumber(range->to);
-      }
+  case OBJ_RANGE: {
+    Range* range = (Range*) obj;
+    return utilHashNumber(range->from) ^ utilHashNumber(range->to);
+  }
 
-    case OBJ_CLASS:
-      {
-        return utilHashBits((uint64_t) obj);
-      }
-    default:
-      break;
+  case OBJ_CLASS: {
+    return utilHashBits((uint64_t) obj);
+  }
+  default:
+    break;
   }
 
   UNREACHABLE();
@@ -1254,22 +1217,22 @@ uint32_t varHashValue(Var v) {
   return utilHashBits(v);
 #else
   switch (v.type) {
-    case VAL_NULL:
-      return 0;
-    case VAL_UNDEF:
-      return 1;
-    case VAL_VOID:
-      return 2;
-    case VAL_TRUE:
-      return 3;
-    case VAL_FALSE:
-      return 4;
-    case VAL_INT:
-      return utilHashBits((uint64_t) v._int);
-    case VAL_NUMBER:
-      return utilHashBits(utilDoubleToBits(v._number));
-    default:
-      return 0;
+  case VAL_NULL:
+    return 0;
+  case VAL_UNDEF:
+    return 1;
+  case VAL_VOID:
+    return 2;
+  case VAL_TRUE:
+    return 3;
+  case VAL_FALSE:
+    return 4;
+  case VAL_INT:
+    return utilHashBits((uint64_t) v._int);
+  case VAL_NUMBER:
+    return utilHashBits(utilDoubleToBits(v._number));
+  default:
+    return 0;
   }
 #endif
 }
@@ -1363,8 +1326,7 @@ static bool _mapFindStringEntry(Map* thiz, String* key, MapEntry** result) {
     } else if (IS_OBJ_TYPE(entry->key, OBJ_STRING)) {
       String* entry_key = (String*) AS_OBJ(entry->key);
       if (entry_key == key
-          || (entry_key->hash == key->hash
-              && entry_key->length == key->length
+          || (entry_key->hash == key->hash && entry_key->length == key->length
               && memcmp(entry_key->data, key->data, key->length) == 0)) {
         *result = entry;
         return true;
@@ -1563,7 +1525,7 @@ Var mapRemoveKey(VM* vm, Map* thiz, Var key) {
     if (isValuesEqual(thiz->order_keys.data[i], key)) {
       if (i + 1 < thiz->order_keys.count) {
         memmove(&thiz->order_keys.data[i], &thiz->order_keys.data[i + 1],
-                (thiz->order_keys.count - i - 1) * sizeof(Var));
+            (thiz->order_keys.count - i - 1) * sizeof(Var));
       }
       thiz->order_keys.count--;
       break;
@@ -1578,8 +1540,7 @@ Var mapRemoveKey(VM* vm, Map* thiz, Var key) {
     mapClear(vm, thiz);
 
   } else if ((thiz->capacity > MIN_CAPACITY)
-             && (thiz->capacity / (GROW_FACTOR * GROW_FACTOR))
-                    > ((thiz->count * 100) / MAP_LOAD_PERCENT)) {
+             && (thiz->capacity / (GROW_FACTOR * GROW_FACTOR)) > ((thiz->count * 100) / MAP_LOAD_PERCENT)) {
     // We grow the map when it's filled 75% (MAP_LOAD_PERCENT) by 2
     // (GROW_FACTOR) but we're not shrink the map when it's half filled (ie.
     // half of the capacity is 75%). Instead we wait till it'll become 1/4 is
@@ -1613,121 +1574,108 @@ void freeObject(VM* vm, Object* thiz) {
   // will won't be freed here instead they haven't marked at all, and will be
   // removed at the sweeping phase of the garbage collection.
   switch (thiz->type) {
-    case OBJ_STRING:
-      {
-        String* str = (String*) thiz;
-        DEALLOCATE_DYNAMIC(vm, str, String, str->capacity, char);
-        return;
-      };
+  case OBJ_STRING: {
+    String* str = (String*) thiz;
+    DEALLOCATE_DYNAMIC(vm, str, String, str->capacity, char);
+    return;
+  };
 
-    case OBJ_LIST:
-      {
-        VarBufferClear(&(((List*) thiz)->elements), vm);
-        DEALLOCATE(vm, thiz, List);
-        return;
-      }
+  case OBJ_LIST: {
+    VarBufferClear(&(((List*) thiz)->elements), vm);
+    DEALLOCATE(vm, thiz, List);
+    return;
+  }
 
-    case OBJ_MAP:
-      {
-        Map* map = (Map*) thiz;
-        DEALLOCATE_ARRAY(vm, map->entries, MapEntry, map->capacity);
-        VarBufferClear(&map->order_keys, vm);
-        DEALLOCATE(vm, thiz, Map);
-        return;
-      }
+  case OBJ_MAP: {
+    Map* map = (Map*) thiz;
+    DEALLOCATE_ARRAY(vm, map->entries, MapEntry, map->capacity);
+    VarBufferClear(&map->order_keys, vm);
+    DEALLOCATE(vm, thiz, Map);
+    return;
+  }
 
-    case OBJ_RANGE:
-      {
-        DEALLOCATE(vm, thiz, Range);
-        return;
-      }
+  case OBJ_RANGE: {
+    DEALLOCATE(vm, thiz, Range);
+    return;
+  }
 
-    case OBJ_MODULE:
-      {
-        Module* module = (Module*) thiz;
-        VarBufferClear(&module->globals, vm);
-        UintBufferClear(&module->global_names, vm);
-        VarBufferClear(&module->constants, vm);
+  case OBJ_MODULE: {
+    Module* module = (Module*) thiz;
+    VarBufferClear(&module->globals, vm);
+    UintBufferClear(&module->global_names, vm);
+    VarBufferClear(&module->constants, vm);
 #ifndef NO_DL
-        if (module->handle)
-          vmUnloadDlHandle(vm, module->handle);
+    if (module->handle)
+      vmUnloadDlHandle(vm, module->handle);
 #endif
-        DEALLOCATE(vm, thiz, Module);
-        return;
+    DEALLOCATE(vm, thiz, Module);
+    return;
+  }
+
+  case OBJ_FUNC: {
+    Function* func = (Function*) thiz;
+    if (!func->is_native) {
+      ByteBufferClear(&func->fn->opcodes, vm);
+      UintBufferClear(&func->fn->oplines, vm);
+      DEALLOCATE(vm, func->fn, Fn);
+    }
+    DEALLOCATE(vm, thiz, Function);
+    return;
+  };
+
+  case OBJ_CLOSURE: {
+    DEALLOCATE_DYNAMIC(vm, thiz, Closure, ((Closure*) thiz)->fn->upvalue_count, Upvalue*);
+    return;
+  }
+
+  case OBJ_METHOD_BIND: {
+    DEALLOCATE(vm, thiz, MethodBind);
+    return;
+  }
+
+  case OBJ_UPVALUE: {
+    DEALLOCATE(vm, thiz, Upvalue);
+    return;
+  }
+
+  case OBJ_FIBER: {
+    Fiber* fiber = (Fiber*) thiz;
+    DEALLOCATE_ARRAY(vm, fiber->stack, Var, fiber->stack_size);
+    DEALLOCATE_ARRAY(vm, fiber->frames, CallFrame, fiber->frame_capacity);
+    DEALLOCATE(vm, fiber, Fiber);
+    return;
+  }
+
+  case OBJ_CLASS: {
+    Class* cls = (Class*) thiz;
+    ClosureBufferClear(&cls->methods, vm);
+    DEALLOCATE(vm, cls, Class);
+    return;
+  }
+
+  case OBJ_POINTER: {
+    Pointer* pointer = (Pointer*) thiz;
+    if (pointer->destructor && pointer->native_ptr) {
+      pointer->destructor(pointer->native_ptr);
+    }
+    DEALLOCATE(vm, pointer, Pointer);
+    return;
+  }
+
+  case OBJ_INST: {
+    Instance* inst = (Instance*) thiz;
+    Class* cls = inst->cls;
+    while (cls != NULL) {
+      if (cls->delete_fn != NULL) {
+        cls->delete_fn(vm, inst->native);
+        break;
       }
+      cls = cls->super_class;
+    }
 
-    case OBJ_FUNC:
-      {
-        Function* func = (Function*) thiz;
-        if (!func->is_native) {
-          ByteBufferClear(&func->fn->opcodes, vm);
-          UintBufferClear(&func->fn->oplines, vm);
-          DEALLOCATE(vm, func->fn, Fn);
-        }
-        DEALLOCATE(vm, thiz, Function);
-        return;
-      };
-
-    case OBJ_CLOSURE:
-      {
-        DEALLOCATE_DYNAMIC(vm, thiz, Closure, ((Closure*) thiz)->fn->upvalue_count, Upvalue*);
-        return;
-      }
-
-    case OBJ_METHOD_BIND:
-      {
-        DEALLOCATE(vm, thiz, MethodBind);
-        return;
-      }
-
-    case OBJ_UPVALUE:
-      {
-        DEALLOCATE(vm, thiz, Upvalue);
-        return;
-      }
-
-    case OBJ_FIBER:
-      {
-        Fiber* fiber = (Fiber*) thiz;
-        DEALLOCATE_ARRAY(vm, fiber->stack, Var, fiber->stack_size);
-        DEALLOCATE_ARRAY(vm, fiber->frames, CallFrame, fiber->frame_capacity);
-        DEALLOCATE(vm, fiber, Fiber);
-        return;
-      }
-
-    case OBJ_CLASS:
-      {
-        Class* cls = (Class*) thiz;
-        ClosureBufferClear(&cls->methods, vm);
-        DEALLOCATE(vm, cls, Class);
-        return;
-      }
-
-    case OBJ_POINTER:
-      {
-        Pointer* pointer = (Pointer*) thiz;
-        if (pointer->destructor && pointer->native_ptr) {
-          pointer->destructor(pointer->native_ptr);
-        }
-        DEALLOCATE(vm, pointer, Pointer);
-        return;
-      }
-
-    case OBJ_INST:
-      {
-        Instance* inst = (Instance*) thiz;
-        Class* cls = inst->cls;
-        while (cls != NULL) {
-          if (cls->delete_fn != NULL) {
-            cls->delete_fn(vm, inst->native);
-            break;
-          }
-          cls = cls->super_class;
-        }
-
-        DEALLOCATE(vm, inst, Instance);
-        return;
-      }
+    DEALLOCATE(vm, inst, Instance);
+    return;
+  }
   }
 
   UNREACHABLE();
@@ -1743,8 +1691,7 @@ uint32_t moduleAddConstant(VM* vm, Module* module, Var value) {
   return (int) module->constants.count - 1;
 }
 
-String* moduleAddString(Module* module, VM* vm, const char* name,
-                        uint32_t length, int* index) {
+String* moduleAddString(Module* module, VM* vm, const char* name, uint32_t length, int* index) {
   for (uint32_t i = 0; i < module->constants.count; i++) {
     if (!IS_OBJ_TYPE(module->constants.data[i], OBJ_STRING))
       continue;
@@ -1800,8 +1747,7 @@ static void _moduleRebuildGlobalIndices(VM* vm, Module* module) {
 int moduleGetGlobalIndexByName(VM* vm, Module* module, String* name) {
   ASSERT(vm != NULL && module != NULL && name != NULL, OOPS);
 
-  if (!module->global_indices_dirty
-      && module->global_lookup_name_cache == name) {
+  if (!module->global_indices_dirty && module->global_lookup_name_cache == name) {
     int32_t g_index = module->global_lookup_index_cache;
     if (g_index >= 0 && (uint32_t) g_index < module->globals.count) {
       return g_index;
@@ -1845,8 +1791,7 @@ uint32_t moduleSetGlobal(VM* vm, Module* module, const char* name, uint32_t leng
   if (g_index != -1) {
     ASSERT(g_index < (int) module->globals.count, OOPS);
     module->globals.data[g_index] = value;
-    module->global_lookup_name_cache = moduleGetStringAt(module,
-                                                          (int) module->global_names.data[g_index]);
+    module->global_lookup_name_cache = moduleGetStringAt(module, (int) module->global_names.data[g_index]);
     module->global_lookup_index_cache = g_index;
     if (IS_OBJ(value))
       vmPopTempRef(vm);
@@ -1893,9 +1838,9 @@ bool moduleDeleteGlobal(VM* vm, Module* module, const char* name, uint32_t lengt
   uint32_t idx = (uint32_t) g_index;
   if (idx + 1 < module->globals.count) {
     memmove(&module->globals.data[idx], &module->globals.data[idx + 1],
-            (module->globals.count - idx - 1) * sizeof(Var));
+        (module->globals.count - idx - 1) * sizeof(Var));
     memmove(&module->global_names.data[idx], &module->global_names.data[idx + 1],
-            (module->global_names.count - idx - 1) * sizeof(uint32_t));
+        (module->global_names.count - idx - 1) * sizeof(uint32_t));
   }
 
   if (module->globals.count > 0)
@@ -1916,16 +1861,15 @@ void moduleAddMain(VM* vm, Module* module) {
   module->initialized = false;
 
   const char* fn_name = IMPLICIT_MAIN_NAME;
-  Function* body_fn = newFunction(vm, fn_name, (int) strlen(fn_name), module,
-                                  false, NULL, NULL);
+  Function* body_fn = newFunction(vm, fn_name, (int) strlen(fn_name), module, false, NULL, NULL);
   body_fn->arity = 0;
 
   vmPushTempRef(vm, &body_fn->_super); // body_fn.
   module->body = newClosure(vm, body_fn);
   vmPopTempRef(vm); // body_fn.
 
-  moduleSetGlobal(vm, module, IMPLICIT_MAIN_NAME,
-                  (uint32_t) strlen(IMPLICIT_MAIN_NAME), VAR_OBJ(module->body));
+  moduleSetGlobal(
+      vm, module, IMPLICIT_MAIN_NAME, (uint32_t) strlen(IMPLICIT_MAIN_NAME), VAR_OBJ(module->body));
 }
 
 /*****************************************************************************/
@@ -1934,32 +1878,32 @@ void moduleAddMain(VM* vm, Module* module) {
 
 VarType getObjVarType(ObjectType type) {
   switch (type) {
-    case OBJ_STRING:
-      return vSTRING;
-    case OBJ_LIST:
-      return vLIST;
-    case OBJ_MAP:
-      return vMAP;
-    case OBJ_RANGE:
-      return vRANGE;
-    case OBJ_MODULE:
-      return vMODULE;
-    case OBJ_FUNC:
-      UNREACHABLE();
-    case OBJ_CLOSURE:
-      return vCLOSURE;
-    case OBJ_METHOD_BIND:
-      return vMETHOD_BIND;
-    case OBJ_UPVALUE:
-      UNREACHABLE();
-    case OBJ_FIBER:
-      return vFIBER;
-    case OBJ_CLASS:
-      return vCLASS;
-    case OBJ_POINTER:
-      return vPOINTER;
-    case OBJ_INST:
-      return vINSTANCE;
+  case OBJ_STRING:
+    return vSTRING;
+  case OBJ_LIST:
+    return vLIST;
+  case OBJ_MAP:
+    return vMAP;
+  case OBJ_RANGE:
+    return vRANGE;
+  case OBJ_MODULE:
+    return vMODULE;
+  case OBJ_FUNC:
+    UNREACHABLE();
+  case OBJ_CLOSURE:
+    return vCLOSURE;
+  case OBJ_METHOD_BIND:
+    return vMETHOD_BIND;
+  case OBJ_UPVALUE:
+    UNREACHABLE();
+  case OBJ_FIBER:
+    return vFIBER;
+  case OBJ_CLASS:
+    return vCLASS;
+  case OBJ_POINTER:
+    return vPOINTER;
+  case OBJ_INST:
+    return vINSTANCE;
   }
 
   UNREACHABLE();
@@ -1968,34 +1912,34 @@ VarType getObjVarType(ObjectType type) {
 
 ObjectType getVarObjType(VarType type) {
   switch (type) {
-    case vOBJECT:
-    case vNULL:
-    case vBOOL:
-    case vNUMBER:
-      UNREACHABLE();
+  case vOBJECT:
+  case vNULL:
+  case vBOOL:
+  case vNUMBER:
+    UNREACHABLE();
 
-    case vSTRING:
-      return OBJ_STRING;
-    case vLIST:
-      return OBJ_LIST;
-    case vMAP:
-      return OBJ_MAP;
-    case vRANGE:
-      return OBJ_RANGE;
-    case vMODULE:
-      return OBJ_MODULE;
-    case vCLOSURE:
-      return OBJ_CLOSURE;
-    case vMETHOD_BIND:
-      return OBJ_METHOD_BIND;
-    case vFIBER:
-      return OBJ_FIBER;
-    case vCLASS:
-      return OBJ_CLASS;
-    case vPOINTER:
-      return OBJ_POINTER;
-    case vINSTANCE:
-      return OBJ_INST;
+  case vSTRING:
+    return OBJ_STRING;
+  case vLIST:
+    return OBJ_LIST;
+  case vMAP:
+    return OBJ_MAP;
+  case vRANGE:
+    return OBJ_RANGE;
+  case vMODULE:
+    return OBJ_MODULE;
+  case vCLOSURE:
+    return OBJ_CLOSURE;
+  case vMETHOD_BIND:
+    return OBJ_METHOD_BIND;
+  case vFIBER:
+    return OBJ_FIBER;
+  case vCLASS:
+    return OBJ_CLASS;
+  case vPOINTER:
+    return OBJ_POINTER;
+  case vINSTANCE:
+    return OBJ_INST;
   }
 
   UNREACHABLE();
@@ -2004,16 +1948,16 @@ ObjectType getVarObjType(VarType type) {
 
 const char* getVarTypeName(VarType type) {
   switch (type) {
-    case vOBJECT:
-      return "Object";
-    case vNULL:
-      return "Null";
-    case vBOOL:
-      return "Bool";
-    case vNUMBER:
-      return "Number";
-    default:
-      return getObjectTypeName(getVarObjType(type));
+  case vOBJECT:
+    return "Object";
+  case vNULL:
+    return "Null";
+  case vBOOL:
+    return "Bool";
+  case vNUMBER:
+    return "Number";
+  default:
+    return getObjectTypeName(getVarObjType(type));
   }
 
   UNREACHABLE();
@@ -2022,32 +1966,32 @@ const char* getVarTypeName(VarType type) {
 
 const char* getObjectTypeName(ObjectType type) {
   switch (type) {
-    case OBJ_STRING:
-      return "String";
-    case OBJ_LIST:
-      return "List";
-    case OBJ_MAP:
-      return "Map";
-    case OBJ_RANGE:
-      return "Range";
-    case OBJ_MODULE:
-      return "Module";
-    case OBJ_FUNC:
-      return "Func";
-    case OBJ_CLOSURE:
-      return "Closure";
-    case OBJ_METHOD_BIND:
-      return "MethodBind";
-    case OBJ_UPVALUE:
-      return "Upvalue";
-    case OBJ_FIBER:
-      return "Fiber";
-    case OBJ_CLASS:
-      return "Class";
-    case OBJ_POINTER:
-      return "Pointer";
-    case OBJ_INST:
-      return "Inst";
+  case OBJ_STRING:
+    return "String";
+  case OBJ_LIST:
+    return "List";
+  case OBJ_MAP:
+    return "Map";
+  case OBJ_RANGE:
+    return "Range";
+  case OBJ_MODULE:
+    return "Module";
+  case OBJ_FUNC:
+    return "Func";
+  case OBJ_CLOSURE:
+    return "Closure";
+  case OBJ_METHOD_BIND:
+    return "MethodBind";
+  case OBJ_UPVALUE:
+    return "Upvalue";
+  case OBJ_FIBER:
+    return "Fiber";
+  case OBJ_CLASS:
+    return "Class";
+  case OBJ_POINTER:
+    return "Pointer";
+  case OBJ_INST:
+    return "Inst";
   }
   UNREACHABLE();
   return NULL;
@@ -2094,14 +2038,14 @@ bool isValuesSame(Var v1, Var v2) {
   if (v1.type != v2.type)
     return false;
   switch (v1.type) {
-    case VAL_NUMBER:
-      return utilDoubleToBits(v1._number) == utilDoubleToBits(v2._number);
-    case VAL_INT:
-      return v1._int == v2._int;
-    case VAL_OBJECT:
-      return v1._obj == v2._obj;
-    default:
-      return true;
+  case VAL_NUMBER:
+    return utilDoubleToBits(v1._number) == utilDoubleToBits(v2._number);
+  case VAL_INT:
+    return v1._int == v2._int;
+  case VAL_OBJECT:
+    return v1._obj == v2._obj;
+  default:
+    return true;
   }
 #endif
 }
@@ -2124,57 +2068,52 @@ bool isValuesEqual(Var v1, Var v2) {
     return false;
 
   switch (o1->type) {
-    case OBJ_RANGE:
-      return ((Range*) o1)->from == ((Range*) o2)->from
-             && ((Range*) o1)->to == ((Range*) o2)->to;
+  case OBJ_RANGE:
+    return ((Range*) o1)->from == ((Range*) o2)->from && ((Range*) o1)->to == ((Range*) o2)->to;
 
-    case OBJ_STRING:
-      {
-        String *s1 = (String*) o1, *s2 = (String*) o2;
-        return s1->hash == s2->hash && s1->length == s2->length
-               && memcmp(s1->data, s2->data, s1->length) == 0;
-      }
+  case OBJ_STRING: {
+    String *s1 = (String*) o1, *s2 = (String*) o2;
+    return s1->hash == s2->hash && s1->length == s2->length && memcmp(s1->data, s2->data, s1->length) == 0;
+  }
 
-    case OBJ_LIST:
-      {
-        /*
-         * l1 = []; list_append(l1, l1) # [[...]]
-         * l2 = []; list_append(l2, l2) # [[...]]
-         * l1 == l2 ## This will cause a stack overflow but not handling that
-         *          ## (in python too).
-         */
-        List *l1 = (List*) o1, *l2 = (List*) o2;
-        if (l1->elements.count != l2->elements.count)
-          return false;
-        Var* _v1 = l1->elements.data;
-        Var* _v2 = l2->elements.data;
-        for (uint32_t i = 0; i < l1->elements.count; i++) {
-          if (!isValuesEqual(*_v1, *_v2))
-            return false;
-          _v1++, _v2++;
-        }
-        return true;
-      }
-
-    case OBJ_MAP:
-      {
-        Map *m1 = (Map*) o1, *m2 = (Map*) o2;
-
-        MapEntry* e = m1->entries;
-        for (; e < m1->entries + m1->capacity; e++) {
-          if (IS_UNDEF(e->key))
-            continue;
-          Var v = mapGet(m2, e->key);
-          if (IS_UNDEF(v))
-            return false;
-          if (!isValuesEqual(e->value, v))
-            return false;
-        }
-        return true;
-      }
-
-    default:
+  case OBJ_LIST: {
+    /*
+     * l1 = []; list_append(l1, l1) # [[...]]
+     * l2 = []; list_append(l2, l2) # [[...]]
+     * l1 == l2 ## This will cause a stack overflow but not handling that
+     *          ## (in python too).
+     */
+    List *l1 = (List*) o1, *l2 = (List*) o2;
+    if (l1->elements.count != l2->elements.count)
       return false;
+    Var* _v1 = l1->elements.data;
+    Var* _v2 = l2->elements.data;
+    for (uint32_t i = 0; i < l1->elements.count; i++) {
+      if (!isValuesEqual(*_v1, *_v2))
+        return false;
+      _v1++, _v2++;
+    }
+    return true;
+  }
+
+  case OBJ_MAP: {
+    Map *m1 = (Map*) o1, *m2 = (Map*) o2;
+
+    MapEntry* e = m1->entries;
+    for (; e < m1->entries + m1->capacity; e++) {
+      if (IS_UNDEF(e->key))
+        continue;
+      Var v = mapGet(m2, e->key);
+      if (IS_UNDEF(v))
+        return false;
+      if (!isValuesEqual(e->value, v))
+        return false;
+    }
+    return true;
+  }
+
+  default:
+    return false;
   }
 }
 
@@ -2197,8 +2136,7 @@ struct OuterSequence {
 };
 typedef struct OuterSequence OuterSequence;
 
-static void _toStringInternal(VM* vm, const Var v, ByteBuffer* buff,
-                              OuterSequence* outer, bool repr) {
+static void _toStringInternal(VM* vm, const Var v, ByteBuffer* buff, OuterSequence* outer, bool repr) {
   ASSERT(outer == NULL || repr, OOPS);
 
   if (IS_NULL(v)) {
@@ -2237,298 +2175,277 @@ static void _toStringInternal(VM* vm, const Var v, ByteBuffer* buff,
     const Object* obj = AS_OBJ(v);
 
     switch (obj->type) {
-      case OBJ_STRING:
-        {
-          const String* str = (const String*) obj;
-          if (outer == NULL && !repr) {
-            ByteBufferAddString(buff, vm, str->data, str->length);
-            return;
-          } else {
-            // If recursive return with quotes (ex: [42, "hello", 0..10]).
-            ByteBufferWrite(buff, vm, '"');
-            for (uint32_t i = 0; i < str->length; i++) {
-              char c = str->data[i];
-              switch (c) {
-                case '"':
-                  ByteBufferAddString(buff, vm, "\\\"", 2);
-                  break;
-                case '\\':
-                  ByteBufferAddString(buff, vm, "\\\\", 2);
-                  break;
-                case '\n':
-                  ByteBufferAddString(buff, vm, "\\n", 2);
-                  break;
-                case '\r':
-                  ByteBufferAddString(buff, vm, "\\r", 2);
-                  break;
-                case '\t':
-                  ByteBufferAddString(buff, vm, "\\t", 2);
-                  break;
+    case OBJ_STRING: {
+      const String* str = (const String*) obj;
+      if (outer == NULL && !repr) {
+        ByteBufferAddString(buff, vm, str->data, str->length);
+        return;
+      } else {
+        // If recursive return with quotes (ex: [42, "hello", 0..10]).
+        ByteBufferWrite(buff, vm, '"');
+        for (uint32_t i = 0; i < str->length; i++) {
+          char c = str->data[i];
+          switch (c) {
+          case '"':
+            ByteBufferAddString(buff, vm, "\\\"", 2);
+            break;
+          case '\\':
+            ByteBufferAddString(buff, vm, "\\\\", 2);
+            break;
+          case '\n':
+            ByteBufferAddString(buff, vm, "\\n", 2);
+            break;
+          case '\r':
+            ByteBufferAddString(buff, vm, "\\r", 2);
+            break;
+          case '\t':
+            ByteBufferAddString(buff, vm, "\\t", 2);
+            break;
 
-                default:
-                  {
-                    // if c isn't in range 0x00 to 0xff, isprintc()
-                    // fail an assertion.
-                    if (isprint(c)) {
-                      ByteBufferWrite(buff, vm, c);
-                    } else {
-                      ByteBufferAddString(buff, vm, "\\x", 2);
-                      uint8_t byte = (uint8_t) c;
-                      ByteBufferWrite(buff, vm, utilHexDigit(((byte >> 4) & 0xf), false));
-                      ByteBufferWrite(buff, vm, utilHexDigit(((byte >> 0) & 0xf), false));
-                    }
-                  }
-                  break;
-              }
+          default: {
+            // if c isn't in range 0x00 to 0xff, isprintc()
+            // fail an assertion.
+            if (isprint(c)) {
+              ByteBufferWrite(buff, vm, c);
+            } else {
+              ByteBufferAddString(buff, vm, "\\x", 2);
+              uint8_t byte = (uint8_t) c;
+              ByteBufferWrite(buff, vm, utilHexDigit(((byte >> 4) & 0xf), false));
+              ByteBufferWrite(buff, vm, utilHexDigit(((byte >> 0) & 0xf), false));
             }
-            ByteBufferWrite(buff, vm, '"');
-            return;
+          } break;
           }
-          UNREACHABLE();
         }
+        ByteBufferWrite(buff, vm, '"');
+        return;
+      }
+      UNREACHABLE();
+    }
 
-      case OBJ_LIST:
-        {
-          const List* list = (const List*) obj;
-          if (list->elements.count == 0) {
-            ByteBufferAddString(buff, vm, "[]", 2);
-            return;
-          }
+    case OBJ_LIST: {
+      const List* list = (const List*) obj;
+      if (list->elements.count == 0) {
+        ByteBufferAddString(buff, vm, "[]", 2);
+        return;
+      }
 
-          // Check if the list is recursive.
-          OuterSequence* seq = outer;
-          while (seq != NULL) {
-            if (seq->is_list && seq->list == list) {
-              ByteBufferAddString(buff, vm, "[...]", 5);
-              return;
-            }
-            seq = seq->outer;
-          }
-          OuterSequence seq_list;
-          seq_list.outer = outer;
-          seq_list.is_list = true;
-          seq_list.list = list;
-
-          ByteBufferWrite(buff, vm, '[');
-          for (uint32_t i = 0; i < list->elements.count; i++) {
-            if (i != 0)
-              ByteBufferAddString(buff, vm, ", ", 2);
-            _toStringInternal(vm, list->elements.data[i], buff, &seq_list, true);
-          }
-          ByteBufferWrite(buff, vm, ']');
+      // Check if the list is recursive.
+      OuterSequence* seq = outer;
+      while (seq != NULL) {
+        if (seq->is_list && seq->list == list) {
+          ByteBufferAddString(buff, vm, "[...]", 5);
           return;
         }
+        seq = seq->outer;
+      }
+      OuterSequence seq_list;
+      seq_list.outer = outer;
+      seq_list.is_list = true;
+      seq_list.list = list;
 
-      case OBJ_MAP:
-        {
-          const Map* map = (const Map*) obj;
-          if (map->order_keys.count == 0) {
-            ByteBufferAddString(buff, vm, "{}", 2);
-            return;
-          }
+      ByteBufferWrite(buff, vm, '[');
+      for (uint32_t i = 0; i < list->elements.count; i++) {
+        if (i != 0)
+          ByteBufferAddString(buff, vm, ", ", 2);
+        _toStringInternal(vm, list->elements.data[i], buff, &seq_list, true);
+      }
+      ByteBufferWrite(buff, vm, ']');
+      return;
+    }
 
-          // Check if the map is recursive.
-          OuterSequence* seq = outer;
-          while (seq != NULL) {
-            if (!seq->is_list && seq->map == map) {
-              ByteBufferAddString(buff, vm, "{...}", 5);
-              return;
-            }
-            seq = seq->outer;
-          }
-          OuterSequence seq_map;
-          seq_map.outer = outer;
-          seq_map.is_list = false;
-          seq_map.map = map;
+    case OBJ_MAP: {
+      const Map* map = (const Map*) obj;
+      if (map->order_keys.count == 0) {
+        ByteBufferAddString(buff, vm, "{}", 2);
+        return;
+      }
 
-          ByteBufferWrite(buff, vm, '{');
-          for (uint32_t i = 0; i < map->order_keys.count; i++) {
-            if (i != 0)
-              ByteBufferAddString(buff, vm, ", ", 2);
-
-            Var key = map->order_keys.data[i];
-            Var value = mapGet((Map*) map, key);
-
-            _toStringInternal(vm, key, buff, &seq_map, true);
-            ByteBufferWrite(buff, vm, ':');
-            _toStringInternal(vm, value, buff, &seq_map, true);
-          }
-
-          ByteBufferWrite(buff, vm, '}');
+      // Check if the map is recursive.
+      OuterSequence* seq = outer;
+      while (seq != NULL) {
+        if (!seq->is_list && seq->map == map) {
+          ByteBufferAddString(buff, vm, "{...}", 5);
           return;
         }
+        seq = seq->outer;
+      }
+      OuterSequence seq_map;
+      seq_map.outer = outer;
+      seq_map.is_list = false;
+      seq_map.map = map;
 
-      case OBJ_RANGE:
-        {
-          const Range* range = (const Range*) obj;
+      ByteBufferWrite(buff, vm, '{');
+      for (uint32_t i = 0; i < map->order_keys.count; i++) {
+        if (i != 0)
+          ByteBufferAddString(buff, vm, ", ", 2);
 
-          char buff_from[STR_DBL_BUFF_SIZE];
-          const int len_from = snprintf(buff_from, sizeof(buff_from),
-                                        DOUBLE_FMT, range->from);
-          char buff_to[STR_DBL_BUFF_SIZE];
-          const int len_to = snprintf(buff_to, sizeof(buff_to), DOUBLE_FMT,
-                                      range->to);
+        Var key = map->order_keys.data[i];
+        Var value = mapGet((Map*) map, key);
 
-          ByteBufferAddString(buff, vm, "[Range:", 7);
-          ByteBufferAddString(buff, vm, buff_from, len_from);
-          ByteBufferAddString(buff, vm, "..", 2);
-          ByteBufferAddString(buff, vm, buff_to, len_to);
-          ByteBufferWrite(buff, vm, ']');
-          return;
-        }
+        _toStringInternal(vm, key, buff, &seq_map, true);
+        ByteBufferWrite(buff, vm, ':');
+        _toStringInternal(vm, value, buff, &seq_map, true);
+      }
 
-      case OBJ_MODULE:
-        {
-          const Module* module = (const Module*) obj;
-          ByteBufferAddString(buff, vm, "[Module:", 8);
-          if (module->name != NULL) {
-            ByteBufferAddString(buff, vm, module->name->data, module->name->length);
-          } else {
-            ByteBufferWrite(buff, vm, '"');
-            ByteBufferAddString(buff, vm, module->path->data, module->path->length);
-            ByteBufferWrite(buff, vm, '"');
-          }
-          /*
-          ByteBufferAddString(buff, vm, " ", 1);
+      ByteBufferWrite(buff, vm, '}');
+      return;
+    }
 
-          char buff_addr[STR_HEX_BUFF_SIZE];
-          char* ptr = (char*)buff_addr;
-          (*ptr++) = '0'; (*ptr++) = 'x';
-          const int len = snprintf(ptr, sizeof(buff_addr) - 2,
-            "%08x", (unsigned int)(uintptr_t)module);
-          ByteBufferAddString(buff, vm, buff_addr, (uint32_t)len);
-          */
-          ByteBufferWrite(buff, vm, ']');
-          return;
-        }
+    case OBJ_RANGE: {
+      const Range* range = (const Range*) obj;
 
-      case OBJ_FUNC:
-        {
-          const Function* fn = (const Function*) obj;
-          ByteBufferAddString(buff, vm, "[Func:", 6);
-          ByteBufferAddString(buff, vm, fn->name, (uint32_t) strlen(fn->name));
-          /*
-          ByteBufferAddString(buff, vm, " ", 1);
+      char buff_from[STR_DBL_BUFF_SIZE];
+      const int len_from = snprintf(buff_from, sizeof(buff_from), DOUBLE_FMT, range->from);
+      char buff_to[STR_DBL_BUFF_SIZE];
+      const int len_to = snprintf(buff_to, sizeof(buff_to), DOUBLE_FMT, range->to);
 
-          char buff_addr[STR_HEX_BUFF_SIZE];
-          char* ptr = (char*)buff_addr;
-          (*ptr++) = '0'; (*ptr++) = 'x';
-          const int len = snprintf(ptr, sizeof(buff_addr) - 2,
-            "%08x", (unsigned int)(uintptr_t)fn);
-          ByteBufferAddString(buff, vm, buff_addr, (uint32_t)len);
-          */
-          ByteBufferWrite(buff, vm, ']');
-          return;
-        }
+      ByteBufferAddString(buff, vm, "[Range:", 7);
+      ByteBufferAddString(buff, vm, buff_from, len_from);
+      ByteBufferAddString(buff, vm, "..", 2);
+      ByteBufferAddString(buff, vm, buff_to, len_to);
+      ByteBufferWrite(buff, vm, ']');
+      return;
+    }
 
-      case OBJ_CLOSURE:
-        {
-          const Closure* closure = (const Closure*) obj;
-          ByteBufferAddString(buff, vm, "[Closure:", 9);
-          ByteBufferAddString(buff, vm, closure->fn->name,
-                              (uint32_t) strlen(closure->fn->name));
-          /*
-          ByteBufferAddString(buff, vm, " ", 1);
+    case OBJ_MODULE: {
+      const Module* module = (const Module*) obj;
+      ByteBufferAddString(buff, vm, "[Module:", 8);
+      if (module->name != NULL) {
+        ByteBufferAddString(buff, vm, module->name->data, module->name->length);
+      } else {
+        ByteBufferWrite(buff, vm, '"');
+        ByteBufferAddString(buff, vm, module->path->data, module->path->length);
+        ByteBufferWrite(buff, vm, '"');
+      }
+      /*
+      ByteBufferAddString(buff, vm, " ", 1);
 
-          char buff_addr[STR_HEX_BUFF_SIZE];
-          char* ptr = (char*)buff_addr;
-          (*ptr++) = '0'; (*ptr++) = 'x';
-          const int len = snprintf(ptr, sizeof(buff_addr) - 2,
-            "%08x", (unsigned int)(uintptr_t)closure);
-          ByteBufferAddString(buff, vm, buff_addr, (uint32_t)len);
-          */
-          ByteBufferWrite(buff, vm, ']');
-          return;
-        }
-      case OBJ_METHOD_BIND:
-        {
-          const MethodBind* mb = (const MethodBind*) obj;
-          ByteBufferAddString(buff, vm, "[MethodBind:", 12);
-          ByteBufferAddString(buff, vm, mb->method->fn->name,
-                              (uint32_t) strlen(mb->method->fn->name));
-          /*
-          ByteBufferAddString(buff, vm, " ", 1);
+      char buff_addr[STR_HEX_BUFF_SIZE];
+      char* ptr = (char*)buff_addr;
+      (*ptr++) = '0'; (*ptr++) = 'x';
+      const int len = snprintf(ptr, sizeof(buff_addr) - 2,
+        "%08x", (unsigned int)(uintptr_t)module);
+      ByteBufferAddString(buff, vm, buff_addr, (uint32_t)len);
+      */
+      ByteBufferWrite(buff, vm, ']');
+      return;
+    }
 
-          char buff_addr[STR_HEX_BUFF_SIZE];
-          char* ptr = (char*)buff_addr;
-          (*ptr++) = '0'; (*ptr++) = 'x';
-          const int len = snprintf(ptr, sizeof(buff_addr) - 2,
-            "%08x", (unsigned int)(uintptr_t)mb);
-          ByteBufferAddString(buff, vm, buff_addr, (uint32_t)len);
-          */
-          ByteBufferWrite(buff, vm, ']');
-          return;
-        }
+    case OBJ_FUNC: {
+      const Function* fn = (const Function*) obj;
+      ByteBufferAddString(buff, vm, "[Func:", 6);
+      ByteBufferAddString(buff, vm, fn->name, (uint32_t) strlen(fn->name));
+      /*
+      ByteBufferAddString(buff, vm, " ", 1);
 
-      case OBJ_FIBER:
-        {
-          const Fiber* fb = (const Fiber*) obj;
-          ByteBufferAddString(buff, vm, "[Fiber:", 7);
-          ByteBufferAddString(buff, vm, fb->closure->fn->name,
-                              (uint32_t) strlen(fb->closure->fn->name));
-          ByteBufferWrite(buff, vm, ']');
-          return;
-        }
+      char buff_addr[STR_HEX_BUFF_SIZE];
+      char* ptr = (char*)buff_addr;
+      (*ptr++) = '0'; (*ptr++) = 'x';
+      const int len = snprintf(ptr, sizeof(buff_addr) - 2,
+        "%08x", (unsigned int)(uintptr_t)fn);
+      ByteBufferAddString(buff, vm, buff_addr, (uint32_t)len);
+      */
+      ByteBufferWrite(buff, vm, ']');
+      return;
+    }
 
-      case OBJ_UPVALUE:
-        {
-          ByteBufferAddString(buff, vm, "[Upvalue]", 9);
-          return;
-        }
+    case OBJ_CLOSURE: {
+      const Closure* closure = (const Closure*) obj;
+      ByteBufferAddString(buff, vm, "[Closure:", 9);
+      ByteBufferAddString(buff, vm, closure->fn->name, (uint32_t) strlen(closure->fn->name));
+      /*
+      ByteBufferAddString(buff, vm, " ", 1);
 
-      case OBJ_CLASS:
-        {
-          const Class* cls = (const Class*) obj;
-          ByteBufferAddString(buff, vm, "[Class:", 7);
-          ByteBufferAddString(buff, vm, cls->name->data, cls->name->length);
-          /*
-          ByteBufferAddString(buff, vm, " ", 1);
+      char buff_addr[STR_HEX_BUFF_SIZE];
+      char* ptr = (char*)buff_addr;
+      (*ptr++) = '0'; (*ptr++) = 'x';
+      const int len = snprintf(ptr, sizeof(buff_addr) - 2,
+        "%08x", (unsigned int)(uintptr_t)closure);
+      ByteBufferAddString(buff, vm, buff_addr, (uint32_t)len);
+      */
+      ByteBufferWrite(buff, vm, ']');
+      return;
+    }
+    case OBJ_METHOD_BIND: {
+      const MethodBind* mb = (const MethodBind*) obj;
+      ByteBufferAddString(buff, vm, "[MethodBind:", 12);
+      ByteBufferAddString(buff, vm, mb->method->fn->name, (uint32_t) strlen(mb->method->fn->name));
+      /*
+      ByteBufferAddString(buff, vm, " ", 1);
 
-          char buff_addr[STR_HEX_BUFF_SIZE];
-          char* ptr = (char*)buff_addr;
-          (*ptr++) = '0'; (*ptr++) = 'x';
-          const int len = snprintf(ptr, sizeof(buff_addr) - 2,
-            "%08x", (unsigned int)(uintptr_t)cls);
-          ByteBufferAddString(buff, vm, buff_addr, (uint32_t)len);
-          */
-          ByteBufferWrite(buff, vm, ']');
-          return;
-        }
+      char buff_addr[STR_HEX_BUFF_SIZE];
+      char* ptr = (char*)buff_addr;
+      (*ptr++) = '0'; (*ptr++) = 'x';
+      const int len = snprintf(ptr, sizeof(buff_addr) - 2,
+        "%08x", (unsigned int)(uintptr_t)mb);
+      ByteBufferAddString(buff, vm, buff_addr, (uint32_t)len);
+      */
+      ByteBufferWrite(buff, vm, ']');
+      return;
+    }
 
-      case OBJ_POINTER:
-        {
-          const Pointer* ptr = (const Pointer*) obj;
+    case OBJ_FIBER: {
+      const Fiber* fb = (const Fiber*) obj;
+      ByteBufferAddString(buff, vm, "[Fiber:", 7);
+      ByteBufferAddString(buff, vm, fb->closure->fn->name, (uint32_t) strlen(fb->closure->fn->name));
+      ByteBufferWrite(buff, vm, ']');
+      return;
+    }
 
-          ByteBufferAddString(buff, vm, "[Pointer:", 9);
-          char addr_buff[STR_HEX_BUFF_SIZE];
-          char* addr_ptr = addr_buff;
-          (*addr_ptr++) = '0';
-          (*addr_ptr++) = 'x';
-          int addr_len = snprintf(addr_ptr, sizeof(addr_buff) - 2, "%08x",
-                                  (unsigned int) (uintptr_t) ptr->native_ptr);
-          ByteBufferAddString(buff, vm, addr_buff, (uint32_t) addr_len);
-          ByteBufferWrite(buff, vm, ']');
-          return;
-        }
+    case OBJ_UPVALUE: {
+      ByteBufferAddString(buff, vm, "[Upvalue]", 9);
+      return;
+    }
 
-      case OBJ_INST:
-        {
-          const Instance* inst = (const Instance*) obj;
-          ByteBufferWrite(buff, vm, '[');
-          ByteBufferWrite(buff, vm, '\'');
-          ByteBufferAddString(buff, vm, inst->cls->name->data, inst->cls->name->length);
-          ByteBufferAddString(buff, vm, "' instance at ", 14);
+    case OBJ_CLASS: {
+      const Class* cls = (const Class*) obj;
+      ByteBufferAddString(buff, vm, "[Class:", 7);
+      ByteBufferAddString(buff, vm, cls->name->data, cls->name->length);
+      /*
+      ByteBufferAddString(buff, vm, " ", 1);
 
-          char buff_addr[STR_HEX_BUFF_SIZE];
-          char* ptr = (char*) buff_addr;
-          (*ptr++) = '0';
-          (*ptr++) = 'x';
-          const int len = snprintf(ptr, sizeof(buff_addr) - 2, "%08x",
-                                   (unsigned int) (uintptr_t) inst);
-          ByteBufferAddString(buff, vm, buff_addr, (uint32_t) len);
-          ByteBufferWrite(buff, vm, ']');
-          return;
-        }
+      char buff_addr[STR_HEX_BUFF_SIZE];
+      char* ptr = (char*)buff_addr;
+      (*ptr++) = '0'; (*ptr++) = 'x';
+      const int len = snprintf(ptr, sizeof(buff_addr) - 2,
+        "%08x", (unsigned int)(uintptr_t)cls);
+      ByteBufferAddString(buff, vm, buff_addr, (uint32_t)len);
+      */
+      ByteBufferWrite(buff, vm, ']');
+      return;
+    }
+
+    case OBJ_POINTER: {
+      const Pointer* ptr = (const Pointer*) obj;
+
+      ByteBufferAddString(buff, vm, "[Pointer:", 9);
+      char addr_buff[STR_HEX_BUFF_SIZE];
+      char* addr_ptr = addr_buff;
+      (*addr_ptr++) = '0';
+      (*addr_ptr++) = 'x';
+      int addr_len = snprintf(
+          addr_ptr, sizeof(addr_buff) - 2, "%08x", (unsigned int) (uintptr_t) ptr->native_ptr);
+      ByteBufferAddString(buff, vm, addr_buff, (uint32_t) addr_len);
+      ByteBufferWrite(buff, vm, ']');
+      return;
+    }
+
+    case OBJ_INST: {
+      const Instance* inst = (const Instance*) obj;
+      ByteBufferWrite(buff, vm, '[');
+      ByteBufferWrite(buff, vm, '\'');
+      ByteBufferAddString(buff, vm, inst->cls->name->data, inst->cls->name->length);
+      ByteBufferAddString(buff, vm, "' instance at ", 14);
+
+      char buff_addr[STR_HEX_BUFF_SIZE];
+      char* ptr = (char*) buff_addr;
+      (*ptr++) = '0';
+      (*ptr++) = 'x';
+      const int len = snprintf(ptr, sizeof(buff_addr) - 2, "%08x", (unsigned int) (uintptr_t) inst);
+      ByteBufferAddString(buff, vm, buff_addr, (uint32_t) len);
+      ByteBufferWrite(buff, vm, ']');
+      return;
+    }
     }
   }
   UNREACHABLE();
@@ -2569,23 +2486,23 @@ bool toBool(Var v) {
   ASSERT(IS_OBJ(v), OOPS);
   Object* o = AS_OBJ(v);
   switch (o->type) {
-    case OBJ_STRING:
-      return ((String*) o)->length != 0;
-    case OBJ_LIST:
-      return ((List*) o)->elements.count != 0;
-    case OBJ_MAP:
-      return ((Map*) o)->count != 0;
-    case OBJ_RANGE: // [[FALLTHROUGH]]
-    case OBJ_MODULE:
-    case OBJ_FUNC:
-    case OBJ_CLOSURE:
-    case OBJ_METHOD_BIND:
-    case OBJ_UPVALUE:
-    case OBJ_FIBER:
-    case OBJ_CLASS:
-    case OBJ_POINTER:
-    case OBJ_INST:
-      return true;
+  case OBJ_STRING:
+    return ((String*) o)->length != 0;
+  case OBJ_LIST:
+    return ((List*) o)->elements.count != 0;
+  case OBJ_MAP:
+    return ((Map*) o)->count != 0;
+  case OBJ_RANGE: // [[FALLTHROUGH]]
+  case OBJ_MODULE:
+  case OBJ_FUNC:
+  case OBJ_CLOSURE:
+  case OBJ_METHOD_BIND:
+  case OBJ_UPVALUE:
+  case OBJ_FIBER:
+  case OBJ_CLASS:
+  case OBJ_POINTER:
+  case OBJ_INST:
+    return true;
   }
 
   UNREACHABLE();

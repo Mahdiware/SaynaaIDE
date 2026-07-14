@@ -10,10 +10,6 @@ JNIEXPORT jint JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1doFile(
 JNIEXPORT jint JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1doString(
     JNIEnv* env, jobject thiz, jstring code);
 JNIEXPORT void JNICALL Java_com_android_saynaa_saynaajava_Saynaa_execute(JNIEnv* env, jobject thiz, jobject context);
-JNIEXPORT void JNICALL Java_com_android_saynaa_saynaajava_Saynaa_invokeCallbackNative(
-    JNIEnv* env, jobject thiz, jint callbackId, jobject arg0);
-JNIEXPORT void JNICALL Java_com_android_saynaa_saynaajava_Saynaa_invokeCallbackMethodNative(
-    JNIEnv* env, jobject thiz, jint callbackId, jstring methodName, jobjectArray args);
 JNIEXPORT jobject JNICALL Java_com_android_saynaa_saynaajava_Saynaa_invokeCallbackMethodWithResultNative(
     JNIEnv* env, jobject thiz, jint callbackId, jstring methodName, jobjectArray args);
 JNIEXPORT jobject JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1getGlobal(

@@ -8,7 +8,7 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.function.Function;
-import com.android.saynaa.saynaajava.tests.EcjTest;
+import java.util.ArrayList;
 
 public class JavaModule {
   protected final SaynaaState state;
@@ -23,7 +23,6 @@ public class JavaModule {
     try {
       SaynaaModule module = state.newModule(module_name);
       state.moduleSetGlobal(module, "context", state.getContext());
-      state.moduleSetGlobal(module, "EjsTest", this, "EcjCompile");
       state.moduleSetGlobal(module, "saynaadir", state.getSaynaaDir());
       state.moduleSetGlobal(module, "bindClass", ReflectionFinder.class, "findClass");
       state.moduleSetGlobal(module, "new", this, "newJavaObject");
@@ -33,16 +32,11 @@ public class JavaModule {
       state.moduleSetGlobal(module, "call", MethodHelper.class, "call");
       state.moduleSetGlobal(module, "instanceof", this, "instanceOf");
       state.moduleSetGlobal(module, "length", this, "lengthOf");
-      state.moduleSetGlobal(module, "testing", this, "testing");
       state.registerModule(module);
     } catch (Exception e) {
       return false;
     }
     return true;
-  }
-
-  public void EcjCompile() {
-    EcjTest.compileHello(state.getSaynaaDir());
   }
 
   public Object newJavaObject(Object classOrName, Object... args) {
@@ -119,7 +113,5 @@ public class JavaModule {
     return -1;
   }
 
-  public byte[] testing() {
-    return new byte[] {'H', 'e', 'l', 'l', 'o'};
-  }
+
 }

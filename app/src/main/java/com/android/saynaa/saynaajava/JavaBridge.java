@@ -43,10 +43,6 @@ public class JavaBridge {
     return slotToJava(unwrapState(state), slot);
   }
 
-  public static Object slotToJava(Saynaa saynaa, int slot) {
-    return slotToJavaInternal(saynaa, slot, 0);
-  }
-
   private static boolean isFiniteDouble(double value) {
     return !Double.isNaN(value) && !Double.isInfinite(value);
   }
@@ -70,59 +66,87 @@ public class JavaBridge {
     return Double.valueOf(value);
   }
 
-  private static Object slotToJavaInternal(Saynaa saynaa, int slot, int depth) {
-    if (saynaa == null || saynaa.isClosed())
+  public static Object slotToJava(Saynaa saynaa, int slot) {
+    if (saynaa == null || saynaa.isClosed()) {
       return null;
+    }
+
+    // FORCE the scratchpad baseline to start well clear of the current slot
+    // and any active argument frame boundaries.
+    int scratchStart = Math.max(slot, saynaa.getSlotCount());
+
+    return slotToJavaInternal(saynaa, slot, scratchStart, 0);
+  }
+
+  private static Object slotToJavaInternal(Saynaa saynaa, int slot, int scratchSlot, int depth) {
+    if (saynaa == null || saynaa.isClosed()) {
+      return null;
+    }
 
     if (depth >= MAX_BRIDGE_RECURSION_DEPTH) {
-      Log.w(TAG, "slotToJava depth limit reached at slot " + slot);
+      Log.e(TAG, "slotToJava depth limit reached at slot " + slot);
       return null;
     }
 
     int type = saynaa.getSlotType(slot);
+
     switch (type) {
     case Saynaa.SLOT_TYPE_NULL:
       return null;
+
     case Saynaa.SLOT_TYPE_BOOL:
       return Boolean.valueOf(saynaa.getSlotBool(slot));
+
     case Saynaa.SLOT_TYPE_NUMBER:
       return decodeSlotNumber(saynaa.getSlotNumber(slot));
+
     case Saynaa.SLOT_TYPE_STRING:
       return saynaa.getSlotString(slot);
+
     case Saynaa.SLOT_TYPE_POINTER:
     case Saynaa.SLOT_TYPE_INSTANCE:
       return saynaa.getSlotJavaObject(slot);
+
     case Saynaa.SLOT_TYPE_LIST: {
       int size = saynaa.getListSize(slot);
       ArrayList<Object> out = new ArrayList<>(Math.max(size, 0));
-      int valueSlot = slot + 1;
-      saynaa.reserveSlots(valueSlot + 1);
+
       for (int i = 0; i < size; i++) {
+        int valueSlot = scratchSlot;
+        //saynaa.reserveSlots(valueSlot + 1);
+
         if (saynaa.listGetToSlot(slot, i, valueSlot)) {
-          out.add(slotToJavaInternal(saynaa, valueSlot, depth + 1));
+          // Offsets the child scratch space by 1 to protect valueSlot
+          out.add(slotToJavaInternal(saynaa, valueSlot, scratchSlot + 1, depth + 1));
         } else {
           out.add(null);
         }
       }
       return out;
     }
+
     case Saynaa.SLOT_TYPE_MAP: {
       int size = saynaa.getMapSize(slot);
       HashMap<Object, Object> out = new HashMap<>(Math.max(size, 0));
-      int keySlot = slot + 1;
-      int valueSlot = slot + 2;
-      saynaa.reserveSlots(valueSlot + 1);
+
       for (int i = 0; i < size; i++) {
+        int keySlot = scratchSlot;
+        int valueSlot = scratchSlot + 1;
+        //saynaa.reserveSlots(valueSlot + 1);
+
         if (saynaa.mapEntryToSlots(slot, i, keySlot, valueSlot)) {
-          Object key = slotToJavaInternal(saynaa, keySlot, depth + 1);
-          Object value = slotToJavaInternal(saynaa, valueSlot, depth + 1);
+          // Offsets child scratch space by 2 to protect both key and value slots
+          Object key = slotToJavaInternal(saynaa, keySlot, scratchSlot + 2, depth + 1);
+          Object value = slotToJavaInternal(saynaa, valueSlot, scratchSlot + 2, depth + 1);
           out.put(key, value);
         }
       }
       return out;
     }
+
     case Saynaa.SLOT_TYPE_MODULE:
       return new SaynaaModule(saynaa, slot);
+
     default:
       return null;
     }
@@ -244,7 +268,7 @@ public class JavaBridge {
 
   // --- Create Java object dynamically ---
   public static Object createJavaObject(String fullClassName, Object... args) {
-    Log.d(TAG, "Creating Java object: " + fullClassName);
+    //Log.d(TAG, "Creating Java object: " + fullClassName);
     logArgsDebug("createJavaObject", args);
     Class<?> cls = ReflectionFinder.findClass(fullClassName);
     if (cls == null) {
@@ -568,6 +592,54 @@ public class JavaBridge {
       return true;
     }
 
+    // HashMap<Object, Object> out = new HashMap<>(Math.max(size, 0));
+    // convert into map
+
+    if (normalized instanceof Map) {
+      saynaa.newMap(slot);
+      Map<?, ?> map = (Map<?, ?>) normalized;
+      for (Map.Entry<?, ?> entry : map.entrySet()) {
+        int keySlot = saynaa.nextSlot();
+        int valueSlot = saynaa.nextSlot();
+
+        if (!pushToSlot(saynaa, keySlot, entry.getKey())) {
+          saynaa.freeSlot(keySlot);
+          saynaa.freeSlot(valueSlot);
+          return false;
+        }
+
+        if (!pushToSlot(saynaa, valueSlot, entry.getValue())) {
+          saynaa.freeSlot(keySlot);
+          saynaa.freeSlot(valueSlot);
+          return false;
+        }
+
+        if (!saynaa.mapSet(slot, keySlot, valueSlot)) {
+          saynaa.freeSlot(keySlot);
+          saynaa.freeSlot(valueSlot);
+          return false;
+        }
+
+        saynaa.freeSlot(keySlot);
+        saynaa.freeSlot(valueSlot);
+      }
+      return true;
+    }
+
+    // ArrayList<Object>
+    if (normalized instanceof List) {
+      saynaa.newList(slot);
+      List<?> list = (List<?>) normalized;
+      for (Object item : list) {
+        int itemSlot = saynaa.nextSlot();
+        if (!pushToSlot(saynaa, itemSlot, item))
+          return false;
+        if (!saynaa.listInsert(slot, -1, itemSlot))
+          return false;
+      }
+      return true;
+    }
+
     // SaynaaModule
     if (normalized instanceof SaynaaModule) {
       saynaa.setSlotHandle(slot, ((SaynaaModule) normalized).getSlot());
@@ -582,7 +654,7 @@ public class JavaBridge {
       return false;
 
     Object normalized = ReflectionNormalizer.normalizeReturn(value);
-    saynaa.reserveSlots(slot + 3);
+    // saynaa.reserveSlots(slot + 2);
 
     if (pushScalarToSlot(saynaa, slot, normalized)) {
       return true;
@@ -624,13 +696,15 @@ public class JavaBridge {
 
     Object[] safeArgs = ReflectionNormalizer.normalizeCallbackArgs(method, args);
     int argc = safeArgs == null ? 0 : safeArgs.length;
-    int argStart = 2;
-    saynaa.reserveSlots(argStart + Math.max(argc, 0) + 4);
+    int argStart = saynaa.allocSlot(argc + 4);
 
     for (int i = 0; i < argc; i++) {
       int slot = argStart + i;
-      if (!pushToSlot(saynaa, slot, safeArgs[i]))
+      if (!pushToSlot(saynaa, slot, safeArgs[i])) {
+        saynaa.freeSlot(argStart, argc + 4);
         return null;
+      }
+      
     }
 
     return saynaa.invokeCallbackMethodWithResultFromSlots(callbackId, methodName, argStart, argc);

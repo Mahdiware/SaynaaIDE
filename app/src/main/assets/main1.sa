@@ -42,10 +42,10 @@ end
 activity.setTitle('Saynaa Demo')
 
 
-testList = java.new('java.util.ArrayList')
-testList.add('a')
-testList.add('b')
-assert(java.length(testList) == 2, 'java.length failed')
+# testList = java.new('java.util.ArrayList')
+# testList.add('a')
+# testList.add('b')
+# assert(java.length(testList) == 2, 'java.length failed')
 
 # result = pcall(function()
 # 	return java.call(testList, 'size')

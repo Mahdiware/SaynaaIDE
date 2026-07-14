@@ -5,8 +5,8 @@ import android.util.Log;
 import android.view.View;
 import com.android.saynaa.activity.SaynaaActivity;
 import com.android.saynaa.saynaajava.JavaMethodBinding;
-import com.android.saynaa.saynaajava.datatype.*;
 import com.android.saynaa.saynaajava.PCallResult;
+import com.android.saynaa.saynaajava.datatype.*;
 
 public class Saynaa {
   public static final int SLOT_TYPE_OBJECT = 0;
@@ -47,10 +47,6 @@ public class Saynaa {
     return saynaa_doStringPcall(code);
   }
 
-  public synchronized void invokeCallback(int callbackId, Object arg0) {
-    invokeCallbackNative(callbackId, arg0);
-  }
-
   public synchronized void invokeCallbackMethod(int callbackId, String methodName, Object[] args) {
     invokeCallbackMethodNative(callbackId, methodName, args);
   }
@@ -61,7 +57,7 @@ public class Saynaa {
 
   public synchronized Object invokeCallbackMethodWithResultFromSlots(
       int callbackId, String methodName, int argStart, int argCount) {
-    return invokeCallbackMethodWithResultFromSlotsNative(callbackId, methodName, argStart, argCount);
+    return invokeCallbackWithResultFromSlots(callbackId, methodName, argStart, argCount);
   }
 
   public synchronized PCallResult pcall(String functionName, Object... args) {
@@ -102,6 +98,10 @@ public class Saynaa {
     return JavaBridge.slotToJava(this, retSlot);
   }
 
+  public synchronized int getSlotCount() {
+    return saynaa_getSlotCount();
+  }
+
   public synchronized Object callGlobalFunction(String name, Object... args) {
     int functionId = getGlobalFunctionId(name);
     return callFunctionByIdWithArgs(functionId, args);
@@ -113,6 +113,22 @@ public class Saynaa {
 
   synchronized void reserveSlots(int count) {
     saynaa_reserveSlots(count);
+  }
+
+  synchronized int allocSlot(int count) {
+    return saynaa_allocSlot(count);
+  }
+
+  synchronized int nextSlot() {
+    return saynaa_nextSlot();
+  }
+
+  synchronized void freeSlot(int slot) {
+    saynaa_freeSlot(slot, 1);
+  }
+
+  synchronized void freeSlot(int slot, int count) {
+    saynaa_freeSlot(slot, count);
   }
 
   synchronized void addSearchPath(String path) {
@@ -279,7 +295,6 @@ public class Saynaa {
   }
 
   private synchronized native int saynaa_doStringPcall(String code);
-  private synchronized native void invokeCallbackNative(int callbackId, Object arg0);
   private synchronized native CPtr saynaa_open();
   private synchronized native Object saynaa_getModule();
   private synchronized native PCallResult saynaa_pcall(String functionName, Object[] args);
@@ -292,6 +307,12 @@ public class Saynaa {
   private synchronized native boolean saynaa_setGlobal(String name, Object value);
   private synchronized native boolean saynaa_setGlobalFromSlot(String name, int slot);
   private synchronized native void saynaa_reserveSlots(int count);
+  private synchronized native int saynaa_nextSlot();
+  private synchronized native void saynaa_freeSlot(int slot, int count);
+  private synchronized native int saynaa_allocSlot(int count);
+  private synchronized native int saynaa_getSlotCount();
+  // only testing
+  private synchronized native int saynaa_testing(int slot);
   private synchronized native void saynaa_setSlotNull(int slot);
   private synchronized native void saynaa_setSlotBool(int slot, boolean value);
   private synchronized native void saynaa_setSlotNumber(int slot, double value);
@@ -327,6 +348,6 @@ public class Saynaa {
   private synchronized native void invokeCallbackMethodNative(int callbackId, String methodName, Object[] args);
   private synchronized native Object invokeCallbackMethodWithResultNative(
       int callbackId, String methodName, Object[] args);
-  private synchronized native Object invokeCallbackMethodWithResultFromSlotsNative(
+  private synchronized native Object invokeCallbackWithResultFromSlots(
       int callbackId, String methodName, int argStart, int argCount);
 }
