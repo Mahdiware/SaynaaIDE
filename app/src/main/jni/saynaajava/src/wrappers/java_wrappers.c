@@ -413,7 +413,7 @@ void java_class_call(VM* vm) {
     LOGE("JavaClass._call returned null for class=%s", clsName == NULL ? "<unknown>" : clsName);
     if (classNameObj != NULL && clsName != NULL)
       (*env)->ReleaseStringUTFChars(env, classNameObj, clsName);
-    SetRuntimeError(vm, "JavaClass._call returned null. Check logcat for constructor mismatch.");
+    SetRuntimeError(vm, "JavaClass._call returned null. Check logcat for constructor mismatch or exception.");
     if (classNameObj != NULL)
       (*env)->DeleteLocalRef(env, classNameObj);
     (*env)->DeleteLocalRef(env, classObj);

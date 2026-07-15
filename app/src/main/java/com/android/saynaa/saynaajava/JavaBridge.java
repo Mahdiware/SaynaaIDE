@@ -631,10 +631,14 @@ public class JavaBridge {
       List<?> list = (List<?>) normalized;
       for (Object item : list) {
         int itemSlot = saynaa.nextSlot();
-        if (!pushToSlot(saynaa, itemSlot, item))
+        if (!pushToSlot(saynaa, itemSlot, item)) {
+          saynaa.freeSlot(itemSlot);
           return false;
-        if (!saynaa.listInsert(slot, -1, itemSlot))
+        }
+        if (!saynaa.listInsert(slot, -1, itemSlot)) {
+          saynaa.freeSlot(itemSlot);
           return false;
+        }
       }
       return true;
     }

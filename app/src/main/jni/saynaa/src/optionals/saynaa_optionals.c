@@ -18,6 +18,7 @@ void registerModuleTerm(VM* vm);
 void registerModuleRegex(VM* vm);
 void registerModuleCompile(VM* vm);
 void registerModuleDebug(VM* vm);
+void registerModuleZip(VM* vm);
 
 void cleanupModuleTerm(VM* vm);
 
@@ -35,6 +36,7 @@ void registerLibs(VM* vm) {
   registerModuleCompile(vm);
   registerModuleDebug(vm);
   registerModuleRegex(vm);
+  registerModuleZip(vm);
 }
 
 // Cleanup the modules.

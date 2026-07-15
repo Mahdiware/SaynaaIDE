@@ -167,6 +167,7 @@ JNIEXPORT jobject JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1getM
   setSlotHandle(vm, slot, handle);
   jobject result = slot_to_java(env, vm, bridge, slot);
   releaseHandle(vm, handle);
+  freeSlot(vm, slot, 1);
   return result;
 }
 
@@ -192,6 +193,8 @@ JNIEXPORT jobject JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1pcal
   jstring jmsg = NULL;
   jobject result = NULL;
   jobject resultValue = NULL;
+  int tempslot1 = -1;
+  int slots = -1;
 
   // ===== VALIDATION =====
   if (vm == NULL || bridge == NULL || functionName == NULL) {
@@ -225,8 +228,8 @@ JNIEXPORT jobject JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1pcal
   // ===== PREPARE CALL =====
   reserveSlots(vm, argc + 1);
 
-  int tempslot1 = nextSlot(vm, true);
-  int slots = allocSlot(vm, argc + 1);
+  tempslot1 = nextSlot(vm, true);
+  slots = allocSlot(vm, argc + 1);
 
   vm->fiber->ret[tempslot1] = module->globals.data[fnIndex];
 
@@ -275,6 +278,14 @@ JNIEXPORT jobject JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1pcal
   }
 
 L_cleanup:
+  if (tempslot1 >= 0) {
+    freeSlot(vm, tempslot1, 1);
+  }
+
+  if (slots >= 0) {
+    freeSlot(vm, slots, argc + 1);
+  }
+
   if (fnNameChars != NULL) {
     (*env)->ReleaseStringUTFChars(env, functionName, fnNameChars);
   }
@@ -336,6 +347,7 @@ JNIEXPORT jobject JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1getG
   setSlotHandle(vm, slot1, handle);
   jobject resultValue = slot_to_java(env, vm, bridge, slot1);
   releaseHandle(vm, handle);
+  freeSlot(vm, slot1, 1);
   return resultValue;
 }
 
@@ -387,9 +399,9 @@ JNIEXPORT jboolean JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1cal
   int slot1 = nextSlot(vm, true);
 
   vm->fiber->ret[slot1] = module->globals.data[functionId];
-  if (!CallFunction(vm, slot1, (int) argCount, (int) argStart, (int) retSlot))
-    return JNI_FALSE;
-  return JNI_TRUE;
+  jboolean ok = CallFunction(vm, slot1, (int) argCount, (int) argStart, (int) retSlot) ? JNI_TRUE : JNI_FALSE;
+  freeSlot(vm, slot1, 1);
+  return ok;
 }
 
 JNIEXPORT jboolean JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1setGlobal(
@@ -417,6 +429,7 @@ JNIEXPORT jboolean JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1set
 
   if (!object_to_slot(env, vm, bridge, slot1, value, "Failed to wrap Java value object.")) {
     (*env)->ReleaseStringUTFChars(env, name, key);
+    freeSlot(vm, slot1, 1);
     return JNI_FALSE;
   }
 
@@ -431,12 +444,14 @@ JNIEXPORT jboolean JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1set
   Handle* handle = GetSlotHandle(vm, slot1);
   if (handle == NULL) {
     (*env)->ReleaseStringUTFChars(env, name, key);
+    freeSlot(vm, slot1, 1);
     return JNI_FALSE;
   }
 
   moduleSetGlobal(vm, module, key, (uint32_t) strlen(key), handle->value);
   releaseHandle(vm, handle);
   (*env)->ReleaseStringUTFChars(env, name, key);
+  freeSlot(vm, slot1, 1);
   return JNI_TRUE;
 }
 
@@ -614,9 +629,9 @@ JNIEXPORT jobject JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1newM
   int slot = nextSlot(vm, true);
   setSlotHandle(vm, slot, module);
   jobject result = slot_to_java(env, vm, bridge, slot);
+  // don't free the slot, it used in Java side
+  //freeSlot(vm, slot, 1);
 
-  // TODO: i think this will cause a leak,
-  // we need to track module handles and release them when the module is GC'd in java
   releaseHandle(vm, module);
   return result;
 }
@@ -681,12 +696,14 @@ JNIEXPORT jboolean JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1mod
 
   if (!object_to_slot(env, vm, bridge, slot1, value, "Failed to wrap Java value object.")) {
     (*env)->ReleaseStringUTFChars(env, name, key);
+    freeSlot(vm, slot1, 1);
     return JNI_FALSE;
   }
 
   Handle* valueHandle = GetSlotHandle(vm, slot1);
   if (valueHandle == NULL) {
     (*env)->ReleaseStringUTFChars(env, name, key);
+    freeSlot(vm, slot1, 1);
     return JNI_FALSE;
   }
 
@@ -694,6 +711,7 @@ JNIEXPORT jboolean JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1mod
 
   releaseHandle(vm, valueHandle);
   (*env)->ReleaseStringUTFChars(env, name, key);
+  freeSlot(vm, slot1, 1);
   return JNI_TRUE;
 }
 
@@ -839,7 +857,6 @@ JNIEXPORT jboolean JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1bin
   return JNI_TRUE;
 }
 
-// use this function: create_java_method_instance(target (object), name (string), false(is static), 0 (slot for method instance));
 JNIEXPORT jboolean JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1bindJavaMethod(
     JNIEnv* env, jobject thiz, jint slot, jobject target, jstring methodName, jboolean isStatic) {
   VM* vm = vm_from_saynaa(env, thiz);
