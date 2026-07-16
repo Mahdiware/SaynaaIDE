@@ -64,5 +64,6 @@ android {
 dependencies {
     implementation fileTree(dir: "libs", include: ["*.jar"])
     implementation project(":sora-editor")
+    implementation "com.google.android.material:material:1.12.0"
 }
 
