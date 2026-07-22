@@ -32,6 +32,7 @@ public class JavaModule {
       state.moduleSetGlobal(module, "call", MethodHelper.class, "call");
       state.moduleSetGlobal(module, "instanceof", this, "instanceOf");
       state.moduleSetGlobal(module, "length", this, "lengthOf");
+      state.moduleSetGlobal(module, "getClassName", this, "getClassName");
       state.registerModule(module);
     } catch (Exception e) {
       return false;
@@ -111,6 +112,13 @@ public class JavaModule {
     if (value.getClass().isArray())
       return Array.getLength(value);
     return -1;
+  }
+
+  public static String getClassName(Object obj) {
+    if (obj instanceof Class) {
+      return ((Class<?>) obj).getName();
+    }
+    return obj.getClass().getName();
   }
 
 
