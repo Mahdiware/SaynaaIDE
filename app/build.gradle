@@ -64,5 +64,24 @@ android {
 dependencies {
     implementation fileTree(dir: "libs", include: ["*.jar"])
     implementation project(":sora-editor")
+
+    // Drawer
+    implementation "androidx.drawerlayout:drawerlayout:1.2.0"
+
+    // Swipe pages
+    implementation "androidx.viewpager2:viewpager2:1.1.0"
+
+    // Lists
+    implementation "androidx.recyclerview:recyclerview:1.3.2"
+
+    // Cards
+    implementation "androidx.cardview:cardview:1.0.0"
+
+    // Fragments (for pages)
+    implementation "androidx.fragment:fragment:1.8.5"
+
+    // Core utilities
+    implementation "androidx.core:core:1.15.0"
+
 }
 
