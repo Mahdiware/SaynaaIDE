@@ -3,9 +3,8 @@ apply plugin: 'com.android.application'
 android {
     namespace 'com.android.saynaa'  // ✅ Required for AGP 8+
 
-    compileSdkVersion 34
-    buildToolsVersion "34.0.0"
-
+    compileSdkVersion 35
+    
     defaultConfig {
         applicationId "com.android.saynaa"
         minSdkVersion 21
