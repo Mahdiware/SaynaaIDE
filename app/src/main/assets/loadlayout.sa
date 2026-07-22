@@ -28,6 +28,9 @@ Context = java.bindClass('android.content.Context')
 DisplayMetrics = java.bindClass('android.util.DisplayMetrics')
 BitmapFactory = java.bindClass('android.graphics.BitmapFactory')
 BitmapDrawable = java.bindClass('android.graphics.drawable.BitmapDrawable')
+GravityLayoutParams = java.bindClass('android.view.Gravity$LayoutParams')
+FrameLayout = java.bindClass('android.widget.FrameLayout')
+FrameLayoutParams = java.bindClass('android.widget.FrameLayout$LayoutParams')
 
 
 RelativeLayoutRule = {
@@ -237,6 +240,18 @@ types = {
   mm: 5
 }
 
+gravity = {
+  center: 17,
+  center_horizontal: 1,
+  center_vertical: 16,
+  left: 3,
+  right: 5,
+  top: 48,
+  bottom: 80,
+  start: 8388611,
+  'end': 8388613
+}
+
 
 function as_numeric(value)
   result = pcall(function(numb) return Number(numb) end, value)
@@ -337,24 +352,7 @@ function split_flags(value)
   if type(value) != 'String' then
     return parts
   end
-  if value.indexOf('|') == -1 then
-    parts.append(value)
-    return parts
-  end
-  i = 0
-  curr = ''
-  while i < value.length do
-    ch = value[i]
-    if ch == '|' then
-      if curr.length > 0 then parts.append(curr) end
-      curr = ''
-    else
-      curr = curr + ch
-    end
-    i = i + 1
-  end
-  if curr.length > 0 then parts.append(curr) end
-  return parts
+  return parts.split('|')
 end
 
 function parse_flags(value, map)
@@ -395,19 +393,15 @@ function checkattr(name)
 end
 
 function parse_gravity(value)
-  if type(value) != 'String' then
-    return value
-  end
-  if value == 'center' then return 17 end
-  if value == 'center_horizontal' then return 1 end
-  if value == 'center_vertical' then return 16 end
-  if value == 'left' then return 3 end
-  if value == 'right' then return 5 end
-  if value == 'top' then return 48 end
-  if value == 'bottom' then return 80 end
-  if value == 'start' then return 8388611 end
-  if value == 'end' then return 8388613 end
-  return null
+    flags = value.split('|')
+    result = 0
+    for flag in flags do
+        flag = flag.strip()
+        if gravity.has(flag) then
+            result = result | gravity.get(flag)
+        end
+    end
+    return result
 end
 
 function set_text_style(view, style)
@@ -485,9 +479,15 @@ function new_layout_params(parent, width, height)
   if parent != null and java.instanceof(parent, LinearLayout) then
     return LinearLayoutParams(width, height)
   end
+
   if parent != null and java.instanceof(parent, RelativeLayout) then
     return RelativeLayoutParams(width, height)
   end
+
+  if parent != null and java.instanceof(parent, FrameLayout) then
+    return FrameLayoutParams(width, height)
+  end
+
   return ViewGroup.LayoutParams(width, height)
 end
 
@@ -518,10 +518,12 @@ function apply_layout(view, params, node)
   end
 
   layout_gravity = node.get('layout_gravity')
-  if layout_gravity != null and java.instanceof(params, LinearLayoutParams) then
+
+  if layout_gravity != null then
     g = parse_gravity(layout_gravity)
+  
     if g != null then
-      params.gravity = g
+        params.gravity = g
     end
   end
 
@@ -568,7 +570,6 @@ function apply_layout(view, params, node)
     end
   end
 
-  debug("type: $view")
   view.setLayoutParams(params)
 end
 
@@ -957,6 +958,8 @@ function loadlayout(activity, node, data)
   H = out.heightPixels
   target_module.define('ids', ids)
   target_module.define('idmap', idmap)
+  target_module.define('width', W)
+  target_module.define('height', H)
   return create_view(node, null, data)
 end
 

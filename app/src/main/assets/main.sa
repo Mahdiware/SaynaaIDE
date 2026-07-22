@@ -60,46 +60,58 @@ result = java.call(result, 'toString')
 assert(result == '8', 'java.call instance method failed')
 
 DemoLayout = {
-  LinearLayout,
-  orientation: 'vertical',
-  padding: '16dp',
-  backgroundColor: '#EEF0F4',
-  layout_width: 'match_parent',
-  layout_height: 'match_parent',
+  FrameLayout,
 
   {
-    TextView,
-    id: 'Title',
-    text: "Welcome to Saynaa!",
-    textSize: '32sp',
-    textStyle: 'bold',
-    textColor: '#111111',
-    layout_width: 'match_parent',
-    gravity: 'center',
-    layout_height: 'wrap_content',
-    layout_marginBottom: '12dp'
-  },
-
-  {
-    Button,
-    id: 'nextpage',
-    text: 'Next Page',
-    layout_width: 'match_parent',
-    layout_height: 'wrap_content',
-    backgroundColor: '#03DAC5',
-    textColor: '#000000',
-    padding: '12dp',
-    layout_marginBottom: '12dp'
-  },
-
-  load(java.saynaadir + "/listview.sa"),
-
-  {
-    ListView,
-    id: 'DemoList',
+    LinearLayout,
+    orientation: 'vertical',
+    padding: '16dp',
     layout_width: 'match_parent',
     layout_height: 'match_parent',
-    items: ['Item 1', 'Item 2', 'Item 3', 'Item 4', 'Item 5']
+
+    {
+      TextView,
+      id: 'Title',
+      text: "Welcome to Saynaa!",
+      textSize: '32sp',
+      textStyle: 'bold',
+      textColor: '#111111',
+      layout_width: 'match_parent',
+      gravity: 'center',
+      layout_height: 'wrap_content',
+      layout_marginBottom: '12dp'
+    },
+  
+    {
+      Button,
+      id: 'nextpage',
+      text: 'Next Page',
+      layout_width: 'match_parent',
+      layout_height: 'wrap_content',
+      backgroundColor: '#03DAC5',
+      textColor: '#000000',
+      padding: '12dp',
+      layout_marginBottom: '12dp'
+    },
+  
+    load(java.saynaadir + "/listview.sa"),
+  
+    {
+      ListView,
+      id: 'DemoList',
+      layout_width: 'match_parent',
+      layout_height: 'match_parent',
+      items: ['Item 1', 'Item 2', 'Item 3', 'Item 4', 'Item 5']
+    },
+  },
+  {
+    ImageView,
+    id: "DemoImage",
+    src: "icon.png",
+    layout_width: "48dp",
+    layout_height: "48dp",
+    layout_gravity: "bottom|right",
+    layout_margin: "16dp"
   }
 }
 
@@ -166,6 +178,11 @@ function onCreate(arg1)
       debug("Item clicked at position: $position, parent: $parent, view: $view, id: $id")
     end
   }))
+
+  # params = FrameLayout.LayoutParams(width,height);
+
+  # params.gravity = Gravity.CENTER;
+  # DemoImage.setLayoutParams(params);
 
   nextpage.setOnClickListener(View.OnClickListener({
     onClick: function(v)
