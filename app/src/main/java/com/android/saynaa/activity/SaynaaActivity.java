@@ -38,13 +38,12 @@ import java.io.FileNotFoundException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
-import androidx.appcompat.app.AppCompatActivity;
 
 /**
  * SaynaaActivity is the main entry point for Saynaa scripts. It initializes the
  * Saynaa runtime, loads the main script, and provides hooks for lifecycle events
  */
-public class SaynaaActivity extends AppCompatActivity implements SaynaaBroadcastReceiver.OnReceiveListener, SaynaaContext {
+public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.OnReceiveListener, SaynaaContext {
   public static final String ARG = "arg";
   public static final String DATA = "data";
   public static final String NAME = "name";
@@ -137,7 +136,7 @@ public class SaynaaActivity extends AppCompatActivity implements SaynaaBroadcast
       dexLoader = new SaynaaDexLoader(this);
       dexLoader.loadLibs();
       saynaaState.setExtraClassLoaders(dexLoader.getClassLoaders());
-      //saynaaState.addSearchPath(saynaaState.getSaynaaDir() + "/");
+      // saynaaState.addSearchPath(saynaaState.getSaynaaDir() + "/");
       File initFile = new File(saynaaDir == null ? localDir : saynaaDir, "init.sa");
       if (initFile.exists()) {
         int initResult = saynaaState.runFile(initFile.getAbsolutePath());
@@ -466,6 +465,16 @@ public class SaynaaActivity extends AppCompatActivity implements SaynaaBroadcast
         return true;
     }
     return super.onOptionsItemSelected(item);
+  }
+
+  @Override
+  public boolean onMenuItemSelected(int featureId, MenuItem item) {
+    if (!item.hasSubMenu()) {
+      Object ret = runFunc("onMenuItemSelected", featureId, item);
+      if (ret instanceof Boolean && (Boolean) ret)
+        return true;
+    }
+    return super.onMenuItemSelected(featureId, item);
   }
 
   @Override

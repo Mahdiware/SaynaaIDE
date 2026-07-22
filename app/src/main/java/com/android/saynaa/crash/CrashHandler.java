@@ -1,5 +1,6 @@
 package com.android.saynaa.crash;
 
+import android.app.Activity;
 import android.app.Application;
 import android.content.ActivityNotFoundException;
 import android.content.ClipData;
@@ -18,7 +19,6 @@ import android.view.ViewGroup;
 import android.widget.HorizontalScrollView;
 import android.widget.ScrollView;
 import android.widget.TextView;
-import androidx.appcompat.app.AppCompatActivity;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -130,7 +130,7 @@ public final class CrashHandler {
     });
   }
 
-  public static final class CrashActiviy extends AppCompatActivity implements MenuItem.OnMenuItemClickListener {
+  public static final class CrashActiviy extends Activity implements MenuItem.OnMenuItemClickListener {
     private static final String EXTRA_CRASH_INFO = "crashInfo";
 
     private String mLog;
@@ -138,6 +138,7 @@ public final class CrashHandler {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
       super.onCreate(savedInstanceState);
+      setTheme(android.R.style.Theme_DeviceDefault);
       mLog = getIntent().getStringExtra(EXTRA_CRASH_INFO);
     setContentView: {
       ScrollView contentView = new ScrollView(this);

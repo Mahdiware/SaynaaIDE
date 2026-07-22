@@ -75,6 +75,7 @@ DemoLayout = {
     textStyle: 'bold',
     textColor: '#111111',
     layout_width: 'match_parent',
+    gravity: 'center',
     layout_height: 'wrap_content',
     layout_marginBottom: '12dp'
   },
