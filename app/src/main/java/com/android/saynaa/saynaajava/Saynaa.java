@@ -315,8 +315,6 @@ public class Saynaa {
   private synchronized native void saynaa_freeSlot(int slot, int count);
   private synchronized native int saynaa_allocSlot(int count);
   private synchronized native int saynaa_getSlotCount();
-  // only testing
-  private synchronized native int saynaa_testing(int slot);
   private synchronized native int saynaa_chdir(String path);
   private synchronized native void saynaa_setSlotNull(int slot);
   private synchronized native void saynaa_setSlotBool(int slot, boolean value);
