@@ -150,6 +150,13 @@ public class SaynaaState {
     saynaa.addSearchPath(path);
   }
 
+  public synchronized int chdir(String path) throws SaynaaException {
+    if (isClosed()) {
+      throw new SaynaaException("SaynaaState is closed.");
+    }
+    return saynaa.chdir(path);
+  }
+
   public synchronized boolean setGlobal(String name, Object value) throws SaynaaException {
     if (isClosed()) {
       throw new SaynaaException("SaynaaState is closed.");

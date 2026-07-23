@@ -10,7 +10,26 @@
 #include <math.h>
 #include <string.h>
 #include <sys/stat.h>
+
+#ifdef _WIN32
+
+#include <direct.h>
+#include <fcntl.h>
+#include <io.h>
+
+#define access _access
+#define unlink _unlink
+#define mkdir _mkdir
+
+#ifndef F_OK
+#define F_OK 0
+#endif
+
+#else
+
 #include <unistd.h>
+
+#endif
 
 typedef enum {
   ZIP_STATE_CLOSED = 0,

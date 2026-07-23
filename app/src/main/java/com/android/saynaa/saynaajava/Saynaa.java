@@ -135,6 +135,10 @@ public class Saynaa {
     saynaa_addSearchPath(path);
   }
 
+  synchronized int chdir(String path) {
+    return saynaa_chdir(path);
+  }
+
   synchronized void setSlotNull(int slot) {
     saynaa_setSlotNull(slot);
   }
@@ -313,6 +317,7 @@ public class Saynaa {
   private synchronized native int saynaa_getSlotCount();
   // only testing
   private synchronized native int saynaa_testing(int slot);
+  private synchronized native int saynaa_chdir(String path);
   private synchronized native void saynaa_setSlotNull(int slot);
   private synchronized native void saynaa_setSlotBool(int slot, boolean value);
   private synchronized native void saynaa_setSlotNumber(int slot, double value);

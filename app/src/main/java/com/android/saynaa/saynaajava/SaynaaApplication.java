@@ -19,12 +19,11 @@ import java.util.Set;
 public class SaynaaApplication extends Application implements SaynaaContext {
   private static SaynaaApplication mApp;
   static private HashMap<String, Object> data = new HashMap<String, Object>();
+  protected String projectDir = ".SaynaaIDE";
   protected String localDir;
   protected String odexDir;
   protected String libDir;
   protected String saynaaMdDir;
-  protected String saynaaCpath;
-  protected String saynaaLpath;
   protected String saynaaExtDir;
   private boolean isUpdata;
   private SharedPreferences mSharedPreferences;
@@ -37,10 +36,10 @@ public class SaynaaApplication extends Application implements SaynaaContext {
       switch (uri.getScheme()) {
       case "content":
         /*try {
-                                    InputStream in = getContentResolver().openInputStream(uri);
-                            } catch (IOException e) {
-                                    e.printStackTrace();
-                            }*/
+            InputStream in = getContentResolver().openInputStream(uri);
+          } catch (IOException e) {
+            e.printStackTrace();
+        */
         Cursor cursor = getContentResolver().query(uri, p, null, null, null);
 
         if (cursor != null) {
@@ -123,42 +122,31 @@ public class SaynaaApplication extends Application implements SaynaaContext {
     // 注册crashHandler
     crashHandler.init(this);
     mSharedPreferences = getSharedPreferences(this);
-    // 初始化AndroSaynaa工作目录
-    if (Environment.getExternalStorageState().equals(Environment.MEDIA_MOUNTED)) {
-      String sdDir = Environment.getExternalStorageDirectory().getAbsolutePath();
-      saynaaExtDir = sdDir + "/AndroSaynaa";
-    } else {
-      File[] fs = new File("/storage").listFiles();
-      if (fs != null) {
-        for (File f : fs) {
-          String[] ls = f.list();
-          if (ls == null)
-            continue;
-          if (ls.length > 5)
-            saynaaExtDir = f.getAbsolutePath() + "/AndroSaynaa";
+
+    File dir = null;
+
+    if (Environment.MEDIA_MOUNTED.equals(Environment.getExternalStorageState())) {
+      dir = new File(Environment.getExternalStorageDirectory(), projectDir);
+
+      try {
+        if (!dir.exists() && !dir.mkdirs()) {
+          dir = null;
         }
+      } catch (SecurityException e) {
+        dir = null;
       }
-      if (saynaaExtDir == null)
-        saynaaExtDir = getDir("AndroSaynaa", Context.MODE_PRIVATE).getAbsolutePath();
     }
-    // saynaaExtDir = mSharedPreferences.getString("user_data_dir", getString(R.string.default_user_data_dir));
 
-    File destDir = new File(saynaaExtDir);
-    if (!destDir.exists())
-      destDir.mkdirs();
+    if (dir == null) {
+      dir = getDir(projectDir, Context.MODE_PRIVATE);
+    }
 
-    // 定义文件夹
+    saynaaExtDir = dir.getAbsolutePath();
+
     localDir = getFilesDir().getAbsolutePath();
     odexDir = getDir("odex", Context.MODE_PRIVATE).getAbsolutePath();
     libDir = getDir("lib", Context.MODE_PRIVATE).getAbsolutePath();
     saynaaMdDir = getDir("saynaa", Context.MODE_PRIVATE).getAbsolutePath();
-    saynaaCpath = getApplicationInfo().nativeLibraryDir + "/lib?.so"
-                  + ";" + libDir + "/lib?.so";
-    // saynaaDir = extDir;
-    saynaaLpath = localDir + "/?.saynaa;" + localDir + "/saynaa/?.saynaa;" + localDir
-                  + "/?/init.saynaa;" + saynaaMdDir + "/?.saynaa;" + saynaaMdDir
-                  + "/saynaa/?.saynaa;" + saynaaMdDir + "/?/init.saynaa;";
-    // checkInfo();
   }
 
   private static SharedPreferences getSharedPreferences(Context context) {

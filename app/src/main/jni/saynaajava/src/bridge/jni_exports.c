@@ -146,6 +146,23 @@ JNIEXPORT jobject JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1open
   return cptrObj;
 }
 
+JNIEXPORT jint JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1chdir(
+    JNIEnv* env, jobject thiz, jstring path) {
+  VM* vm = vm_from_saynaa(env, thiz);
+  if (vm == NULL)
+    return -1;
+
+  const char* pathChars = (*env)->GetStringUTFChars(env, path, NULL);
+  if (pathChars == NULL)
+    return -1;
+
+  int result = chdir(pathChars);
+
+  (*env)->ReleaseStringUTFChars(env, path, pathChars);
+
+  return result;
+}
+
 JNIEXPORT jobject JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1getModule(JNIEnv* env, jobject thiz) {
   VM* vm = vm_from_saynaa(env, thiz);
   if (vm == NULL)
@@ -630,7 +647,7 @@ JNIEXPORT jobject JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1newM
   setSlotHandle(vm, slot, module);
   jobject result = slot_to_java(env, vm, bridge, slot);
   // don't free the slot, it used in Java side
-  //freeSlot(vm, slot, 1);
+  // freeSlot(vm, slot, 1);
 
   releaseHandle(vm, module);
   return result;

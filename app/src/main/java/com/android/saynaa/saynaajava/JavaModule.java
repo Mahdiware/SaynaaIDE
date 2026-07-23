@@ -4,11 +4,11 @@ import android.util.Log;
 import com.android.saynaa.saynaajava.datatype.*;
 import com.android.saynaa.saynaajava.reflection.*;
 import java.lang.reflect.Array;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.function.Function;
-import java.util.ArrayList;
 
 public class JavaModule {
   protected final SaynaaState state;
@@ -33,6 +33,8 @@ public class JavaModule {
       state.moduleSetGlobal(module, "instanceof", this, "instanceOf");
       state.moduleSetGlobal(module, "length", this, "lengthOf");
       state.moduleSetGlobal(module, "getClassName", this, "getClassName");
+      state.moduleSetGlobal(module, "getPackageName", this, "getPackageName");
+      state.moduleSetGlobal(module, "getSimpleClassName", this, "getSimpleClassName");
       state.registerModule(module);
     } catch (Exception e) {
       return false;
@@ -114,12 +116,33 @@ public class JavaModule {
     return -1;
   }
 
-  public static String getClassName(Object obj) {
+  public String getClassName(Object obj) {
     if (obj instanceof Class) {
       return ((Class<?>) obj).getName();
     }
     return obj.getClass().getName();
   }
 
+  public String getPackageName(Object obj) {
+    if (obj instanceof Class) {
+      Package pkg = ((Class<?>) obj).getPackage();
+      return pkg != null ? pkg.getName() : "";
+    }
+    Package pkg = obj.getClass().getPackage();
+    return pkg != null ? pkg.getName() : "";
+  }
 
+  public String getSimpleClassName(Object obj) {
+    if (obj instanceof Class) {
+      return ((Class<?>) obj).getSimpleName();
+    }
+    return obj.getClass().getSimpleName();
+  }
+
+  public String getCanonicalClassName(Object obj) {
+    if (obj instanceof Class) {
+      return ((Class<?>) obj).getCanonicalName();
+    }
+    return obj.getClass().getCanonicalName();
+  }
 }

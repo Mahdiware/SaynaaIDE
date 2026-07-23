@@ -21,6 +21,10 @@
 #define _OS_APPLE_
 #define OS_NAME "apple"
 
+#elif defined(__ANDROID__)
+#define _OS_ANDROID_
+#define OS_NAME "android"
+
 #elif defined(__linux__)
 #define _OS_LINUX_
 #define OS_NAME "linux"
@@ -28,6 +32,18 @@
 #else
 #define _OS_UNKNOWN_
 #define OS_NAME "<?>"
+#endif
+
+#if defined(__x86_64__) || defined(_M_X64)
+#define CPU_NAME "x64"
+#elif defined(__i386__) || defined(_M_IX86)
+#define CPU_NAME "x86"
+#elif defined(__aarch64__)
+#define CPU_NAME "arm64"
+#elif defined(__arm__)
+#define CPU_NAME "arm"
+#else
+#define CPU_NAME "<?>"
 #endif
 
 #if defined(_OS_WIN_)
@@ -282,10 +298,11 @@ List* Arguments(VM* vm) {
 void registerModuleOS(VM* vm) {
   Handle* os = NewModule(vm, "os");
 
-  moduleSetGlobal(vm, ((Module*) AS_OBJ(os->value)), "name", 4,
-                  VAR_OBJ(newString(vm, OS_NAME)));
   moduleSetGlobal(vm, ((Module*) AS_OBJ(os->value)), "platform", 8,
                   VAR_OBJ(newString(vm, OS_NAME)));
+
+  moduleSetGlobal(vm, ((Module*) AS_OBJ(os->value)), "cpu", 3,
+                  VAR_OBJ(newString(vm, CPU_NAME)));
 
   moduleSetGlobal(vm, ((Module*) AS_OBJ(os->value)), "argv", 4, VAR_OBJ(Arguments(vm)));
   moduleSetGlobal(vm, ((Module*) AS_OBJ(os->value)), "argc", 4,
@@ -311,4 +328,5 @@ void registerModuleOS(VM* vm) {
 }
 
 #undef OS_NAME
+#undef CPU_NAME
 #undef MAX_PATH_LEN

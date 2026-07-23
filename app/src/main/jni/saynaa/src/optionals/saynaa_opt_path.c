@@ -80,22 +80,22 @@ static inline size_t checkImportExists(char* path, const char* ext, char* buff) 
 static char* tryImportPaths(VM* vm, char* path, char* buff) {
   size_t path_size = 0;
   size_t raw_size = strlen(path);
-    static const char* EXT[] = {
-    // Prefer bytecode if present.
-    SAYNAA_BYTECODE_EXT,
+  static const char* EXT[] = {
+      // Prefer bytecode if present.
+      SAYNAA_BYTECODE_EXT,
 
-    // Path can already end with '.sa' or anything when running from
-    // RunFile() so it's mandatory for the bellow empty string.
-    SAYNAA_FILE_EXT,
-    "",
+      // Path can already end with '.sa' or anything when running from
+      // RunFile() so it's mandatory for the bellow empty string.
+      SAYNAA_FILE_EXT,
+      "",
 
-  #ifdef _WIN32
-    "\\_init" SAYNAA_BYTECODE_EXT,
-    "\\_init" SAYNAA_FILE_EXT,
-  #else
-    "/_init" SAYNAA_BYTECODE_EXT,
-    "/_init" SAYNAA_FILE_EXT,
-  #endif
+#ifdef _WIN32
+      "\\_init" SAYNAA_BYTECODE_EXT,
+      "\\_init" SAYNAA_FILE_EXT,
+#else
+      "/_init" SAYNAA_BYTECODE_EXT,
+      "/_init" SAYNAA_FILE_EXT,
+#endif
 
 #ifndef NO_DL
 #if defined(_WIN32)
@@ -191,17 +191,21 @@ char* pathResolveImport(VM* vm, const char* from, const char* path) {
 /*****************************************************************************/
 
 static inline bool pathIsFile(const char* path) {
-  struct stat path_stat;
-  if (stat(path, &path_stat))
-    return false; // Error: might be path not exists.
-  return (path_stat.st_mode & S_IFMT) == S_IFREG;
+  struct stat st;
+
+  if (stat(path, &st) != 0)
+    return false;
+
+  return S_ISREG(st.st_mode);
 }
 
 static inline bool pathIsDir(const char* path) {
-  struct stat path_stat;
-  if (stat(path, &path_stat))
-    return false; // Error: might be path not exists.
-  return (path_stat.st_mode & S_IFMT) == S_IFDIR;
+  struct stat st;
+
+  if (stat(path, &st) != 0)
+    return false;
+
+  return S_ISDIR(st.st_mode);
 }
 
 static inline time_t pathMtime(const char* path) {
@@ -384,7 +388,7 @@ saynaa_function(_pathIsDir, "path.isdir(path:String) -> Bool",
 }
 
 saynaa_function(_pathListDir, "path.listdir(path:String='.') -> List",
-                "Returns all the entries in the directory at the [path].") {
+                "Returns all entries in the directory at the [path].") {
   int argc = GetArgc(vm);
   if (!CheckArgcRange(vm, argc, 0, 1))
     return;
@@ -395,29 +399,96 @@ saynaa_function(_pathListDir, "path.listdir(path:String='.') -> List",
       return;
 
   if (!pathIsExists(path)) {
-    SetRuntimeErrorFmt(vm, "Path '%s' does not exists.", path);
+    SetRuntimeErrorFmt(vm, "Path '%s' does not exist.", path);
     return;
   }
 
-  // We create a new list at slot[0] and use slot[1] as our working memory
-  // overriding our parameter.
   NewList(vm, 0);
 
   DIR* dirstream = opendir(path);
-  if (dirstream) {
-    struct dirent* dir;
-    while ((dir = readdir(dirstream)) != NULL) {
-      if (!strcmp(dir->d_name, "."))
-        continue;
-      if (!strcmp(dir->d_name, ".."))
-        continue;
+  if (dirstream == NULL)
+    return;
 
-      setSlotString(vm, 1, dir->d_name);
-      if (!ListInsert(vm, 0, -1, 1))
-        return;
+  struct dirent* dir;
+
+  while ((dir = readdir(dirstream)) != NULL) {
+    if (strcmp(dir->d_name, ".") == 0 || strcmp(dir->d_name, "..") == 0)
+      continue;
+
+    char fullpath[PATH_MAX];
+    snprintf(fullpath, sizeof(fullpath), "%s/%s", path, dir->d_name);
+
+    struct stat st;
+    memset(&st, 0, sizeof(st));
+
+    bool isFile = false;
+    bool isDir = false;
+    bool hidden = false;
+    bool readonly = false;
+
+    if (stat(fullpath, &st) == 0) {
+      isFile = S_ISREG(st.st_mode);
+      isDir = S_ISDIR(st.st_mode);
+      readonly = (st.st_mode & S_IWUSR) == 0;
     }
-    closedir(dirstream);
+
+    hidden = (dir->d_name[0] == '.');
+
+    Map* map = newMap(vm);
+    vmPushTempRef(vm, &map->_super);
+
+#define ADD_STRING(KEY, VALUE) \
+  do { \
+    String* k = newString(vm, KEY); \
+    vmPushTempRef(vm, &k->_super); \
+    String* v = newString(vm, VALUE); \
+    vmPushTempRef(vm, &v->_super); \
+    mapSet(vm, map, VAR_OBJ(k), VAR_OBJ(v)); \
+    vmPopTempRef(vm); \
+    vmPopTempRef(vm); \
+  } while (0)
+
+#define ADD_BOOL(KEY, VALUE) \
+  do { \
+    String* k = newString(vm, KEY); \
+    vmPushTempRef(vm, &k->_super); \
+    mapSet(vm, map, VAR_OBJ(k), VAR_BOOL(VALUE)); \
+    vmPopTempRef(vm); \
+  } while (0)
+
+#define ADD_NUM(KEY, VALUE) \
+  do { \
+    String* k = newString(vm, KEY); \
+    vmPushTempRef(vm, &k->_super); \
+    mapSet(vm, map, VAR_OBJ(k), VAR_NUM((double) (VALUE))); \
+    vmPopTempRef(vm); \
+  } while (0)
+
+    ADD_STRING("name", dir->d_name);
+    ADD_STRING("path", fullpath);
+
+    ADD_BOOL("isFile", isFile);
+    ADD_BOOL("isDir", isDir);
+    ADD_BOOL("hidden", hidden);
+    ADD_BOOL("readonly", readonly);
+
+    ADD_NUM("size", st.st_size);
+    ADD_NUM("modified", st.st_mtime);
+    ADD_NUM("accessed", st.st_atime);
+    ADD_NUM("created", st.st_ctime);
+    ADD_NUM("permissions", st.st_mode);
+
+#undef ADD_STRING
+#undef ADD_BOOL
+#undef ADD_NUM
+
+    vm->fiber->ret[1] = VAR_OBJ(map);
+    ListInsert(vm, 0, -1, 1);
+
+    vmPopTempRef(vm); // map
   }
+
+  closedir(dirstream);
 }
 
 /*****************************************************************************/

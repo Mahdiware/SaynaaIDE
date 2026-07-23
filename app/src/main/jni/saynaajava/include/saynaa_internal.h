@@ -10,6 +10,9 @@
 #include <stdlib.h>
 #include <string.h>
 
+// chdir
+#include <unistd.h>
+
 #define JAVA_REF_MAGIC 0x534A5246u /* SJRF */
 
 typedef struct JavaRef {

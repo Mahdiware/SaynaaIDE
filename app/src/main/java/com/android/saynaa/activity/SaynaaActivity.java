@@ -327,6 +327,7 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
     saynaaState = getOrCreateState();
     saynaa = saynaaState.getSaynaa();
     new JavaModule(saynaaState).create();
+
     ArrayList<Object> javaList = new ArrayList<>();
     javaList.add("alpha");
     javaList.add(123);
@@ -335,6 +336,7 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
     javaMap.put("count", 7);
     try {
       saynaaState.setGlobal("activity", this);
+      saynaaState.chdir(saynaaDir == null ? localDir : saynaaDir);
     } catch (SaynaaException e) {
       sendMsg("initSaynaa error: " + e.getMessage());
     }

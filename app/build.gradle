@@ -3,7 +3,7 @@ apply plugin: 'com.android.application'
 android {
     namespace 'com.android.saynaa'  // ✅ Required for AGP 8+
 
-    compileSdkVersion 35
+    compileSdkVersion 34
     
     defaultConfig {
         applicationId "com.android.saynaa"
@@ -80,7 +80,6 @@ dependencies {
     implementation "androidx.fragment:fragment:1.8.5"
 
     // Core utilities
-    implementation "androidx.core:core:1.15.0"
-
+    implementation "androidx.core:core:1.13.1"
 }
 

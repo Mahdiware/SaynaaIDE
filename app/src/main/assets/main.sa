@@ -94,7 +94,7 @@ DemoLayout = {
       layout_marginBottom: '12dp'
     },
   
-    load(java.saynaadir + "/listview.sa"),
+    load("listview.sa"),
   
     {
       ListView,
@@ -160,11 +160,10 @@ assert(activity.runFunc("runfunc_test", 1, 2, 3, 40) == 46, "activity.runFunc re
 
 debug("This is a debug message from Saynaa script.")
 
-result = load("${java.saynaadir}/loadtest.sa")
+result = load("loadtest.sa")
 debug("loadtest: ${result}")
 
 function onCreate(arg1)
-  debug("onCreate ${os.system("echo $DemoLayout >> ${java.saynaadir}/hi")}")
   root = loadlayout(activity, DemoLayout)
   
   assert(root != null, 'loadlayout returned null')

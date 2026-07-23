@@ -16,6 +16,13 @@
 #include <math.h>
 #include <time.h>
 
+#ifdef _WIN32
+#include <sys/stat.h>
+#else
+#include <sys/stat.h>
+#include <unistd.h>
+#endif
+
 // Path Resolving Functionality Documentation:
 //
 // The core does not implement path resolving functionality directly.
@@ -1457,12 +1464,33 @@ static char* stdinRead(VM* vm) {
   return str;
 }
 
+int is_regular_file(const char* path) {
+  struct stat st;
+
+  if (stat(path, &st) != 0)
+    return 0;
+
+#ifdef _WIN32
+  return (st.st_mode & _S_IFREG) != 0;
+#else
+  return S_ISREG(st.st_mode);
+#endif
+}
+
 static uint8_t* readFileRawBytes(VM* vm, const char* path, size_t* out_size) {
   if (out_size)
     *out_size = 0;
   FILE* file = fopen(path, "rb");
   if (file == NULL)
     return NULL;
+
+  // Check if the file is a regular file. This is important to avoid reading from
+  // special files like /dev/null, /dev/zero, etc.
+  // which can cause the program to hang or consume excessive resources.
+  if (!is_regular_file(path)) {
+    fclose(file);
+    return NULL;
+  }
 
   // Get the source length. In windows the ftell will includes the cariage
   // return when using ftell with fseek. But that's not an issue since

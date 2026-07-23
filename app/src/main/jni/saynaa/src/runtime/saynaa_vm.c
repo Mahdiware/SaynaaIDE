@@ -1100,33 +1100,24 @@ Var vmImportModule(VM* vm, String* from, String* path) {
 
   bool is_relative = path->data[0] == '.';
 
-  // If not relative check the [path] in the modules cache with the name
-  // (before resolving the path).
-  if (!is_relative) {
-    // If not relative path we first search in modules cache. It'll find the
-    // native module or the already imported cache of the script.
-    Var entry = mapGet(vm->modules, VAR_OBJ(path));
-    if (!IS_UNDEF(entry)) {
-      ASSERT(AS_OBJ(entry)->type == OBJ_MODULE, OOPS);
-      return entry; // We're done.
-    }
-  } else {
-    // Relative Import Logic
-    if (vm->config.resolve_path_fn == NULL) {
-      VM_SET_ERROR(vm,
-                   newString(vm, "Cannot import. The hosting application "
-                                 "haven't registered the module loading API"));
-      return VAR_NULL;
-    }
+  Var entry = mapGet(vm->modules, VAR_OBJ(path));
+  if (!IS_UNDEF(entry)) {
+    ASSERT(AS_OBJ(entry)->type == OBJ_MODULE, OOPS);
+    return entry; // We're done.
+  }
 
-    const char* from_path = (from) ? from->data : NULL;
-    Var from_key = (from != NULL) ? VAR_OBJ(from) : VAR_NULL;
-    String* resolved = _resolvePathWithCache(vm, from_key, from_path, path);
-    if (resolved == NULL) {
-      VM_SET_ERROR(vm, stringFormat(vm, "Cannot import module '@'", path));
-      return VAR_NULL;
-    }
+  // Relative Import Logic
+  if (vm->config.resolve_path_fn == NULL) {
+    VM_SET_ERROR(vm,
+                 newString(vm, "Cannot import. The hosting application "
+                               "haven't registered the module loading API"));
+    return VAR_NULL;
+  }
 
+  const char* from_path = (from) ? from->data : NULL;
+  Var from_key = (from != NULL) ? VAR_OBJ(from) : VAR_NULL;
+  String* resolved = _resolvePathWithCache(vm, from_key, from_path, path);
+  if (resolved != NULL) {
     // We use _importResolved which handles cache check for resolved path
     Module* mod = _importResolved(vm, resolved, path);
     if (mod != NULL)

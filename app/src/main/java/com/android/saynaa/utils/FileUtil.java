@@ -11,6 +11,8 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
 
 public class FileUtil {
   public final static String SDCARD_PATH = "/sdcard/saynaa/";
@@ -58,6 +60,70 @@ public class FileUtil {
     } catch (IOException e) {
       e.printStackTrace();
     }
+  }
+
+  /*
+    * Unzip a ZIP file from assets to the specified output directory.
+    * @param assetName name of the ZIP file in assets
+    * @param outputDirectory path to the output directory in internal storage
+    * @throws IOException if an I/O error occurs
+   */
+  public void unZipAssets(Context context, String assetName, String outputDirectory) throws IOException {
+    // Create output directory if it does not exist
+    File outputDir = new File(outputDirectory);
+
+    if (!outputDir.exists()) {
+      outputDir.mkdirs();
+    }
+
+    InputStream inputStream;
+
+    // Open ZIP file from APK assets
+    try {
+      inputStream = context.getAssets().open(assetName);
+    } catch (IOException e) {
+      return;
+    }
+
+    ZipInputStream zipInputStream = new ZipInputStream(inputStream);
+
+    byte[] buffer = new byte[4096];
+
+    ZipEntry zipEntry = zipInputStream.getNextEntry();
+
+    // Extract every file and directory from ZIP
+    while (zipEntry != null) {
+      File file = new File(outputDirectory + File.separator + zipEntry.getName());
+
+      if (zipEntry.isDirectory()) {
+        // Create directory
+        file.mkdirs();
+
+      } else {
+        // Make sure parent directory exists
+        File parent = file.getParentFile();
+
+        if (parent != null && !parent.exists()) {
+          parent.mkdirs();
+        }
+
+        // Write file contents
+        FileOutputStream outputStream = new FileOutputStream(file);
+
+        int count;
+
+        while ((count = zipInputStream.read(buffer)) > 0) {
+          outputStream.write(buffer, 0, count);
+        }
+
+        outputStream.close();
+      }
+
+      // Move to next ZIP entry
+      zipEntry = zipInputStream.getNextEntry();
+    }
+
+    zipInputStream.close();
   }
 
   private static int readAssetsVersion(File marker) {
