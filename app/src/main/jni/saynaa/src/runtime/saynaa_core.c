@@ -1393,11 +1393,19 @@ saynaa_function(stdModuleLoad, "package.load(name:String) -> Module",
     from = frame->closure->fn->owner->path;
   }
 
-  Var module = vmImportModule(vm, from, name);
+  Var _imported = vmImportModule(vm, from, name);
   if (VM_HAS_ERROR(vm))
     return;
+  
+  Module* module = (Module*) AS_OBJ(_imported);
 
-  RET(module);
+  Var ret = VAR_NULL;
+  vmCallFunction(vm, module->body, 0, NULL, &ret);
+
+  if (ret != VAR_NULL)
+    RET(ret);
+  else
+    RET(_imported);
 }
 
 static void initializeCoreModules(VM* vm) {
