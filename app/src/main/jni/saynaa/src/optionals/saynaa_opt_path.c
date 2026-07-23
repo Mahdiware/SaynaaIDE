@@ -388,104 +388,156 @@ saynaa_function(_pathIsDir, "path.isdir(path:String) -> Bool",
 }
 
 saynaa_function(_pathListDir, "path.listdir(path:String='.') -> List",
-                "Returns all entries in the directory at the [path].") {
+                "Returns detailed entries in the directory.") {
   int argc = GetArgc(vm);
   if (!CheckArgcRange(vm, argc, 0, 1))
     return;
 
   const char* path = ".";
-  if (argc == 1)
+
+  if (argc == 1) {
     if (!ValidateSlotString(vm, 1, &path, NULL))
       return;
+  }
 
-  if (!pathIsExists(path)) {
-    SetRuntimeErrorFmt(vm, "Path '%s' does not exist.", path);
+  DIR* dirstream = opendir(path);
+
+  if (dirstream == NULL) {
+    SetRuntimeErrorFmt(vm, "Cannot open directory '%s'.", path);
     return;
   }
 
   NewList(vm, 0);
 
-  DIR* dirstream = opendir(path);
-  if (dirstream == NULL)
-    return;
-
   struct dirent* dir;
 
   while ((dir = readdir(dirstream)) != NULL) {
-    if (strcmp(dir->d_name, ".") == 0 || strcmp(dir->d_name, "..") == 0)
+    if (!strcmp(dir->d_name, ".") || !strcmp(dir->d_name, ".."))
       continue;
 
     char fullpath[PATH_MAX];
+
     snprintf(fullpath, sizeof(fullpath), "%s/%s", path, dir->d_name);
 
     struct stat st;
-    memset(&st, 0, sizeof(st));
 
-    bool isFile = false;
-    bool isDir = false;
-    bool hidden = false;
-    bool readonly = false;
+    if (lstat(fullpath, &st) != 0)
+      continue;
 
-    if (stat(fullpath, &st) == 0) {
-      isFile = S_ISREG(st.st_mode);
-      isDir = S_ISDIR(st.st_mode);
-      readonly = (st.st_mode & S_IWUSR) == 0;
+    const char* type = "unknown";
+
+    if (S_ISREG(st.st_mode))
+      type = "file";
+
+    else if (S_ISDIR(st.st_mode))
+      type = "directory";
+
+#ifdef S_ISLNK
+    else if (S_ISLNK(st.st_mode))
+      type = "symlink";
+#endif
+
+#ifdef S_ISFIFO
+    else if (S_ISFIFO(st.st_mode))
+      type = "fifo";
+#endif
+
+#ifdef S_ISSOCK
+    else if (S_ISSOCK(st.st_mode))
+      type = "socket";
+#endif
+
+#ifdef S_ISCHR
+    else if (S_ISCHR(st.st_mode))
+      type = "character";
+#endif
+
+#ifdef S_ISBLK
+    else if (S_ISBLK(st.st_mode))
+      type = "block";
+#endif
+
+    bool hidden = dir->d_name[0] == '.';
+
+    bool canRead = false;
+    bool canWrite = false;
+    bool canExecute = false;
+
+#ifdef _WIN32
+
+    canRead = _access(fullpath, 4) == 0;
+    canWrite = _access(fullpath, 2) == 0;
+    canExecute = _access(fullpath, 0) == 0;
+
+#else
+
+    canRead = access(fullpath, R_OK) == 0;
+    canWrite = access(fullpath, W_OK) == 0;
+    canExecute = access(fullpath, X_OK) == 0;
+
+#endif
+
+    char target[PATH_MAX];
+    target[0] = '\0';
+
+#ifdef S_ISLNK
+
+    if (strcmp(type, "symlink") == 0) {
+      ssize_t len = readlink(fullpath, target, sizeof(target) - 1);
+
+      if (len >= 0)
+        target[len] = '\0';
     }
 
-    hidden = (dir->d_name[0] == '.');
+#endif
 
     Map* map = newMap(vm);
+
     vmPushTempRef(vm, &map->_super);
 
-#define ADD_STRING(KEY, VALUE) \
-  do { \
-    String* k = newString(vm, KEY); \
-    vmPushTempRef(vm, &k->_super); \
-    String* v = newString(vm, VALUE); \
-    vmPushTempRef(vm, &v->_super); \
-    mapSet(vm, map, VAR_OBJ(k), VAR_OBJ(v)); \
-    vmPopTempRef(vm); \
-    vmPopTempRef(vm); \
-  } while (0)
+    // name
+    mapSet(vm, map, VAR_OBJ(newString(vm, "name")), VAR_OBJ(newString(vm, dir->d_name)));
 
-#define ADD_BOOL(KEY, VALUE) \
-  do { \
-    String* k = newString(vm, KEY); \
-    vmPushTempRef(vm, &k->_super); \
-    mapSet(vm, map, VAR_OBJ(k), VAR_BOOL(VALUE)); \
-    vmPopTempRef(vm); \
-  } while (0)
+    // path
+    mapSet(vm, map, VAR_OBJ(newString(vm, "path")), VAR_OBJ(newString(vm, fullpath)));
 
-#define ADD_NUM(KEY, VALUE) \
-  do { \
-    String* k = newString(vm, KEY); \
-    vmPushTempRef(vm, &k->_super); \
-    mapSet(vm, map, VAR_OBJ(k), VAR_NUM((double) (VALUE))); \
-    vmPopTempRef(vm); \
-  } while (0)
+    // type
+    mapSet(vm, map, VAR_OBJ(newString(vm, "type")), VAR_OBJ(newString(vm, type)));
 
-    ADD_STRING("name", dir->d_name);
-    ADD_STRING("path", fullpath);
+    // size
+    mapSet(vm, map, VAR_OBJ(newString(vm, "size")), VAR_NUM(st.st_size));
 
-    ADD_BOOL("isFile", isFile);
-    ADD_BOOL("isDir", isDir);
-    ADD_BOOL("hidden", hidden);
-    ADD_BOOL("readonly", readonly);
+    // timestamps
+    mapSet(vm, map, VAR_OBJ(newString(vm, "modified")), VAR_NUM(st.st_mtime));
 
-    ADD_NUM("size", st.st_size);
-    ADD_NUM("modified", st.st_mtime);
-    ADD_NUM("accessed", st.st_atime);
-    ADD_NUM("created", st.st_ctime);
-    ADD_NUM("permissions", st.st_mode);
+    mapSet(vm, map, VAR_OBJ(newString(vm, "accessed")), VAR_NUM(st.st_atime));
 
-#undef ADD_STRING
-#undef ADD_BOOL
-#undef ADD_NUM
+    mapSet(vm, map, VAR_OBJ(newString(vm, "changed")), VAR_NUM(st.st_ctime));
+
+    // permissions
+    mapSet(vm, map, VAR_OBJ(newString(vm, "permissions")), VAR_NUM(st.st_mode));
+
+    // flags
+    mapSet(vm, map, VAR_OBJ(newString(vm, "hidden")), VAR_BOOL(hidden));
+
+    mapSet(vm, map, VAR_OBJ(newString(vm, "readonly")), VAR_BOOL(!(st.st_mode & S_IWUSR)));
+
+    mapSet(vm, map, VAR_OBJ(newString(vm, "canRead")), VAR_BOOL(canRead));
+
+    mapSet(vm, map, VAR_OBJ(newString(vm, "canWrite")), VAR_BOOL(canWrite));
+
+    mapSet(vm, map, VAR_OBJ(newString(vm, "canExecute")), VAR_BOOL(canExecute));
+
+    // Only add target for symlinks
+    if (target[0] != '\0') {
+      mapSet(vm, map, VAR_OBJ(newString(vm, "target")), VAR_OBJ(newString(vm, target)));
+    }
 
     vm->fiber->ret[1] = VAR_OBJ(map);
+
     ListInsert(vm, 0, -1, 1);
 
-    vmPopTempRef(vm); // map
+    vmPopTempRef(vm);
   }
 
   closedir(dirstream);
