@@ -28,36 +28,7 @@ public class SaynaaApplication extends Application implements SaynaaContext {
   private boolean isUpdata;
   private SharedPreferences mSharedPreferences;
   private SaynaaState saynaaState;
-
-  public String getPathFromUri(Uri uri) {
-    String path = null;
-    if (uri != null) {
-      String[] p = {getPackageName()};
-      switch (uri.getScheme()) {
-      case "content":
-        /*try {
-            InputStream in = getContentResolver().openInputStream(uri);
-          } catch (IOException e) {
-            e.printStackTrace();
-        */
-        Cursor cursor = getContentResolver().query(uri, p, null, null, null);
-
-        if (cursor != null) {
-          int idx = cursor.getColumnIndexOrThrow(getPackageName());
-          if (idx < 0)
-            break;
-          path = cursor.getString(idx);
-          cursor.moveToFirst();
-          cursor.close();
-        }
-        break;
-      case "file":
-        path = uri.getPath();
-        break;
-      }
-    }
-    return path;
-  }
+  public int tijaabo = 200;
 
   public static SaynaaApplication getInstance() {
     return mApp;

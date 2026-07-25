@@ -184,7 +184,8 @@ JNIEXPORT jobject JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1getM
   setSlotHandle(vm, slot, handle);
   jobject result = slot_to_java(env, vm, bridge, slot);
   releaseHandle(vm, handle);
-  freeSlot(vm, slot, 1);
+  // i don't know its need to comment? check it
+  // freeSlot(vm, slot, 1);
   return result;
 }
 
@@ -368,6 +369,28 @@ JNIEXPORT jobject JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1getG
   return resultValue;
 }
 
+JNIEXPORT jint JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1getGlobalId(
+    JNIEnv* env, jobject thiz, jstring name) {
+  VM* vm = vm_from_saynaa(env, thiz);
+  if (vm == NULL || name == NULL)
+    return (jint) -1;
+
+  BridgeState* bridge = bridge_from_vm(vm);
+  const char* key = (*env)->GetStringUTFChars(env, name, NULL);
+  if (key == NULL)
+    return (jint) -1;
+
+  Module* module = get_or_create_main_module(vm, bridge);
+  if (module == NULL) {
+    (*env)->ReleaseStringUTFChars(env, name, key);
+    return (jint) -1;
+  }
+
+  int idx = moduleGetGlobalIndex(module, key, (uint32_t) strlen(key));
+  (*env)->ReleaseStringUTFChars(env, name, key);
+  return (jint) idx;
+}
+
 JNIEXPORT jint JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1getGlobalFunctionId(
     JNIEnv* env, jobject thiz, jstring name) {
   VM* vm = vm_from_saynaa(env, thiz);
@@ -386,6 +409,23 @@ JNIEXPORT jint JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1getGlob
   }
 
   int idx = moduleGetGlobalIndex(module, key, (uint32_t) strlen(key));
+
+  if (idx == -1) {
+    (*env)->ReleaseStringUTFChars(env, name, key);
+    return (jint) idx;
+  }
+
+  int slot1 = nextSlot(vm, true);
+
+  Var var = module->globals.data[idx];
+  vm->fiber->ret[slot1] = var;
+
+  idx = IS_OBJ_TYPE(var, OBJ_CLOSURE) ? idx : -1;
+
+  LOGI("varTypeName: %s, %d", varTypeName(var), idx);
+
+  freeSlot(vm, slot1, 1);
+
   (*env)->ReleaseStringUTFChars(env, name, key);
   return (jint) idx;
 }

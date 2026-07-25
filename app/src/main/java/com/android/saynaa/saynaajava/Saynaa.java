@@ -72,6 +72,10 @@ public class Saynaa {
     return saynaa_getGlobalFunctionId(name);
   }
 
+  public synchronized int getGlobalId(String name) {
+    return saynaa_getGlobalId(name);
+  }
+
   public synchronized boolean callFunctionById(int functionId, int argStart, int argCount, int retSlot) {
     return saynaa_callFunctionById(functionId, argStart, argCount, retSlot);
   }
@@ -306,6 +310,7 @@ public class Saynaa {
   private synchronized native int saynaa_doString(String code);
   private synchronized native Object saynaa_getGlobal(String name);
   private synchronized native int saynaa_getGlobalFunctionId(String name);
+  private synchronized native int saynaa_getGlobalId(String name);
   private synchronized native boolean saynaa_callFunctionById(
       int functionId, int argStart, int argCount, int retSlot);
   private synchronized native boolean saynaa_setGlobal(String name, Object value);

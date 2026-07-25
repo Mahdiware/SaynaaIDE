@@ -294,9 +294,17 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
     return super.registerReceiver(mReceiver, filter);
   }
 
+  public SaynaaApplication getSaynaaApplication() {
+    return (SaynaaApplication) getApplicationContext();
+  }
+
   @Override
   public Object getSharedData(String key) {
     return SaynaaApplication.getInstance().getSharedData(key);
+  }
+
+  public String getDefaultExtDir() {
+    return SaynaaApplication.getInstance().getSaynaaExtDir();
   }
 
   @Override
@@ -691,13 +699,20 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
     }
 
     try {
-      PCallResult result = getOrCreateState().pcall(funcName, args);
-      if (!result.success && mDebug) {
-        Log.w(TAG, "runFunc non-zero result for hook=" + funcName + ": " + result.message);
-        showScriptError(result.message, "Hook failed: " + funcName + "\n" + drainNativeErrors());
-        return null;
+      saynaaState = getOrCreateState();
+      int id = saynaaState.getGlobalFunctionId(funcName);
+
+      if (id != -1) {
+        Object result = saynaaState.callFunctionById(id, args);
+
+        String errMsg = drainNativeErrors();
+        if (!errMsg.isEmpty()) {
+          showScriptError("Hook error", funcName + ": " + errMsg);
+        }
+
+        return result;
       }
-      return result.value;
+
     } catch (SaynaaException e) {
       if (mDebug) {
         Log.w(TAG, "runFunc failed for hook=" + funcName, e);
@@ -949,13 +964,6 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
 
     layout.addView(scroll, new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
                                ViewGroup.LayoutParams.WRAP_CONTENT));
-  }
-
-  private String getDefaultExtDir() {
-    if (Environment.getExternalStorageState().equals(Environment.MEDIA_MOUNTED)) {
-      return new File(Environment.getExternalStorageDirectory(), "saynaa").getAbsolutePath();
-    }
-    return getDir("saynaa", MODE_PRIVATE).getAbsolutePath();
   }
 
   private final class MainHandler extends Handler {

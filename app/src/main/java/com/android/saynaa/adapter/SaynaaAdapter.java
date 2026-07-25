@@ -286,9 +286,9 @@ public class SaynaaAdapter extends BaseAdapter implements Filterable {
       return view;
     }
 
-    if (mUpdating) {
-      return view;
-    }
+    // if (mUpdating) {
+    //   return view;
+    // }
 
     if (mAnimationFactory != null && convertView != null) {
       Animation animation = mAnimationCache.get(convertView);

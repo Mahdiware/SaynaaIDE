@@ -1,6 +1,7 @@
 package com.android.saynaa.saynaajava;
 
 import android.content.Context;
+import android.util.Log;
 import android.view.View;
 import com.android.saynaa.saynaajava.datatype.*;
 import com.android.saynaa.saynaajava.reflection.ReflectionFinder;
@@ -94,6 +95,13 @@ public class SaynaaState {
     return saynaa.getGlobalFunctionId(name);
   }
 
+  public synchronized int getGlobalId(String name) throws SaynaaException {
+    if (isClosed()) {
+      throw new SaynaaException("SaynaaState is closed.");
+    }
+    return saynaa.getGlobalId(name);
+  }
+
   public synchronized Object callFunctionById(int functionId, Object... args) throws SaynaaException {
     if (isClosed()) {
       throw new SaynaaException("SaynaaState is closed.");
@@ -103,8 +111,8 @@ public class SaynaaState {
     }
 
     int argc = args == null ? 0 : args.length;
-    int argStart = 1;
-    int retSlot = 0;
+    int argStart = saynaa.allocSlot(argc + 4);;
+    int retSlot = saynaa.nextSlot();
     saynaa.reserveSlots(argStart + Math.max(argc, 0) + 2);
     for (int i = 0; i < argc; i++) {
       if (!JavaBridge.pushToSlot(saynaa, argStart + i, args[i])) {
@@ -114,6 +122,7 @@ public class SaynaaState {
 
     boolean ok = saynaa.callFunctionById(functionId, argStart, argc, retSlot);
     if (!ok) {
+      Log.d("SaynaaState", "callFunctionById: failed");
       throw new SaynaaException("CallFunction failed for id: " + functionId);
     }
     return JavaBridge.slotToJava(saynaa, retSlot);
