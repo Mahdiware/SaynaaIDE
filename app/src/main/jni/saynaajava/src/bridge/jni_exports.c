@@ -446,6 +446,13 @@ JNIEXPORT jboolean JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1cal
   if (functionId >= (jint) module->globals.count)
     return JNI_FALSE;
 
+  int needed = argStart + argCount;
+  if (retSlot >= needed)
+    needed = retSlot + 1;
+  if (needed < 1)
+    needed = 1;
+  reserveSlots(vm, needed);
+
   int slot1 = nextSlot(vm, false);
 
   vm->fiber->ret[slot1] = module->globals.data[functionId];
