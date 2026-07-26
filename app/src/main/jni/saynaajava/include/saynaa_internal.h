@@ -65,42 +65,23 @@ struct CallbackEntry {
   CallbackEntry* next;
 };
 
-typedef struct JavaClassNative {
-  JavaRef* class_ref;
-} JavaClassNative;
+typedef enum { JAVA_CLASS, JAVA_OBJECT, JAVA_METHOD } JavaNativeType;
 
-typedef struct JavaObjectNative {
-  JavaRef* object_ref;
-} JavaObjectNative;
+typedef struct {
+  JavaNativeType type;
+  JavaRef* reference;
 
-typedef struct JavaMethodNative {
-  JavaRef* target_ref;
   char* method_name;
   bool is_static;
-} JavaMethodNative;
 
-typedef struct JavaSimpleClasses {
-  jclass stringClass;
-  jclass booleanClass;
-  jclass numberClass;
-  jclass integerClass;
-  jclass longClass;
-  jclass shortClass;
-  jclass byteClass;
-  jclass floatClass;
-  jclass doubleClass;
-  jclass charClass;
-  jclass listClass;
-  jclass mapClass;
-  jclass classClass;
-} JavaSimpleClasses;
+} JavaNativeBase;
 
-typedef struct JavaExport {
-  const char* name;
-  nativeFn fn;
-  int arity;
-  const char* docstring;
-} JavaExport;
+// typedef struct JavaExport {
+//   const char* name;
+//   nativeFn fn;
+//   int arity;
+//   const char* docstring;
+// } JavaExport;
 
 extern BridgeState* bridge_from_vm(VM* vm);
 extern void throw_if_exception(VM* vm, JNIEnv* env, const char* prefix);
@@ -115,15 +96,11 @@ extern jmethodID safe_get_static_method_id(
     VM* vm, JNIEnv* env, jclass cls, const char* name, const char* sig, const char* where);
 
 extern void* new_java_class_instance(VM* vm);
-extern void delete_java_class_instance(VM* vm, void* ptr);
 extern void* new_java_object_instance(VM* vm);
-extern void delete_java_object_instance(VM* vm, void* ptr);
 extern void* new_java_method_instance(VM* vm);
-extern void delete_java_method_instance(VM* vm, void* ptr);
+extern void delete_java_instance(VM* vm, void* ptr);
 
-extern void java_class_init(VM* vm);
-extern void java_object_init(VM* vm);
-extern void java_method_init(VM* vm);
+extern void java_init(VM* vm);
 
 extern void java_class_getter(VM* vm);
 extern void java_class_call(VM* vm);

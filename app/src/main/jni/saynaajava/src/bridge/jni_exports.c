@@ -446,14 +446,7 @@ JNIEXPORT jboolean JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1cal
   if (functionId >= (jint) module->globals.count)
     return JNI_FALSE;
 
-  int needed = argStart + argCount;
-  if (retSlot >= needed)
-    needed = retSlot + 1;
-  if (needed < 1)
-    needed = 1;
-  reserveSlots(vm, needed);
-
-  int slot1 = nextSlot(vm, true);
+  int slot1 = nextSlot(vm, false);
 
   vm->fiber->ret[slot1] = module->globals.data[functionId];
   jboolean ok = CallFunction(vm, slot1, (int) argCount, (int) argStart, (int) retSlot) ? JNI_TRUE : JNI_FALSE;
@@ -1012,56 +1005,14 @@ JNIEXPORT jobject JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1getS
     return (*env)->NewLocalRef(env, ref->global);
   }
 
-  if (type != vINSTANCE || bridge == NULL)
+  if (type != vINSTANCE || bridge == NULL) {
+    LOGE("saynaa_getSlotJavaObject: type isn't instance or bridge is null");
     return NULL;
-
-  int clsSlot = slot + 5;
-  int objSlot = slot + 10;
-  int methodSlot = slot + 7;
-  reserveSlots(vm, methodSlot + 1);
-
-  int slot1 = clsSlot;
-  int slot2 = objSlot;
-  int slot3 = methodSlot;
-
-  // int slot1 = nextSlot(vm, false);
-  // int slot2 = nextSlot(vm, false);
-  // int slot3 = nextSlot(vm, false);
-
-  LOGI("saynaa_getSlotJavaObject called with Slot=%d, type=%s", slot, varTypeName(SLOT(slot)));
-  LOGI("saynaa_getSlotJavaObject: clsSlot=%d, objSlot=%d, methodSlot=%d", slot1, slot2, slot3);
-
-  bool isClass = false, isObject = false, isMethod = false;
-  if (bridge->clsJavaClass != NULL) {
-    setSlotHandle(vm, slot1, bridge->clsJavaClass);
-    IsSlotInstanceOf(vm, slot, slot1, &isClass);
-  }
-  if (bridge->clsJavaObject != NULL) {
-    setSlotHandle(vm, slot2, bridge->clsJavaObject);
-    IsSlotInstanceOf(vm, slot, slot2, &isObject);
-  }
-  if (bridge->clsJavaMethod != NULL) {
-    setSlotHandle(vm, slot3, bridge->clsJavaMethod);
-    IsSlotInstanceOf(vm, slot, slot3, &isMethod);
   }
 
-  if (isClass) {
-    JavaClassNative* jc = (JavaClassNative*) GetSlotNativeInstance(vm, slot);
-    if (jc != NULL && jc->class_ref != NULL && jc->class_ref->global != NULL)
-      return (*env)->NewLocalRef(env, jc->class_ref->global);
-  }
-
-  if (isObject) {
-    JavaObjectNative* jo = (JavaObjectNative*) GetSlotNativeInstance(vm, slot);
-    if (jo != NULL && jo->object_ref != NULL && jo->object_ref->global != NULL)
-      return (*env)->NewLocalRef(env, jo->object_ref->global);
-  }
-
-  if (isMethod) {
-    JavaMethodNative* jm = (JavaMethodNative*) GetSlotNativeInstance(vm, slot);
-    if (jm != NULL && jm->target_ref != NULL && jm->target_ref->global != NULL)
-      return (*env)->NewLocalRef(env, jm->target_ref->global);
-  }
+  JavaNativeBase* javainstance = (JavaNativeBase*) GetSlotNativeInstance(vm, slot);
+  if (javainstance != NULL && javainstance->reference != NULL && javainstance->reference->global != NULL)
+    return (*env)->NewLocalRef(env, javainstance->reference->global);
 
   return NULL;
 }

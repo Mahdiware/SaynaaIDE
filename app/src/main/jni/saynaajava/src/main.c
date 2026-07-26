@@ -632,31 +632,31 @@ bool register_java_wrapper_classes(VM* vm) {
     return false;
   bridge->javaWrapperModule = mod;
 
-  Handle* clsJavaClass = NewClass(vm, "JavaClass", NULL, mod, new_java_class_instance,
-      delete_java_class_instance, "Java class wrapper");
+  Handle* clsJavaClass = NewClass(
+      vm, "JavaClass", NULL, mod, new_java_class_instance, delete_java_instance, "Java class wrapper");
   if (clsJavaClass == NULL)
     return false;
-  ClassAddMethod(vm, clsJavaClass, "_init", java_class_init, 1, "");
+  ClassAddMethod(vm, clsJavaClass, "_init", java_init, 1, "");
   ClassAddMethod(vm, clsJavaClass, "_call", java_class_call, -1, "");
   ClassAddMethod(vm, clsJavaClass, "_getter", java_class_getter, 1, "");
   ClassAddMethod(vm, clsJavaClass, "_str", java_class_str, 0, "");
   bridge->clsJavaClass = clsJavaClass;
 
   Handle* clsJavaObject = NewClass(vm, "JavaObject", NULL, mod, new_java_object_instance,
-      delete_java_object_instance, "Java object wrapper");
+      delete_java_instance, "Java object wrapper");
   if (clsJavaObject == NULL)
     return false;
-  ClassAddMethod(vm, clsJavaObject, "_init", java_object_init, 1, "");
+  ClassAddMethod(vm, clsJavaObject, "_init", java_init, 1, "");
   ClassAddMethod(vm, clsJavaObject, "_getter", java_object_getter, 1, "");
   ClassAddMethod(vm, clsJavaObject, "_setter", java_object_setter, 2, "");
   ClassAddMethod(vm, clsJavaObject, "_str", java_object_str, 0, "");
   bridge->clsJavaObject = clsJavaObject;
 
   Handle* clsJavaMethod = NewClass(vm, "JavaMethod", NULL, mod, new_java_method_instance,
-      delete_java_method_instance, "Java method wrapper");
+      delete_java_instance, "Java method wrapper");
   if (clsJavaMethod == NULL)
     return false;
-  ClassAddMethod(vm, clsJavaMethod, "_init", java_method_init, 3, "");
+  ClassAddMethod(vm, clsJavaMethod, "_init", java_init, 3, "");
   ClassAddMethod(vm, clsJavaMethod, "_call", java_method_call, -1, "");
   ClassAddMethod(vm, clsJavaMethod, "_str", java_method_str, 0, "");
   bridge->clsJavaMethod = clsJavaMethod;

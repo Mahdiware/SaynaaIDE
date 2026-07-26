@@ -258,13 +258,20 @@ public class SaynaaAdapter extends BaseAdapter implements Filterable {
     ViewHolder holder;
     Map<String, Object> row = mData.get(position);
 
+    // --- CRITICAL FIX ---
+    // If we are using a custom factory (loadlayout), we cannot recycle
+    // the view because the factory has no way to update existing views.
+    if (mViewFactory != null) {
+      convertView = null;
+    }
+    // --------------------
+
     if (convertView == null) {
       try {
         view = createRowView(parent, row);
         holder = new ViewHolder(view);
         view.setTag(holder);
       } catch (RuntimeException e) {
-        // FIXED: Expose why the row view creation dropped down here
         Log.e("SaynaaAdapter", "Failed to compile row layout inside getView()", e);
         e.printStackTrace();
         return new View(mContext);
@@ -278,24 +285,22 @@ public class SaynaaAdapter extends BaseAdapter implements Filterable {
       }
     }
 
-    if (mData == null || position < 0 || position >= mData.size()) {
+    if (mData == null || position < 0 || position >= mData.size() || row == null) {
       return view;
     }
 
-    if (row == null) {
-      return view;
+    // Only attempt to bind data manually if we are using standard XML Layouts
+    // (because the ViewFactory handles its own data binding upon creation)
+    if (mViewFactory == null) {
+      bindRowToHolder(holder, row);
     }
 
-    // if (mUpdating) {
-    //   return view;
-    // }
-
-    if (mAnimationFactory != null && convertView != null) {
-      Animation animation = mAnimationCache.get(convertView);
+    if (mAnimationFactory != null && view != null) { // Fixed: check 'view', not 'convertView'
+      Animation animation = mAnimationCache.get(view);
       if (animation == null) {
         animation = mAnimationFactory.createAnimation();
         if (animation != null) {
-          mAnimationCache.put(convertView, animation);
+          mAnimationCache.put(view, animation);
         }
       }
       if (animation != null) {
@@ -305,6 +310,32 @@ public class SaynaaAdapter extends BaseAdapter implements Filterable {
     }
 
     return view;
+  }
+
+  private void bindRowToHolder(ViewHolder holder, Map<String, Object> row) {
+    for (Map.Entry<String, Object> entry : row.entrySet()) {
+      String key = entry.getKey();
+      Object value = entry.getValue();
+
+      // Find the view that matches the Map key (via ID name or tag)
+      View targetView = holder.find(key);
+
+      if (targetView != null) {
+        // Handle TextViews
+        if (targetView instanceof TextView) {
+          ((TextView) targetView).setText(value != null ? String.valueOf(value) : "");
+        }
+        // Handle ImageViews (if you are passing Bitmaps/Drawables)
+        else if (targetView instanceof ImageView) {
+          if (value instanceof Bitmap) {
+            ((ImageView) targetView).setImageBitmap((Bitmap) value);
+          } else if (value instanceof Drawable) {
+            ((ImageView) targetView).setImageDrawable((Drawable) value);
+          }
+        }
+        // Add other view types (e.g., CheckBox, ProgressBar) here if needed
+      }
+    }
   }
 
   @Override

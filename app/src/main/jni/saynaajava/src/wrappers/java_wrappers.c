@@ -4,98 +4,78 @@ static bool is_uppercase_ascii(char c) {
   return c >= 'A' && c <= 'Z';
 }
 
-void* new_java_class_instance(VM* vm) {
+void* new_java_method_instance(VM* vm) {
   (void) vm;
-  return calloc(1, sizeof(JavaClassNative));
+  void* ptr = calloc(1, sizeof(JavaNativeBase));
+  if (ptr != NULL) {
+    JavaNativeBase* inst = (JavaNativeBase*) ptr;
+    inst->type = JAVA_METHOD;
+  }
+  return ptr;
 }
 
-void delete_java_class_instance(VM* vm, void* ptr) {
+void* new_java_class_instance(VM* vm) {
   (void) vm;
-  JavaClassNative* inst = (JavaClassNative*) ptr;
-  if (inst != NULL) {
-    if (inst->class_ref != NULL)
-      java_ref_destructor(inst->class_ref);
-    free(inst);
+  void* ptr = calloc(1, sizeof(JavaNativeBase));
+  if (ptr != NULL) {
+    JavaNativeBase* inst = (JavaNativeBase*) ptr;
+    inst->type = JAVA_CLASS;
   }
+  return ptr;
 }
 
 void* new_java_object_instance(VM* vm) {
   (void) vm;
-  return calloc(1, sizeof(JavaObjectNative));
+  void* ptr = calloc(1, sizeof(JavaNativeBase));
+  if (ptr != NULL) {
+    JavaNativeBase* inst = (JavaNativeBase*) ptr;
+    inst->type = JAVA_OBJECT;
+  }
+  return ptr;
 }
 
-void delete_java_object_instance(VM* vm, void* ptr) {
+void delete_java_instance(VM* vm, void* ptr) {
   (void) vm;
-  JavaObjectNative* inst = (JavaObjectNative*) ptr;
+  JavaNativeBase* inst = (JavaNativeBase*) ptr;
   if (inst != NULL) {
-    if (inst->object_ref != NULL)
-      java_ref_destructor(inst->object_ref);
+    if (inst->reference != NULL)
+      java_ref_destructor(inst->reference);
+    if (inst->type == JAVA_METHOD)
+      if (inst->method_name != NULL)
+        free(inst->method_name);
     free(inst);
   }
 }
 
-void* new_java_method_instance(VM* vm) {
-  (void) vm;
-  return calloc(1, sizeof(JavaMethodNative));
-}
+void java_init(VM* vm) {
+  JavaNativeBase* thiz = (JavaNativeBase*) GetThis(vm);
+  if (thiz == NULL)
+    return;
+  if (!ValidateSlotType(vm, 1, vPOINTER))
+    return;
 
-void delete_java_method_instance(VM* vm, void* ptr) {
-  (void) vm;
-  JavaMethodNative* inst = (JavaMethodNative*) ptr;
-  if (inst != NULL) {
-    if (inst->target_ref != NULL)
-      java_ref_destructor(inst->target_ref);
-    if (inst->method_name != NULL)
-      free(inst->method_name);
-    free(inst);
+  if (thiz->type == JAVA_METHOD) {
+    if (!ValidateSlotString(vm, 2, NULL, NULL))
+      return;
+    const char* method_name = GetSlotString(vm, 2, NULL);
+    thiz->method_name = str_dup_c(method_name);
+    if (GetArgc(vm) >= 3) {
+      thiz->is_static = GetSlotBool(vm, 3);
+    }
   }
-}
 
-void java_class_init(VM* vm) {
-  JavaClassNative* thiz = (JavaClassNative*) GetThis(vm);
-  if (thiz == NULL)
-    return;
-  if (!ValidateSlotType(vm, 1, vPOINTER))
-    return;
-  thiz->class_ref = (JavaRef*) GetSlotPointer(vm, 1, NULL, NULL);
-}
-
-void java_object_init(VM* vm) {
-  JavaObjectNative* thiz = (JavaObjectNative*) GetThis(vm);
-  if (thiz == NULL)
-    return;
-  if (!ValidateSlotType(vm, 1, vPOINTER))
-    return;
-  thiz->object_ref = (JavaRef*) GetSlotPointer(vm, 1, NULL, NULL);
-}
-
-void java_method_init(VM* vm) {
-  JavaMethodNative* thiz = (JavaMethodNative*) GetThis(vm);
-  if (thiz == NULL)
-    return;
-  if (!ValidateSlotType(vm, 1, vPOINTER))
-    return;
-  if (!ValidateSlotString(vm, 2, NULL, NULL))
-    return;
-
-  thiz->target_ref = (JavaRef*) GetSlotPointer(vm, 1, NULL, NULL);
-  const char* method_name = GetSlotString(vm, 2, NULL);
-  thiz->method_name = str_dup_c(method_name);
-
-  if (GetArgc(vm) >= 3) {
-    thiz->is_static = GetSlotBool(vm, 3);
-  }
+  thiz->reference = (JavaRef*) GetSlotPointer(vm, 1, NULL, NULL);
 }
 
 void java_class_getter(VM* vm) {
-  JavaClassNative* thiz = (JavaClassNative*) GetThis(vm);
-  if (thiz == NULL || thiz->class_ref == NULL)
+  JavaNativeBase* thiz = (JavaNativeBase*) GetThis(vm);
+  if (thiz == NULL || thiz->reference == NULL)
     return;
   if (!ValidateSlotString(vm, 1, NULL, NULL))
     return;
 
   const char* name = GetSlotString(vm, 1, NULL);
-  JNIEnv* env = env_from_jvm(thiz->class_ref->jvm);
+  JNIEnv* env = env_from_jvm(thiz->reference->jvm);
   if (env == NULL) {
     SetRuntimeError(vm, "Invalid JNI Environment.");
     return;
@@ -103,7 +83,7 @@ void java_class_getter(VM* vm) {
 
   BridgeState* bridge = bridge_from_vm(vm);
   if (bridge != NULL && bridge->javaBridgeClass != NULL && bridge->mGetFieldValue != NULL) {
-    jobject classObj = (*env)->NewLocalRef(env, thiz->class_ref->global);
+    jobject classObj = (*env)->NewLocalRef(env, thiz->reference->global);
     jstring jField = (*env)->NewStringUTF(env, name == NULL ? "" : name);
 
     jobject fieldValue = (*env)->CallStaticObjectMethod(
@@ -128,7 +108,7 @@ void java_class_getter(VM* vm) {
   // Try resolving nested class references like View.OnClickListener -> android.view.View$OnClickListener
   if (name != NULL && name[0] != '\0' && is_uppercase_ascii(name[0]) && bridge != NULL
       && bridge->javaBridgeClass != NULL && bridge->mFindClass != NULL) {
-    jobject classObj = (*env)->NewLocalRef(env, thiz->class_ref->global);
+    jobject classObj = (*env)->NewLocalRef(env, thiz->reference->global);
     jstring ownerNameObj = get_java_object_name(env, vm, bridge, classObj,
         "JavaClass._getter getName() failed", "JavaClass._getter failed to resolve class name.");
     if (classObj != NULL)
@@ -186,7 +166,7 @@ void java_class_getter(VM* vm) {
     }
   }
 
-  JavaRef* target = clone_java_ref(env, thiz->class_ref);
+  JavaRef* target = clone_java_ref(env, thiz->reference);
   if (target == NULL) {
     SetRuntimeError(vm, "Failed to clone Java class reference.");
     return;
@@ -201,8 +181,8 @@ void java_class_str(VM* vm) {
 }
 
 void java_class_call(VM* vm) {
-  JavaClassNative* thiz = (JavaClassNative*) GetThis(vm);
-  if (thiz == NULL || thiz->class_ref == NULL) {
+  JavaNativeBase* thiz = (JavaNativeBase*) GetThis(vm);
+  if (thiz == NULL || thiz->reference == NULL) {
     LOGE("Invalid JavaClass instance.");
     SetRuntimeError(vm, "Invalid JavaClass instance.");
     return;
@@ -211,7 +191,7 @@ void java_class_call(VM* vm) {
   BridgeState* bridge = bridge_from_vm(vm);
   JNIEnv* env = env_from_jvm(bridge->jvm);
 
-  jobject classObj = (*env)->NewLocalRef(env, thiz->class_ref->global);
+  jobject classObj = (*env)->NewLocalRef(env, thiz->reference->global);
   if (classObj == NULL) {
     LOGE("JavaClass._call failed to access class reference.");
     SetRuntimeError(vm, "JavaClass._call failed to access class reference.");
@@ -413,7 +393,8 @@ void java_class_call(VM* vm) {
     LOGE("JavaClass._call returned null for class=%s", clsName == NULL ? "<unknown>" : clsName);
     if (classNameObj != NULL && clsName != NULL)
       (*env)->ReleaseStringUTFChars(env, classNameObj, clsName);
-    SetRuntimeError(vm, "JavaClass._call returned null. Check logcat for constructor mismatch or exception.");
+    SetRuntimeError(
+        vm, "JavaClass._call returned null. Check logcat for constructor mismatch or exception.");
     if (classNameObj != NULL)
       (*env)->DeleteLocalRef(env, classNameObj);
     (*env)->DeleteLocalRef(env, classObj);
@@ -430,14 +411,14 @@ void java_class_call(VM* vm) {
 }
 
 void java_object_getter(VM* vm) {
-  JavaObjectNative* thiz = (JavaObjectNative*) GetThis(vm);
-  if (thiz == NULL || thiz->object_ref == NULL)
+  JavaNativeBase* thiz = (JavaNativeBase*) GetThis(vm);
+  if (thiz == NULL || thiz->reference == NULL)
     return;
   if (!ValidateSlotString(vm, 1, NULL, NULL))
     return;
 
   const char* name = GetSlotString(vm, 1, NULL);
-  JNIEnv* env = env_from_jvm(thiz->object_ref->jvm);
+  JNIEnv* env = env_from_jvm(thiz->reference->jvm);
   if (env == NULL) {
     SetRuntimeError(vm, "Invalid JNI Environment.");
     return;
@@ -445,7 +426,7 @@ void java_object_getter(VM* vm) {
 
   BridgeState* bridge = bridge_from_vm(vm);
   if (bridge != NULL && bridge->javaBridgeClass != NULL && bridge->mGetFieldValue != NULL) {
-    jobject obj = (*env)->NewLocalRef(env, thiz->object_ref->global);
+    jobject obj = (*env)->NewLocalRef(env, thiz->reference->global);
     jstring jField = (*env)->NewStringUTF(env, name == NULL ? "" : name);
 
     jobject fieldValue = (*env)->CallStaticObjectMethod(
@@ -467,7 +448,7 @@ void java_object_getter(VM* vm) {
     }
   }
 
-  JavaRef* target = clone_java_ref(env, thiz->object_ref);
+  JavaRef* target = clone_java_ref(env, thiz->reference);
   if (target == NULL) {
     SetRuntimeError(vm, "Failed to clone Java object reference.");
     return;
@@ -477,15 +458,15 @@ void java_object_getter(VM* vm) {
 }
 
 void java_object_setter(VM* vm) {
-  JavaObjectNative* thiz = (JavaObjectNative*) GetThis(vm);
-  if (thiz == NULL || thiz->object_ref == NULL)
+  JavaNativeBase* thiz = (JavaNativeBase*) GetThis(vm);
+  if (thiz == NULL || thiz->reference == NULL)
     return;
   if (!ValidateSlotString(vm, 1, NULL, NULL))
     return;
 
   BridgeState* bridge = bridge_from_vm(vm);
   JNIEnv* env = env_from_jvm(bridge->jvm);
-  jobject target = (*env)->NewLocalRef(env, thiz->object_ref->global);
+  jobject target = (*env)->NewLocalRef(env, thiz->reference->global);
   const char* fieldName = GetSlotString(vm, 1, NULL);
   jobject value = slot_to_java(env, vm, bridge, 2);
 
@@ -507,8 +488,8 @@ void java_object_setter(VM* vm) {
 }
 
 void java_object_str(VM* vm) {
-  JavaObjectNative* thiz = (JavaObjectNative*) GetThis(vm);
-  if (thiz == NULL || thiz->object_ref == NULL || thiz->object_ref->global == NULL) {
+  JavaNativeBase* thiz = (JavaNativeBase*) GetThis(vm);
+  if (thiz == NULL || thiz->reference == NULL || thiz->reference->global == NULL) {
     setSlotString(vm, 0, "<JavaObject>");
     return;
   }
@@ -525,7 +506,7 @@ void java_object_str(VM* vm) {
     return;
   }
 
-  jobject target = (*env)->NewLocalRef(env, thiz->object_ref->global);
+  jobject target = (*env)->NewLocalRef(env, thiz->reference->global);
   if (target == NULL) {
     setSlotString(vm, 0, "<JavaObject>");
     return;
@@ -591,8 +572,8 @@ void java_object_str(VM* vm) {
 }
 
 void java_method_call(VM* vm) {
-  JavaMethodNative* thiz = (JavaMethodNative*) GetThis(vm);
-  if (thiz == NULL || thiz->target_ref == NULL || thiz->method_name == NULL) {
+  JavaNativeBase* thiz = (JavaNativeBase*) GetThis(vm);
+  if (thiz == NULL || thiz->reference == NULL || thiz->method_name == NULL) {
     SetRuntimeError(vm, "Invalid JavaMethod instance.");
     return;
   }
@@ -604,7 +585,7 @@ void java_method_call(VM* vm) {
       && thiz->method_name != NULL && argc > 0) {
     jstring jMethod = (*env)->NewStringUTF(env, thiz->method_name);
     if (jMethod != NULL) {
-      jobject targetRef = (*env)->NewLocalRef(env, thiz->target_ref->global);
+      jobject targetRef = (*env)->NewLocalRef(env, thiz->reference->global);
       if (targetRef != NULL) {
         for (int i = 0; i < argc; i++) {
           int slot = 1 + i;
@@ -646,7 +627,7 @@ void java_method_call(VM* vm) {
   jobject ret = NULL;
 
   if (thiz->is_static) {
-    jobject classObj = (*env)->NewLocalRef(env, thiz->target_ref->global);
+    jobject classObj = (*env)->NewLocalRef(env, thiz->reference->global);
     jstring classNameObj = get_java_object_name(env, vm, bridge, classObj,
         "JavaMethod._call static getName failed", "JavaMethod._call static getName failed");
     (*env)->DeleteLocalRef(env, classObj);
@@ -664,7 +645,7 @@ void java_method_call(VM* vm) {
     (*env)->DeleteLocalRef(env, jMethod);
     (*env)->DeleteLocalRef(env, classNameObj);
   } else {
-    jobject target = (*env)->NewLocalRef(env, thiz->target_ref->global);
+    jobject target = (*env)->NewLocalRef(env, thiz->reference->global);
     jstring jMethod = (*env)->NewStringUTF(env, thiz->method_name);
     ret = (*env)->CallStaticObjectMethod(
         env, bridge->javaBridgeClass, bridge->mCallJavaMethod, target, jMethod, args);
@@ -686,7 +667,7 @@ void java_method_call(VM* vm) {
 }
 
 void java_method_str(VM* vm) {
-  JavaMethodNative* thiz = (JavaMethodNative*) GetThis(vm);
+  JavaNativeBase* thiz = (JavaNativeBase*) GetThis(vm);
   if (thiz != NULL && thiz->method_name != NULL) {
     char buffer[256];
     snprintf(buffer, sizeof(buffer), "<JavaMethod %s>", thiz->method_name);
