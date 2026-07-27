@@ -85,20 +85,30 @@ public class Saynaa {
       return null;
     }
 
-    int argc = args == null ? 0 : args.length;
-    int argStart = 1;
-    int retSlot = 0;
-    reserveSlots(argStart + Math.max(argc, 0) + 2);
+    if (functionId < 0) {
+      return null;
+    }
 
+    int argc = args == null ? 0 : args.length;
+    int argStart = allocSlot(argc + 4);
+
+    int retSlot = nextSlot();
+    reserveSlots(argStart + Math.max(argc, 0) + 2);
     for (int i = 0; i < argc; i++) {
       if (!JavaBridge.pushToSlot(this, argStart + i, args[i])) {
+        // throw new SaynaaException("Failed to push argument at index " + i + ".");
+        freeSlot(argStart, argc + 4);
         return null;
       }
     }
 
-    if (!callFunctionById(functionId, argStart, argc, retSlot)) {
-      return null;
+    boolean ok = callFunctionById(functionId, argStart, argc, retSlot);
+    if (!ok) {
+      Log.d("SaynaaState", "callFunctionById: failed");
+      freeSlot(argStart, argc + 4);
+      throw null;
     }
+    freeSlot(argStart, argc + 4);
     return JavaBridge.slotToJava(this, retSlot);
   }
 

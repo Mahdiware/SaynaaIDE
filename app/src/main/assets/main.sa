@@ -115,11 +115,40 @@ DemoLayout = {
   }
 }
 
-AdapterData = [
-  { text: 'Mahdi', icon: 'image1.png' },
-  { text: 'Ahmed', icon: 'image2.png' },
-  { text: 'Ali', icon: 'image3.png' },
-]
+AdapterData = {
+  { text: '1) Mahdi', icon: 'image1.png' },
+  { text: '2) Ahmed', icon: 'image2.png' },
+  { text: '3) Ali', icon: 'image3.png' },
+
+  { text: '4) Hassan', icon: 'image1.png' },
+  { text: '5) Hussein', icon: 'image2.png' },
+  { text: '6) Fatima', icon: 'image3.png' },
+
+  { text: '7) Zainab', icon: 'image1.png' },
+  { text: '8) Aisha', icon: 'image2.png' },
+  { text: '9) Khadija', icon: 'image3.png' },
+
+  { text: '10) Omar', icon: 'image1.png' },
+  { text: '11) Youssef', icon: 'image2.png' },
+  { text: '12) Layla', icon: 'image3.png' },
+
+  { text: '13) Sami', icon: 'image1.png' },
+  { text: '14) Noura', icon: 'image2.png' },
+  { text: '15) Rami', icon: 'image3.png' },
+
+  { text: '16) Zara', icon: 'image1.png' },
+  { text: '17) Lina', icon: 'image2.png' },
+  { text: '18) Maya', icon: 'image3.png' },
+
+  { text: '19) Omar', icon: 'image1.png' },
+  { text: '20) Youssef', icon: 'image2.png' },
+  { text: '21) Layla', icon: 'image3.png' },
+
+  { text: '22) Sami', icon: 'image1.png' },
+  { text: '23) Noura', icon: 'image2.png' },
+  { text: '24) Rami', icon: 'image3.png' },
+
+}
 
 AdapterItem = {
   LinearLayout,

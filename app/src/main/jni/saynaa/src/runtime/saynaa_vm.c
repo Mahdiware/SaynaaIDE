@@ -2184,6 +2184,22 @@ L_vm_main_loop:
     // If we reached here it's a valid callable.
     ASSERT(closure != NULL, OOPS);
 
+    if (closure->_super.type != OBJ_CLOSURE) {
+      ObjectType obj_type = closure->_super.type;
+      String* msg;
+
+      if (obj_type < OBJ_STRING || obj_type > OBJ_INST) {
+        char buff[STR_INT_BUFF_SIZE];
+        sprintf(buff, "%d", obj_type);
+        msg = stringFormat(vm, "$ '$: $'.", "Expected a closure instead got", "garbage number", buff);
+      } else {
+        msg = stringFormat(vm, "$ '$'.", "Expected a closure instead got", getObjectTypeName(obj_type));
+      }
+
+      SAYNAA_DEBUG_LOG(msg->data);
+      RUNTIME_ERROR(stringFormat(vm, msg));
+    }
+
     // Current call semantics: extra arguments are dropped; missing ones become null.
     if (closure->fn->arity != -1) {
       if (argc > closure->fn->arity) { // adjust stack

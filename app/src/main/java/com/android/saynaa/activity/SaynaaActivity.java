@@ -742,7 +742,7 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
     }
   }
 
-  private String drainNativeErrors() {
+  public String drainNativeErrors() {
     synchronized (nativeErrorBuffer) {
       String out = nativeErrorBuffer.toString().trim();
       nativeErrorBuffer.setLength(0);

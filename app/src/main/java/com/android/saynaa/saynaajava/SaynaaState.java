@@ -106,26 +106,7 @@ public class SaynaaState {
     if (isClosed()) {
       throw new SaynaaException("SaynaaState is closed.");
     }
-    if (functionId < 0) {
-      return null;
-    }
-
-    int argc = args == null ? 0 : args.length;
-    int argStart = saynaa.allocSlot(argc + 4);;
-    int retSlot = saynaa.nextSlot();
-    saynaa.reserveSlots(argStart + Math.max(argc, 0) + 2);
-    for (int i = 0; i < argc; i++) {
-      if (!JavaBridge.pushToSlot(saynaa, argStart + i, args[i])) {
-        throw new SaynaaException("Failed to push argument at index " + i + ".");
-      }
-    }
-
-    boolean ok = saynaa.callFunctionById(functionId, argStart, argc, retSlot);
-    if (!ok) {
-      Log.d("SaynaaState", "callFunctionById: failed");
-      throw new SaynaaException("CallFunction failed for id: " + functionId);
-    }
-    return JavaBridge.slotToJava(saynaa, retSlot);
+    return saynaa.callFunctionByIdWithArgs(functionId, args);
   }
 
   public synchronized Object callGlobalFunction(String name, Object... args) throws SaynaaException {
