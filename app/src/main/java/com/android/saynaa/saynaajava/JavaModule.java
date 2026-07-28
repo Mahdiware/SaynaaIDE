@@ -11,31 +11,32 @@ import java.util.Map;
 import java.util.function.Function;
 
 public class JavaModule {
-  protected final SaynaaState state;
+  protected final Saynaa saynaa;
   protected String module_name = "java";
   protected String TAG = "JavaModule";
 
-  public JavaModule(SaynaaState state) {
-    this.state = state;
+  public JavaModule(Saynaa saynaa) {
+    this.saynaa = saynaa;
   }
 
   public boolean create() {
     try {
-      SaynaaModule module = state.newModule(module_name);
-      state.moduleSetGlobal(module, "context", state.getContext());
-      state.moduleSetGlobal(module, "saynaadir", state.getSaynaaDir());
-      state.moduleSetGlobal(module, "bindClass", ReflectionFinder.class, "findClass");
-      state.moduleSetGlobal(module, "new", this, "newJavaObject");
-      state.moduleSetGlobal(module, "getField", FieldHelper.class, "getFieldValue");
-      state.moduleSetGlobal(module, "setField", FieldHelper.class, "setFieldValue");
-      state.moduleSetGlobal(module, "tostring", this, "javaToString");
-      state.moduleSetGlobal(module, "call", MethodHelper.class, "call");
-      state.moduleSetGlobal(module, "instanceof", this, "instanceOf");
-      state.moduleSetGlobal(module, "length", this, "lengthOf");
-      state.moduleSetGlobal(module, "getClassName", this, "getClassName");
-      state.moduleSetGlobal(module, "getPackageName", this, "getPackageName");
-      state.moduleSetGlobal(module, "getSimpleClassName", this, "getSimpleClassName");
-      state.registerModule(module);
+      SaynaaModule module = saynaa.newModule(module_name);
+      saynaa.moduleSetGlobal(module, "context", saynaa.getContext());
+      saynaa.moduleSetGlobal(module, "saynaadir", saynaa.getSaynaaDir());
+      saynaa.moduleSetGlobal(module, "application", saynaa.getContext().getApplicationContext());
+      saynaa.moduleSetGlobal(module, "bindClass", ReflectionFinder.class, "findClass");
+      saynaa.moduleSetGlobal(module, "new", this, "newJavaObject");
+      saynaa.moduleSetGlobal(module, "getField", FieldHelper.class, "getFieldValue");
+      saynaa.moduleSetGlobal(module, "setField", FieldHelper.class, "setFieldValue");
+      saynaa.moduleSetGlobal(module, "tostring", this, "javaToString");
+      saynaa.moduleSetGlobal(module, "call", MethodHelper.class, "call");
+      saynaa.moduleSetGlobal(module, "instanceof", this, "instanceOf");
+      saynaa.moduleSetGlobal(module, "length", this, "lengthOf");
+      saynaa.moduleSetGlobal(module, "getClassName", this, "getClassName");
+      saynaa.moduleSetGlobal(module, "getPackageName", this, "getPackageName");
+      saynaa.moduleSetGlobal(module, "getSimpleClassName", this, "getSimpleClassName");
+      saynaa.registerModule(module);
     } catch (Exception e) {
       return false;
     }

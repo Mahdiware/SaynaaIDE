@@ -1,5 +1,5 @@
 package com.android.saynaa.saynaajava;
 
 public interface JavaFunction {
-  int execute(SaynaaState state) throws SaynaaException;
+  int execute(Saynaa saynaa) throws SaynaaException;
 }

@@ -35,14 +35,6 @@ public class JavaBridge {
   private static final long MAX_SAFE_INTEGER_LONG = 9007199254740991L;
   private static final long MIN_SAFE_INTEGER_LONG = -9007199254740991L;
 
-  private static Saynaa unwrapState(SaynaaState state) {
-    return state == null ? null : state.getSaynaa();
-  }
-
-  public static Object slotToJava(SaynaaState state, int slot) {
-    return slotToJava(unwrapState(state), slot);
-  }
-
   private static boolean isFiniteDouble(double value) {
     return !Double.isNaN(value) && !Double.isInfinite(value);
   }
@@ -175,10 +167,6 @@ public class JavaBridge {
       out[i] = slotToJava(saynaa, startSlot + i);
     }
     return out;
-  }
-
-  public static Object[] argsFromSlots(SaynaaState state, int startSlot, int argc) {
-    return argsFromSlots(unwrapState(state), startSlot, argc);
   }
 
   // --- Check if arg type matches parameter type ---
@@ -479,10 +467,6 @@ public class JavaBridge {
     return pushToSlot(saynaa, outSlot, created);
   }
 
-  public static boolean createFromSlots(SaynaaState state, int classSlot, int valueSlot, int argc, int outSlot) {
-    return createFromSlots(unwrapState(state), classSlot, valueSlot, argc, outSlot);
-  }
-
   public static boolean newFromSlots(Saynaa saynaa, int classSlot, int argsStart, int argc, int outSlot) {
     if (saynaa == null || saynaa.isClosed())
       return false;
@@ -491,10 +475,6 @@ public class JavaBridge {
     Object[] args = argsFromSlots(saynaa, argsStart, argc);
     Object ret = createJavaObjectFlexible(classOrName, args);
     return pushToSlot(saynaa, outSlot, ret);
-  }
-
-  public static boolean newFromSlots(SaynaaState state, int classSlot, int argsStart, int argc, int outSlot) {
-    return newFromSlots(unwrapState(state), classSlot, argsStart, argc, outSlot);
   }
 
   private static void logConstructorMismatch(Class<?> cls, Object[] args) {
@@ -676,20 +656,12 @@ public class JavaBridge {
     return saynaa.bindJavaObject(slot, normalized);
   }
 
-  public static boolean pushToSlot(SaynaaState state, int slot, Object value) {
-    return pushToSlot(unwrapState(state), slot, value);
-  }
-
   private static IdentityHashMap<Object, Boolean> ensureVisitingMap(IdentityHashMap<Object, Boolean> visiting) {
     return visiting != null ? visiting : new IdentityHashMap<Object, Boolean>();
   }
 
   public static Object createProxy(Saynaa saynaa, String interfaceName, String methodName, String script) {
     return SaynaaProxyFactory.createProxy(saynaa, interfaceName, methodName, script);
-  }
-
-  public static Object createProxy(SaynaaState state, String interfaceName, String methodName, String script) {
-    return createProxy(unwrapState(state), interfaceName, methodName, script);
   }
 
   private static Object invokeCallbackFromJava(
@@ -836,11 +808,6 @@ public class JavaBridge {
       Log.e(TAG, "createNativeCallbackProxy failed: " + interfaceName + "." + methodName, t);
       return null;
     }
-  }
-
-  public static Object createNativeCallbackProxy(final SaynaaState state,
-      final String interfaceName, final String methodName, final int callbackId) {
-    return createNativeCallbackProxy(unwrapState(state), interfaceName, methodName, callbackId);
   }
 
   public static String getDefaultInterfaceMethodName(String interfaceName) {

@@ -130,29 +130,6 @@ layout.addView(button)
 activity.setContentView(layout)
 ```
 
-## Important runtime files
-
-- [app/src/main/assets/main.sa](app/src/main/assets/main.sa) — main Saynaa demo.
-- [app/src/main/assets/proxy_test.sa](app/src/main/assets/proxy_test.sa) — proxy feature verification script.
-- [app/src/main/assets/hello.sa](app/src/main/assets/hello.sa) — simple imported module example.
-- [app/src/main/assets/hello.dex](app/src/main/assets/hello.dex) — sample DEX used by the demo scripts.
-- [app/src/main/assets/init.sa](app/src/main/assets/init.sa) — startup initialization script.
-- [app/src/main/assets/init.backup.sa](app/src/main/assets/init.backup.sa) — fallback startup initialization script.
-- [app/src/main/assets/main.backup.sa](app/src/main/assets/main.backup.sa) — fallback main demo script.
-- [app/src/main/assets/main1.sa](app/src/main/assets/main1.sa) — additional demo entry script.
-- [app/src/main/assets/main2.sa](app/src/main/assets/main2.sa) — additional demo entry script.
-- [app/src/main/assets/mainbackup.sa](app/src/main/assets/mainbackup.sa) — legacy backup main script.
-- [app/src/main/assets/loadlayout.sa](app/src/main/assets/loadlayout.sa) — layout helper used by demo UI scripts.
-- [app/src/main/jni/saynaajava/src/main.c](app/src/main/jni/saynaajava/src/main.c) — native entry point and VM bootstrap.
-- [app/src/main/jni/saynaajava/src/api/saynaa_module.c](app/src/main/jni/saynaajava/src/api/saynaa_module.c) — module startup and bytecode/script execution.
-- [app/src/main/jni/saynaajava/src/bridge/jni_exports.c](app/src/main/jni/saynaajava/src/bridge/jni_exports.c) — JNI exports for `Saynaa` native methods.
-- [app/src/main/jni/saynaajava/src/bridge/jni_loader.c](app/src/main/jni/saynaajava/src/bridge/jni_loader.c) — JNI library loading and registration.
-- [app/src/main/jni/saynaajava/src/bridge/jni_utils.c](app/src/main/jni/saynaajava/src/bridge/jni_utils.c) — JNI helper utilities.
-- [app/src/main/jni/saynaajava/src/internal/saynaa_bridge.c](app/src/main/jni/saynaajava/src/internal/saynaa_bridge.c) — native bridge helpers and conversions.
-- [app/src/main/jni/saynaajava/src/wrappers/java_wrappers.c](app/src/main/jni/saynaajava/src/wrappers/java_wrappers.c) — `JavaClass`/`JavaObject`/`JavaMethod` wrapper behavior.
-- [app/src/main/java/com/android/saynaa/saynaajava/JavaBridge.java](app/src/main/java/com/android/saynaa/saynaajava/JavaBridge.java) — Java reflection and proxy bridge.
-- [app/src/main/java/com/android/saynaa/saynaajava/vm/SaynaaState.java](app/src/main/java/com/android/saynaa/saynaajava/vm/SaynaaState.java) — VM-backed scripting state used by the app runtime.
-
 ## Architecture summary
 
 - Java side hosts the Android app and reflection utilities.

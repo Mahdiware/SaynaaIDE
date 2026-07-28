@@ -24,7 +24,7 @@ public class Saynaa {
   public static final int SLOT_TYPE_CLASS = 12;
   public static final int SLOT_TYPE_POINTER = 13;
   public static final int SLOT_TYPE_INSTANCE = 14;
-  Context context;
+  public Context context;
 
   static {
     System.loadLibrary("saynaajava");
@@ -33,6 +33,14 @@ public class Saynaa {
   public Saynaa(Context context) {
     this.context = context;
     this.vm = saynaa_open();
+  }
+
+  public synchronized String getSaynaaDir() {
+    return SaynaaApplication.getInstance().getSaynaaDir();
+  }
+
+  public synchronized Context getContext() {
+    return this.context;
   }
 
   public synchronized int runFile(String fileName) {
@@ -80,6 +88,11 @@ public class Saynaa {
     return saynaa_callFunctionById(functionId, argStart, argCount, retSlot);
   }
 
+
+  public synchronized Object callFunctionById(int functionId, Object... args) {
+    return callFunctionByIdWithArgs(functionId, args);
+  }
+
   public synchronized Object callFunctionByIdWithArgs(int functionId, Object... args) {
     if (isClosed() || functionId < 0) {
       return null;
@@ -104,7 +117,6 @@ public class Saynaa {
 
     boolean ok = callFunctionById(functionId, argStart, argc, retSlot);
     if (!ok) {
-      Log.d("SaynaaState", "callFunctionById: failed");
       freeSlot(argStart, argc + 4);
       throw null;
     }
@@ -125,63 +137,63 @@ public class Saynaa {
     return saynaa_setGlobal(name, value);
   }
 
-  synchronized void reserveSlots(int count) {
+  public synchronized void reserveSlots(int count) {
     saynaa_reserveSlots(count);
   }
 
-  synchronized int allocSlot(int count) {
+  public synchronized int allocSlot(int count) {
     return saynaa_allocSlot(count);
   }
 
-  synchronized int nextSlot() {
+  public synchronized int nextSlot() {
     return saynaa_nextSlot();
   }
 
-  synchronized void freeSlot(int slot) {
+  public synchronized void freeSlot(int slot) {
     saynaa_freeSlot(slot, 1);
   }
 
-  synchronized void freeSlot(int slot, int count) {
+  public synchronized void freeSlot(int slot, int count) {
     saynaa_freeSlot(slot, count);
   }
 
-  synchronized void addSearchPath(String path) {
+  public synchronized void addSearchPath(String path) {
     saynaa_addSearchPath(path);
   }
 
-  synchronized int chdir(String path) {
+  public synchronized int chdir(String path) {
     return saynaa_chdir(path);
   }
 
-  synchronized void setSlotNull(int slot) {
+  public synchronized void setSlotNull(int slot) {
     saynaa_setSlotNull(slot);
   }
 
-  synchronized void setSlotBool(int slot, boolean value) {
+  public synchronized void setSlotBool(int slot, boolean value) {
     saynaa_setSlotBool(slot, value);
   }
 
-  synchronized void setSlotNumber(int slot, double value) {
+  public synchronized void setSlotNumber(int slot, double value) {
     saynaa_setSlotNumber(slot, value);
   }
 
-  synchronized void setSlotString(int slot, String value) {
+  public synchronized void setSlotString(int slot, String value) {
     saynaa_setSlotString(slot, value);
   }
 
-  synchronized void setSlotHandle(int slot, int handleId) {
+  public synchronized void setSlotHandle(int slot, int handleId) {
     saynaa_setSlotHandle(slot, handleId);
   }
 
-  synchronized void newList(int slot) {
+  public synchronized void newList(int slot) {
     saynaa_newList(slot);
   }
 
-  synchronized void newMap(int slot) {
+  public synchronized void newMap(int slot) {
     saynaa_newMap(slot);
   }
 
-  synchronized SaynaaModule newModule(String name) {
+  public synchronized SaynaaModule newModule(String name) {
     Object module = saynaa_newModule(name);
     // module is istance of SaynaaModule
     if (module instanceof SaynaaModule) {
@@ -191,39 +203,39 @@ public class Saynaa {
     }
   }
 
-  synchronized boolean moduleSetGlobal(SaynaaModule module, String name, Object value) {
+  public synchronized boolean moduleSetGlobal(SaynaaModule module, String name, Object value) {
     return saynaa_moduleSetGlobal(module.getSlot(), name, value);
   }
 
-  synchronized boolean moduleSetGlobal(SaynaaModule module, String name, Object clazz, String methodName) {
+  public synchronized boolean moduleSetGlobal(SaynaaModule module, String name, Object clazz, String methodName) {
     return saynaa_moduleSetGlobal(module.getSlot(), name, new JavaMethodBinding(clazz, methodName));
   }
 
-  synchronized boolean registerModule(SaynaaModule module) {
+  public synchronized boolean registerModule(SaynaaModule module) {
     return saynaa_registerModule(module.getSlot());
   }
 
-  synchronized int runFile(SaynaaModule module, String path) {
+  public synchronized int runFile(SaynaaModule module, String path) {
     return saynaa_runFile(module.getSlot(), path);
   }
 
-  synchronized boolean listInsert(int listSlot, int index, int valueSlot) {
+  public synchronized boolean listInsert(int listSlot, int index, int valueSlot) {
     return saynaa_listInsert(listSlot, index, valueSlot);
   }
 
-  synchronized boolean mapSet(int mapSlot, int keySlot, int valueSlot) {
+  public synchronized boolean mapSet(int mapSlot, int keySlot, int valueSlot) {
     return saynaa_mapSet(mapSlot, keySlot, valueSlot);
   }
 
-  synchronized boolean bindJavaObject(int slot, Object value) {
+  public synchronized boolean bindJavaObject(int slot, Object value) {
     return saynaa_bindJavaObject(slot, value);
   }
 
-  synchronized boolean bindJavaClass(int slot, Class<?> clazz) {
+  public synchronized boolean bindJavaClass(int slot, Class<?> clazz) {
     return saynaa_bindJavaClass(slot, clazz);
   }
 
-  synchronized boolean bindJavaMethod(int slot, Object target, String methodName) {
+  public synchronized boolean bindJavaMethod(int slot, Object target, String methodName) {
     if (target instanceof Class) {
       // Static method
       return saynaa_bindJavaMethod(slot, target, methodName, true);
@@ -233,39 +245,39 @@ public class Saynaa {
     }
   }
 
-  synchronized int getSlotType(int slot) {
+  public synchronized int getSlotType(int slot) {
     return saynaa_getSlotType(slot);
   }
 
-  synchronized boolean getSlotBool(int slot) {
+  public synchronized boolean getSlotBool(int slot) {
     return saynaa_getSlotBool(slot);
   }
 
-  synchronized double getSlotNumber(int slot) {
+  public synchronized double getSlotNumber(int slot) {
     return saynaa_getSlotNumber(slot);
   }
 
-  synchronized String getSlotString(int slot) {
+  public synchronized String getSlotString(int slot) {
     return saynaa_getSlotString(slot);
   }
 
-  synchronized Object getSlotJavaObject(int slot) {
+  public synchronized Object getSlotJavaObject(int slot) {
     return saynaa_getSlotJavaObject(slot);
   }
 
-  synchronized int getListSize(int listSlot) {
+  public synchronized int getListSize(int listSlot) {
     return saynaa_getListSize(listSlot);
   }
 
-  synchronized boolean listGetToSlot(int listSlot, int index, int valueSlot) {
+  public synchronized boolean listGetToSlot(int listSlot, int index, int valueSlot) {
     return saynaa_listGetToSlot(listSlot, index, valueSlot);
   }
 
-  synchronized int getMapSize(int mapSlot) {
+  public synchronized int getMapSize(int mapSlot) {
     return saynaa_getMapSize(mapSlot);
   }
 
-  synchronized boolean mapEntryToSlots(int mapSlot, int entryIndex, int keySlot, int valueSlot) {
+  public synchronized boolean mapEntryToSlots(int mapSlot, int entryIndex, int keySlot, int valueSlot) {
     return saynaa_mapEntryToSlots(mapSlot, entryIndex, keySlot, valueSlot);
   }
 
@@ -282,18 +294,17 @@ public class Saynaa {
   }
 
   public synchronized void close() {
-    if (this.vm != null && this.vm.getPointer() != 0) {
+    if (this.vm != 0) {
       try {
         saynaa_close();
       } finally {
-        this.vm.setPointer(0);
-        this.vm = null;
+        this.vm = 0;
       }
     }
   }
 
   public synchronized boolean isClosed() {
-    return this.vm == null || this.vm.getPointer() == 0;
+    return this.vm == 0;
   }
 
   // Called from native bridge when VM writes to stderr.
@@ -309,11 +320,11 @@ public class Saynaa {
   }
 
   public synchronized long getCPtrPeer() {
-    return this.vm == null ? 0 : this.vm.getPointer();
+    return this.vm;
   }
 
   private synchronized native int saynaa_doStringPcall(String code);
-  private synchronized native CPtr saynaa_open();
+  private synchronized native long saynaa_open();
   private synchronized native Object saynaa_getModule();
   private synchronized native PCallResult saynaa_pcall(String functionName, Object[] args);
   private synchronized native int saynaa_doFile(String fileName);
@@ -362,7 +373,7 @@ public class Saynaa {
   private synchronized native void saynaa_close();
   @SuppressWarnings("unused") private String source;
   @SuppressWarnings("unused") private String scriptPath;
-  private CPtr vm;
+  private long vm;
   private synchronized native void invokeCallbackMethodNative(int callbackId, String methodName, Object[] args);
   private synchronized native Object invokeCallbackMethodWithResultNative(
       int callbackId, String methodName, Object[] args);

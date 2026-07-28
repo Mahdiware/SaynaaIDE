@@ -35,10 +35,10 @@ saynaa_function(_debug, "debug(msg:Var) -> Null", "Print the string representati
   __android_log_print(ANDROID_LOG_INFO, "saynaadebug", "%s", s == NULL ? "" : s);
 }
 
-JNIEXPORT jobject JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1open(JNIEnv* env, jobject thiz) {
+JNIEXPORT jlong JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1open(JNIEnv* env, jobject thiz) {
   JavaVM* jvm = NULL;
   if ((*env)->GetJavaVM(env, &jvm) != JNI_OK) {
-    return NULL;
+    return 0;
   }
 
   Configuration config = NewConfiguration();
@@ -47,7 +47,7 @@ JNIEXPORT jobject JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1open
 
   VM* vm = NewVM(&config);
   if (vm == NULL) {
-    return NULL;
+    return 0;
   }
 
   RegisterBuiltinFn(vm, "debug", _debug, 1, DOCSTRING(_debug));
@@ -55,7 +55,7 @@ JNIEXPORT jobject JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1open
   BridgeState* bridge = (BridgeState*) calloc(1, sizeof(BridgeState));
   if (bridge == NULL) {
     FreeVM(vm);
-    return NULL;
+    return 0;
   }
 
   bridge->jvm = jvm;
@@ -63,7 +63,7 @@ JNIEXPORT jobject JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1open
   if (bridge->saynaaObject == NULL) {
     free(bridge);
     FreeVM(vm);
-    return NULL;
+    return 0;
   }
 
   jclass localBridgeClass = (*env)->FindClass(env, "com/android/saynaa/saynaajava/JavaBridge");
@@ -71,7 +71,7 @@ JNIEXPORT jobject JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1open
     (*env)->DeleteGlobalRef(env, bridge->saynaaObject);
     free(bridge);
     FreeVM(vm);
-    return NULL;
+    return 0;
   }
 
   bridge->javaBridgeClass = (jclass) (*env)->NewGlobalRef(env, localBridgeClass);
@@ -120,7 +120,7 @@ JNIEXPORT jobject JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1open
     (*env)->DeleteGlobalRef(env, bridge->javaBridgeClass);
     free(bridge);
     FreeVM(vm);
-    return NULL;
+    return 0;
   }
 
   SetUserData(vm, bridge);
@@ -130,20 +130,10 @@ JNIEXPORT jobject JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1open
     free(bridge);
     SetUserData(vm, NULL);
     FreeVM(vm);
-    return NULL;
+    return 0;
   }
 
-  jclass cptrCls = (*env)->FindClass(env, "com/android/saynaa/saynaajava/CPtr");
-  if (cptrCls == NULL) {
-    return NULL;
-  }
-
-  jobject cptrObj = (*env)->AllocObject(env, cptrCls);
-  jfieldID ptrField = (*env)->GetFieldID(env, cptrCls, "pointer", "J");
-  (*env)->SetLongField(env, cptrObj, ptrField, (jlong) (intptr_t) vm);
-  (*env)->DeleteLocalRef(env, cptrCls);
-
-  return cptrObj;
+  return (jlong) vm;
 }
 
 JNIEXPORT jint JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1chdir(

@@ -4,20 +4,20 @@ import android.content.Context;
 import java.util.ArrayList;
 import java.util.List;
 
-public final class SaynaaStateFactory {
-  private static final List<SaynaaState> states = new ArrayList<>();
+public final class SaynaaFactory {
+  private static final List<Saynaa> states = new ArrayList<>();
 
-  private SaynaaStateFactory() {}
+  private SaynaaFactory() {}
 
-  public static synchronized SaynaaState newState(Context context) {
+  public static synchronized Saynaa newState(Context context) {
     int i = nextIndex();
-    SaynaaState state = new SaynaaState(context, i);
+    Saynaa state = new Saynaa(context);
     ensureSize(i + 1);
     states.set(i, state);
     return state;
   }
 
-  public static synchronized SaynaaState getExistingState(int index) {
+  public static synchronized Saynaa getExistingState(int index) {
     if (index < 0 || index >= states.size()) return null;
     return states.get(index);
   }

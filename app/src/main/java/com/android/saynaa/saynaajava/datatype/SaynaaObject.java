@@ -5,7 +5,6 @@ import com.android.saynaa.saynaajava.*;
 public class SaynaaObject {
   // private final Object value;
 
-  // FIXME: use SaynaaState instead of Saynaa
   protected final Saynaa saynaa;
   protected final int slot;
 

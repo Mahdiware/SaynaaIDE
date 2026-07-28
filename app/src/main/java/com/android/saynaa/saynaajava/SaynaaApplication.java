@@ -27,7 +27,7 @@ public class SaynaaApplication extends Application implements SaynaaContext {
   protected String saynaaExtDir;
   private boolean isUpdata;
   private SharedPreferences mSharedPreferences;
-  private SaynaaState saynaaState;
+  private Saynaa saynaa;
   public int tijaabo = 200;
 
   public static SaynaaApplication getInstance() {
@@ -90,7 +90,6 @@ public class SaynaaApplication extends Application implements SaynaaContext {
     super.onCreate();
     mApp = this;
     CrashHandler crashHandler = CrashHandler.getInstance();
-    // 注册crashHandler
     crashHandler.init(this);
     mSharedPreferences = getSharedPreferences(this);
 
@@ -229,11 +228,11 @@ public class SaynaaApplication extends Application implements SaynaaContext {
   }
 
   @Override
-  public SaynaaState getSaynaaState() {
-    if (saynaaState == null || saynaaState.isClosed()) {
-      saynaaState = SaynaaStateFactory.newState(this);
+  public Saynaa getSaynaa() {
+    if (saynaa == null || saynaa.isClosed()) {
+      saynaa = SaynaaFactory.newState(this);
     }
-    return saynaaState;
+    return saynaa;
   }
 
   @Override

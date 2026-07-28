@@ -21,7 +21,7 @@ import android.widget.ImageView;
 import android.widget.TextView;
 import com.android.saynaa.activity.SaynaaActivity;
 import com.android.saynaa.saynaajava.SaynaaException;
-import com.android.saynaa.saynaajava.SaynaaState;
+import com.android.saynaa.saynaajava.Saynaa;
 import java.io.File;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
@@ -529,18 +529,18 @@ public class SaynaaAdapter extends BaseAdapter implements Filterable {
     private static final String LOADLAYOUT_ALIAS = "loadlayout";
     private final Object layoutSpec;
     private final SaynaaActivity activity;
-    private final SaynaaState saynaaState;
+    private final Saynaa saynaa;
     private boolean loadlayoutReady;
 
     SaynaaLayoutFactory(Context context, Object layoutSpec) {
       this.layoutSpec = layoutSpec;
       this.activity = context instanceof SaynaaActivity ? (SaynaaActivity) context : null;
-      this.saynaaState = this.activity != null ? this.activity.getSaynaaState() : null;
+      this.saynaa = this.activity != null ? this.activity.getSaynaa() : null;
     }
 
     @Override
     public View createView(LayoutInflater inflater, ViewGroup parent, Map<String, Object> row) {
-      if (activity == null || saynaaState == null) {
+      if (activity == null || saynaa == null) {
         throw new IllegalStateException("SaynaaActivity is required to use loadlayout.");
       }
       Object result = callLoadlayout(layoutSpec, row);
@@ -555,8 +555,8 @@ public class SaynaaAdapter extends BaseAdapter implements Filterable {
         return null;
       }
       try {
-        return saynaaState.callGlobalFunction(LOADLAYOUT_ALIAS, activity, layoutSpec, row);
-      } catch (SaynaaException e) {
+        return saynaa.callGlobalFunction(LOADLAYOUT_ALIAS, activity, layoutSpec, row);
+      } catch (Exception e) {
         Log.e("SaynaaAdapter", "SaynaaException triggered during callGlobalFunction('loadlayout')", e);
         e.printStackTrace();
         return null;
@@ -568,13 +568,13 @@ public class SaynaaAdapter extends BaseAdapter implements Filterable {
         return true;
       }
       try {
-        if (saynaaState.getGlobalFunctionId(LOADLAYOUT_ALIAS) >= 0) {
+        if (saynaa.getGlobalFunctionId(LOADLAYOUT_ALIAS) >= 0) {
           loadlayoutReady = true;
           return true;
         }
-        loadlayoutReady = saynaaState.getGlobalFunctionId(LOADLAYOUT_ALIAS) >= 0;
+        loadlayoutReady = saynaa.getGlobalFunctionId(LOADLAYOUT_ALIAS) >= 0;
         return loadlayoutReady;
-      } catch (SaynaaException e) {
+      } catch (Exception e) {
         return false;
       }
     }

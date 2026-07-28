@@ -6,7 +6,6 @@ import com.android.saynaa.saynaajava.JavaFunction;
 import com.android.saynaa.saynaajava.JavaModule;
 import com.android.saynaa.saynaajava.SaynaaContext;
 import com.android.saynaa.saynaajava.SaynaaException;
-import com.android.saynaa.saynaajava.SaynaaState;
 import com.android.saynaa.saynaajava.reflection.ReflectionKeys.ConstructorKey;
 import com.android.saynaa.saynaajava.reflection.ReflectionKeys.FieldKey;
 import com.android.saynaa.saynaajava.reflection.ReflectionKeys.MethodKey;

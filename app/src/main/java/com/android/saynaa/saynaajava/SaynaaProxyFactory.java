@@ -13,10 +13,6 @@ public final class SaynaaProxyFactory {
   private SaynaaProxyFactory() {
   }
 
-  private static Saynaa unwrapState(SaynaaState state) {
-    return state == null ? null : state.getSaynaa();
-  }
-
   private static Object defaultReturnFor(Class<?> returnType) {
     if (returnType == void.class || returnType == Void.class)
       return null;
@@ -96,10 +92,5 @@ public final class SaynaaProxyFactory {
     } catch (Throwable ignored) {
       return null;
     }
-  }
-
-  public static Object createProxy(final SaynaaState state, final String interfaceName,
-      final String methodName, final String functionName) {
-    return createProxy(unwrapState(state), interfaceName, methodName, functionName);
   }
 }

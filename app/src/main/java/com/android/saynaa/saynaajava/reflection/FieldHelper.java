@@ -5,7 +5,6 @@ import com.android.saynaa.saynaajava.JavaBridge;
 import com.android.saynaa.saynaajava.JavaFunction;
 import com.android.saynaa.saynaajava.JavaModule;
 import com.android.saynaa.saynaajava.SaynaaContext;
-import com.android.saynaa.saynaajava.SaynaaState;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;

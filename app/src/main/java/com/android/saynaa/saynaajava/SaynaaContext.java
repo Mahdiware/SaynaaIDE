@@ -24,7 +24,7 @@ public interface SaynaaContext {
 
   public Context getContext();
 
-  public SaynaaState getSaynaaState();
+  public Saynaa getSaynaa();
 
   public Object doFile(String path, Object... arg);
 
