@@ -314,8 +314,8 @@ void _registerEnums(VM* vm, Handle* term) {
 }
 
 saynaa_function(_termInit, "term.init(capture_events:Bool) -> Null",
-                "Initialize terminal with raw mode for tui applications, set "
-                "[capture_events] true to enable event handling.") {
+    "Initialize terminal with raw mode for tui applications, set "
+    "[capture_events] true to enable event handling.") {
   bool capture_events;
   if (!ValidateSlotBool(vm, 1, &capture_events))
     return;
@@ -323,8 +323,7 @@ saynaa_function(_termInit, "term.init(capture_events:Bool) -> Null",
   _termCtxInit();
 }
 
-saynaa_function(_termCleanup, "term.cleanup() -> Null",
-                "Cleanup and resotre the last terminal state.") {
+saynaa_function(_termCleanup, "term.cleanup() -> Null", "Cleanup and resotre the last terminal state.") {
   term_cleanup();
   _sTermCtx.done = false;
   _termCtxFree(vm);
@@ -375,8 +374,7 @@ saynaa_function(_termShowCursor, "term.show_cursor() -> Null", "Show cursor.") {
   fflush(stdout);
 }
 
-saynaa_function(_termSetPosition, "term.setposition(x:Number, y:Number) -> Null",
-                "Set cursor position (0-based).") {
+saynaa_function(_termSetPosition, "term.setposition(x:Number, y:Number) -> Null", "Set cursor position (0-based).") {
   double x, y;
   int argc = GetArgc(vm);
   if (argc == 2) {
@@ -577,8 +575,7 @@ static void _callConfigFn(VM* vm, Handle* config, const char* name, int argc) {
     // We'll use vmCallMethod(vm, VAR_UNDEFINED, AS_CLOSURE(fnVar), argc, argc >
     // 0 ? &SLOT(1) : NULL, &ret); But SLOT(1) is start of args.
     Var ret;
-    vmCallMethod(vm, VAR_UNDEFINED, AS_CLOSURE(fnVar), argc,
-                 argc > 0 ? &SLOT(1) : NULL, &ret);
+    vmCallMethod(vm, VAR_UNDEFINED, AS_CLOSURE(fnVar), argc, argc > 0 ? &SLOT(1) : NULL, &ret);
   }
 }
 
@@ -591,7 +588,7 @@ saynaa_function(_termRun, "term.run(config:Config) -> Null", "Run the main loop.
   // Or just Duck typing? .sa code expect config object with fields.
   // We can just use the handle.
 
-  Handle* config = vmNewHandle(vm, SLOT(1));
+  Handle* config = newHandle(vm, SLOT(1));
 
   // Read config
   setSlotHandle(vm, 0, config);
@@ -730,19 +727,17 @@ saynaa_function(_termConfigInit, "Config._init() -> Null", "Initialize config.")
   setAttribute(vm, 0, "cleanup_fn", 1);
 }
 
-saynaa_function(_termIsatty, "term.isatty() -> Bool",
-                "Returns true if both stdin and stdout are tty.") {
+saynaa_function(_termIsatty, "term.isatty() -> Bool", "Returns true if both stdin and stdout are tty.") {
   setSlotBool(vm, 0, term_isatty());
 }
 
-saynaa_function(_termNewScreenBuffer, "term.new_screen_buffer() -> Null",
-                "Switch to an alternative screen buffer.") {
+saynaa_function(_termNewScreenBuffer, "term.new_screen_buffer() -> Null", "Switch to an alternative screen buffer.") {
   term_new_screen_buffer();
 }
 
 saynaa_function(_termRestoreScreenBuffer, "term.restore_screen_buffer() -> Null",
-                "Restore the alternative buffer which was created with "
-                "term.new_screen_buffer()") {
+    "Restore the alternative buffer which was created with "
+    "term.new_screen_buffer()") {
   term_restore_screen_buffer();
 }
 
@@ -754,15 +749,16 @@ saynaa_function(_termGetSize, "term.getsize() -> types.Vector", "Returns the scr
   _setSlotVector(vm, 0, 1, size.x, size.y);
 }
 
-saynaa_function(_termGetPosition, "term.getposition() -> types.Vector", "Returns the cursor position in the screen on a zero based coordinate.") {
+saynaa_function(_termGetPosition, "term.getposition() -> types.Vector",
+    "Returns the cursor position in the screen on a zero based coordinate.") {
   reserveSlots(vm, 4);
   term_Vec pos = term_getposition();
   _setSlotVector(vm, 0, 1, pos.x, pos.y);
 }
 
 saynaa_function(_termReadEvent, "term.read_event(event:term.Event) -> Bool",
-                "Read an event and update the argument [event] and return true."
-                "If no event was read it'll return false.") {
+    "Read an event and update the argument [event] and return true."
+    "If no event was read it'll return false.") {
   reserveSlots(vm, 3);
   setSlotHandle(vm, 2, _cls_term_event);
   if (!ValidateSlotInstanceOf(vm, 1, 2))
@@ -772,8 +768,7 @@ saynaa_function(_termReadEvent, "term.read_event(event:term.Event) -> Bool",
   setSlotBool(vm, 0, term_read_event(event));
 }
 
-saynaa_function(
-    _termBinaryMode, "term.binary_mode() -> Null",
+saynaa_function(_termBinaryMode, "term.binary_mode() -> Null",
     "On windows it'll set stdout to binary mode, on other platforms this "
     "function won't make make any difference.") {
 #ifdef _WIN32
@@ -858,9 +853,9 @@ void registerModuleTerm(VM* vm) {
   REGISTER_FN(term, "run", _termRun, 1);
 
   _cls_term_event = NewClass(vm, "Event", NULL, term, _termEventNew, _termEventDelete,
-                             "The terminal event type, that'll be used at "
-                             "term.read_event function to "
-                             "fetch events.");
+      "The terminal event type, that'll be used at "
+      "term.read_event function to "
+      "fetch events.");
   ADD_METHOD(_cls_term_event, "_getter", _termEventGetter, 1);
 
   _cls_term_config = NewClass(vm, "Config", NULL, term, NULL, NULL, "Configuration for term.run.");

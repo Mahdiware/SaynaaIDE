@@ -15,6 +15,9 @@
 
 #define JAVA_REF_MAGIC 0x534A5246u /* SJRF */
 
+// Macro to access a slot in the fiber's return array
+#define SLOT(n) (vm->fiber->ret[n])
+
 typedef struct JavaRef {
   unsigned int magic;
   JavaVM* jvm;
@@ -26,8 +29,6 @@ typedef struct CallbackEntry CallbackEntry;
 typedef struct BridgeState {
   JavaVM* jvm;
   jclass javaBridgeClass;
-  jclass JavaObjectClass;
-  jobject activity;
   jobject saynaaObject;
 
   Handle* javaWrapperModule;

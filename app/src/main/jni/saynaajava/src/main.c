@@ -496,6 +496,8 @@ bool create_java_instance(VM* vm, Handle** clsHandlePtr, JavaRef* ref, int outSl
     goto L_return;
   }
 
+  newHandle(vm, SLOT(outSlot));
+
 L_return:
 
   freeSlot(vm, slot1, 1);
@@ -544,6 +546,9 @@ bool create_java_method_instance(VM* vm, JavaRef* target, const char* method_nam
     state = false;
     goto L_return;
   }
+  LOGI("Java method instance: done");
+
+  newHandle(vm, SLOT(outSlot));
 
 L_return:
 
@@ -632,8 +637,8 @@ bool register_java_wrapper_classes(VM* vm) {
     return false;
   bridge->javaWrapperModule = mod;
 
-  Handle* clsJavaClass = NewClass(
-      vm, "JavaClass", NULL, mod, new_java_class_instance, delete_java_instance, "Java class wrapper");
+  Handle* clsJavaClass = NewClass(vm, "JavaClass", NULL, mod, new_java_class_instance,
+      delete_java_instance, "Java class wrapper");
   if (clsJavaClass == NULL)
     return false;
   ClassAddMethod(vm, clsJavaClass, "_init", java_init, 1, "");

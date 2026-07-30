@@ -40,6 +40,7 @@ DEFINE_BUFFER(Byte, uint8_t)
 DEFINE_BUFFER(Var, Var)
 DEFINE_BUFFER(String, String*)
 DEFINE_BUFFER(Closure, Closure*)
+DEFINE_BUFFER(Object, Object*)
 
 const char* saynaa_status_message(Result status) {
   switch (status) {
@@ -104,6 +105,7 @@ void varInitObject(Object* thiz, VM* vm, ObjectType type) {
   vm->first = thiz;
 }
 
+ 
 void markObject(VM* vm, Object* thiz) {
   if (thiz == NULL || thiz->is_marked)
     return;
@@ -470,6 +472,17 @@ Module* newModule(VM* vm) {
   return module;
 }
 
+Handle* newHandle(VM* vm, Var value) {
+  Handle* handle = (Handle*) ALLOCATE(vm, Handle);
+  handle->value = value;
+  handle->prev = NULL;
+  handle->next = vm->handles;
+  if (handle->next != NULL)
+    handle->next->prev = handle;
+  vm->handles = handle;
+  return handle;
+}
+
 Function* newFunction(VM* vm, const char* name, int length, Module* owner,
                       bool is_native, const char* docstring, int* fn_index) {
   Function* func = ALLOCATE(vm, Function);
@@ -540,8 +553,20 @@ Function* newFunctionRaw(VM* vm, Module* owner, String* name, String* docstring,
   return func;
 }
 
+Closure* newClosureSafe(VM* vm, Function* fn) {
+  Closure* closure = ALLOCATE_DYNAMIC(vm, Closure, fn->upvalue_count, Upvalue*);
+  newHandle(vm, VAR_OBJ(closure));
+  varInitObject(&closure->_super, vm, OBJ_CLOSURE);
+
+  closure->fn = fn;
+  memset(closure->upvalues, 0, sizeof(Upvalue*) * fn->upvalue_count);
+
+  return closure;
+}
+
 Closure* newClosure(VM* vm, Function* fn) {
   Closure* closure = ALLOCATE_DYNAMIC(vm, Closure, fn->upvalue_count, Upvalue*);
+  //newHandle(vm, VAR_OBJ(closure));
   varInitObject(&closure->_super, vm, OBJ_CLOSURE);
 
   closure->fn = fn;

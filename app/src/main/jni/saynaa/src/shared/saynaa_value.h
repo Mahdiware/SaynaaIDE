@@ -249,6 +249,7 @@ DECLARE_BUFFER(Byte, uint8_t)
 DECLARE_BUFFER(Var, Var)
 DECLARE_BUFFER(String, String*)
 DECLARE_BUFFER(Closure, Closure*)
+DECLARE_BUFFER(Object, Object*)
 
 // Returns a human-readable message for Result codes.
 const char* saynaa_status_message(Result status);
@@ -719,7 +720,11 @@ Range* newRange(VM* vm, double from, double to);
 
 Module* newModule(VM* vm);
 
+Handle* newHandle(VM* vm, Var value);
+
 Closure* newClosure(VM* vm, Function* fn);
+
+Closure* newClosureSafe(VM* vm, Function* fn);
 
 MethodBind* newMethodBind(VM* vm, Closure* method);
 

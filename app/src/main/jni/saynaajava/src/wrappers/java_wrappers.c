@@ -573,7 +573,7 @@ void java_object_str(VM* vm) {
 
 void java_method_call(VM* vm) {
   JavaNativeBase* thiz = (JavaNativeBase*) GetThis(vm);
-  if (thiz == NULL || thiz->reference == NULL || thiz->method_name == NULL) {
+  if (thiz == NULL || thiz->type != JAVA_METHOD || thiz->reference == NULL || thiz->method_name == NULL) {
     SetRuntimeError(vm, "Invalid JavaMethod instance.");
     return;
   }

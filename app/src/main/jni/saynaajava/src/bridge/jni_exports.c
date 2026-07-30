@@ -2,9 +2,6 @@
 #include "saynaa_internal.h"
 #include "saynaa_jni.h"
 
-// Macro to access a slot in the fiber's return array
-#define SLOT(n) (vm->fiber->ret[n])
-
 static Result run_string_pcall(VM* vm, const char* code) {
   if (vm == NULL || code == NULL)
     return RESULT_RUNTIME_ERROR;
@@ -75,8 +72,6 @@ JNIEXPORT jlong JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1open(J
   }
 
   bridge->javaBridgeClass = (jclass) (*env)->NewGlobalRef(env, localBridgeClass);
-  bridge->JavaObjectClass = (jclass) (*env)->NewGlobalRef(
-      env, (*env)->FindClass(env, "java/lang/Object"));
   (*env)->DeleteLocalRef(env, localBridgeClass);
 
   bridge->mFindClass = (*env)->GetStaticMethodID(
@@ -166,7 +161,7 @@ JNIEXPORT jobject JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1getM
   if (module == NULL)
     return NULL;
 
-  Handle* handle = vmNewHandle(vm, VAR_OBJ(module));
+  Handle* handle = newHandle(vm, VAR_OBJ(module));
   if (handle == NULL)
     return NULL;
 
@@ -348,7 +343,7 @@ JNIEXPORT jobject JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1getG
   reserveSlots(vm, 2);
   int slot1 = nextSlot(vm, true);
 
-  Handle* handle = vmNewHandle(vm, module->globals.data[idx]);
+  Handle* handle = newHandle(vm, module->globals.data[idx]);
   if (handle == NULL)
     return NULL;
 
@@ -480,14 +475,6 @@ JNIEXPORT jboolean JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1set
     return JNI_FALSE;
   }
 
-  if (bridge != NULL && value != NULL && strcmp(key, "activity") == 0) {
-    if (bridge->activity != NULL) {
-      (*env)->DeleteGlobalRef(env, bridge->activity);
-      bridge->activity = NULL;
-    }
-    bridge->activity = (*env)->NewGlobalRef(env, value);
-  }
-
   Handle* handle = GetSlotHandle(vm, slot1);
   if (handle == NULL) {
     (*env)->ReleaseStringUTFChars(env, name, key);
@@ -496,7 +483,8 @@ JNIEXPORT jboolean JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1set
   }
 
   moduleSetGlobal(vm, module, key, (uint32_t) strlen(key), handle->value);
-  releaseHandle(vm, handle);
+  // i don't know its need to comment? check it
+  // releaseHandle(vm, handle);
   (*env)->ReleaseStringUTFChars(env, name, key);
   freeSlot(vm, slot1, 1);
   return JNI_TRUE;
@@ -533,7 +521,7 @@ JNIEXPORT jboolean JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1set
   }
 
   moduleSetGlobal(vm, module, key, (uint32_t) strlen(key), handle->value);
-  releaseHandle(vm, handle);
+  // releaseHandle(vm, handle);
   (*env)->ReleaseStringUTFChars(env, name, key);
   return JNI_TRUE;
 }
@@ -598,7 +586,7 @@ JNIEXPORT void JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1setSlot
   if (vm == NULL)
     return;
   reserveSlots(vm, slot + 1);
-  // use: GetSlotHandle
+
   Handle* handle = GetSlotHandle(vm, handleId);
   if (handle == NULL)
     return;
@@ -612,6 +600,7 @@ JNIEXPORT void JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1newList
     return;
   reserveSlots(vm, slot + 1);
   NewList(vm, slot);
+  newHandle(vm, SLOT(slot));
 }
 
 JNIEXPORT jint JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1nextSlot(JNIEnv* env, jobject thiz) {
@@ -653,6 +642,7 @@ JNIEXPORT void JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1newMap(
     return;
   reserveSlots(vm, slot + 1);
   NewMap(vm, slot);
+  newHandle(vm, SLOT(slot));
 
   LOGI("saynaa_newMap called with Slot=%d, type=%d", slot, GetSlotType(vm, slot));
 }
@@ -679,7 +669,8 @@ JNIEXPORT jobject JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1newM
   // don't free the slot, it used in Java side
   // freeSlot(vm, slot, 1);
 
-  releaseHandle(vm, module);
+  // don't release the handle, it used in Java side
+  // releaseHandle(vm, module);
   return result;
 }
 
@@ -756,7 +747,7 @@ JNIEXPORT jboolean JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1mod
 
   moduleSetGlobal(vm, module, key, (uint32_t) strlen(key), valueHandle->value);
 
-  releaseHandle(vm, valueHandle);
+  // releaseHandle(vm, valueHandle);
   (*env)->ReleaseStringUTFChars(env, name, key);
   freeSlot(vm, slot1, 1);
   return JNI_TRUE;
@@ -1026,7 +1017,7 @@ JNIEXPORT jint JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1getList
   if (handle == NULL)
     return 0;
   List* list = (List*) AS_OBJ(handle->value);
-  releaseHandle(vm, handle);
+  // releaseHandle(vm, handle);
   return (jint) list->elements.count;
 }
 
@@ -1043,14 +1034,14 @@ JNIEXPORT jboolean JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1lis
   if (handle == NULL)
     return JNI_FALSE;
   List* list = (List*) AS_OBJ(handle->value);
-  releaseHandle(vm, handle);
+  // releaseHandle(vm, handle);
   if ((uint32_t) index >= list->elements.count)
     return JNI_FALSE;
-  Handle* valueHandle = vmNewHandle(vm, list->elements.data[index]);
+  Handle* valueHandle = newHandle(vm, list->elements.data[index]);
   if (valueHandle == NULL)
     return JNI_FALSE;
   setSlotHandle(vm, valueSlot, valueHandle);
-  releaseHandle(vm, valueHandle);
+  // releaseHandle(vm, valueHandle);
   return JNI_TRUE;
 }
 
@@ -1066,7 +1057,7 @@ JNIEXPORT jint JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1getMapS
   if (handle == NULL)
     return 0;
   Map* map = (Map*) AS_OBJ(handle->value);
-  releaseHandle(vm, handle);
+  // releaseHandle(vm, handle);
   return (jint) map->count;
 }
 
@@ -1089,7 +1080,7 @@ JNIEXPORT jboolean JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1map
   if (handle == NULL)
     return JNI_FALSE;
   Map* map = (Map*) AS_OBJ(handle->value);
-  releaseHandle(vm, handle);
+  // releaseHandle(vm, handle);
 
   int found = -1;
   for (uint32_t i = 0; i < map->capacity; i++) {
@@ -1098,8 +1089,8 @@ JNIEXPORT jboolean JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1map
       continue;
     found++;
     if (found == entryIndex) {
-      Handle* keyHandle = vmNewHandle(vm, entry->key);
-      Handle* valueHandle = vmNewHandle(vm, entry->value);
+      Handle* keyHandle = newHandle(vm, entry->key);
+      Handle* valueHandle = newHandle(vm, entry->value);
       if (keyHandle == NULL || valueHandle == NULL) {
         if (keyHandle != NULL)
           releaseHandle(vm, keyHandle);
@@ -1310,14 +1301,7 @@ JNIEXPORT void JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1close(J
       (*env)->DeleteGlobalRef(env, bridge->saynaaObject);
       bridge->saynaaObject = NULL;
     }
-    if (bridge->activity != NULL) {
-      (*env)->DeleteGlobalRef(env, bridge->activity);
-      bridge->activity = NULL;
-    }
-    if (bridge->JavaObjectClass != NULL) {
-      (*env)->DeleteGlobalRef(env, bridge->JavaObjectClass);
-      bridge->JavaObjectClass = NULL;
-    }
+
     if (bridge->javaBridgeClass != NULL) {
       (*env)->DeleteGlobalRef(env, bridge->javaBridgeClass);
       bridge->javaBridgeClass = NULL;
@@ -1328,7 +1312,7 @@ JNIEXPORT void JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1close(J
 
   // Best-effort cleanup: ensure no dangling handles block VM shutdown.
   while (vm->handles != NULL) {
-    releaseHandle(vm, vm->handles);
+    // releaseHandle(vm, vm->handles);
   }
 
   FreeVM(vm);

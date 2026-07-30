@@ -20,8 +20,8 @@ import android.widget.Filterable;
 import android.widget.ImageView;
 import android.widget.TextView;
 import com.android.saynaa.activity.SaynaaActivity;
-import com.android.saynaa.saynaajava.SaynaaException;
 import com.android.saynaa.saynaajava.Saynaa;
+import com.android.saynaa.saynaajava.SaynaaException;
 import java.io.File;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
@@ -527,10 +527,10 @@ public class SaynaaAdapter extends BaseAdapter implements Filterable {
 
   private static final class SaynaaLayoutFactory implements SaynaaViewFactory {
     private static final String LOADLAYOUT_ALIAS = "loadlayout";
+    private int LOADLAYOUT_ID = -1;
     private final Object layoutSpec;
     private final SaynaaActivity activity;
     private final Saynaa saynaa;
-    private boolean loadlayoutReady;
 
     SaynaaLayoutFactory(Context context, Object layoutSpec) {
       this.layoutSpec = layoutSpec;
@@ -555,7 +555,7 @@ public class SaynaaAdapter extends BaseAdapter implements Filterable {
         return null;
       }
       try {
-        return saynaa.callGlobalFunction(LOADLAYOUT_ALIAS, activity, layoutSpec, row);
+        return saynaa.callFunctionById(LOADLAYOUT_ID, activity, layoutSpec, row);
       } catch (Exception e) {
         Log.e("SaynaaAdapter", "SaynaaException triggered during callGlobalFunction('loadlayout')", e);
         e.printStackTrace();
@@ -564,16 +564,12 @@ public class SaynaaAdapter extends BaseAdapter implements Filterable {
     }
 
     private boolean ensureLoadlayout() {
-      if (loadlayoutReady) {
+      if (LOADLAYOUT_ID >= 0) {
         return true;
       }
       try {
-        if (saynaa.getGlobalFunctionId(LOADLAYOUT_ALIAS) >= 0) {
-          loadlayoutReady = true;
-          return true;
-        }
-        loadlayoutReady = saynaa.getGlobalFunctionId(LOADLAYOUT_ALIAS) >= 0;
-        return loadlayoutReady;
+        LOADLAYOUT_ID = saynaa.getGlobalFunctionId(LOADLAYOUT_ALIAS);
+        return LOADLAYOUT_ID >= 0;
       } catch (Exception e) {
         return false;
       }

@@ -88,6 +88,10 @@ public class Saynaa {
     return saynaa_callFunctionById(functionId, argStart, argCount, retSlot);
   }
 
+  public synchronized Object callGlobalFunction(String name, Object... args) {
+    int functionId = getGlobalFunctionId(name);
+    return callFunctionByIdWithArgs(functionId, args);
+  }
 
   public synchronized Object callFunctionById(int functionId, Object... args) {
     return callFunctionByIdWithArgs(functionId, args);
@@ -126,11 +130,6 @@ public class Saynaa {
 
   public synchronized int getSlotCount() {
     return saynaa_getSlotCount();
-  }
-
-  public synchronized Object callGlobalFunction(String name, Object... args) {
-    int functionId = getGlobalFunctionId(name);
-    return callFunctionByIdWithArgs(functionId, args);
   }
 
   public synchronized boolean setGlobal(String name, Object value) {

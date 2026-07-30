@@ -100,8 +100,9 @@ struct VM {
 
   // A stack of temporary object references to ensure that the object
   // doesn't garbage collected.
-  Object* temp_reference[MAX_TEMP_REFERENCE];
-  int temp_reference_count;
+  // Object* temp_reference[MAX_TEMP_REFERENCE];
+  ObjectBuffer temp_reference;
+  // int temp_reference_count;
 
   // Pointer to the first handle in the doubly linked list of handles. Handles
   // are wrapper around Var that lives on the host application. This linked
@@ -183,9 +184,6 @@ struct VM {
 // stable and reduce unnecessary full-GC triggers.
 void* vmRealloc(VM* vm, void* memory, size_t old_size, size_t new_size);
 
-// Create and return a new handle for the [value].
-Handle* vmNewHandle(VM* vm, Var value);
-
 // If the stack size is less than [size], the stack will grow to keep more
 // values on it.
 void vmEnsureStackSize(VM* vm, Fiber* fiber, int size);
@@ -249,8 +247,7 @@ void vmRegisterModule(VM* vm, Module* module, String* key);
 Module* vmGetModule(VM* vm, String* key);
 
 // Lookup an interned string by raw bytes/hash.
-String* vmFindInternedString(VM* vm, const char* text, uint32_t length,
-                             uint32_t hash);
+String* vmFindInternedString(VM* vm, const char* text, uint32_t length, uint32_t hash);
 
 // Insert a string into the intern table if not already present.
 void vmInternString(VM* vm, String* string);
