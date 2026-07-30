@@ -292,6 +292,7 @@ Result vmCallMethod(VM* vm, Var thiz, Closure* fn, int argc, Var* argv, Var* ret
 // If the [from] is not NULL, it'll be used for relative path search.
 // On failure, it'll set an error and return VAR_NULL.
 void vmStandardSearcher(VM* vm);
+Module* vmimportScript(VM* vm, String* resolved, String* name);
 Var vmImportModule(VM* vm, String* from, String* path);
 
 #ifndef NO_DL

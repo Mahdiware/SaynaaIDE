@@ -842,7 +842,7 @@ void vmUnloadDlHandle(VM* vm, void* handle) {
 /* VM INTERNALS                                                              */
 /*****************************************************************************/
 
-static Module* _importScript(VM* vm, String* resolved, String* name) {
+Module* vmimportScript(VM* vm, String* resolved, String* name) {
   LoadScriptResult load_result = vm->config.load_script_fn(vm, resolved->data);
   char* source = load_result.content;
   if (source == NULL || load_result.status != RESULT_SUCCESS) {
@@ -957,7 +957,7 @@ static Module* _importResolved(VM* vm, String* resolved, String* name) {
       module = _importDL(vm, resolved, _name);
     else /* ... */
 #endif
-      module = _importScript(vm, resolved, _name);
+      module = vmimportScript(vm, resolved, _name);
 
     vmPopTempRef(vm); // _name.
   }

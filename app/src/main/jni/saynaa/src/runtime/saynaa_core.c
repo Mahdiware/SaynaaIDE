@@ -1394,19 +1394,66 @@ saynaa_function(stdModuleLoad, "package.load(name:String) -> Module",
     from = frame->closure->fn->owner->path;
   }
 
-  Var _imported = vmImportModule(vm, from, name);
+  Var module = vmImportModule(vm, from, name);
   if (VM_HAS_ERROR(vm))
     return;
-  
-  Module* module = (Module*) AS_OBJ(_imported);
+
+  RET(module);
+}
+
+saynaa_function(stdModuleLoadFile, "package.loadfile(path:String) -> Module",
+                "Load import the module from the given [path] and returns it. "
+                "It won't be imported to the current scope.") {
+  String* path;
+  if (!validateArgString(vm, 1, &path))
+    return;
+
+  if (vm->config.resolve_path_fn == NULL)
+    return;
+
+  char* from_path = NULL;
+  if (vm->fiber->frame_count > 0) {
+    CallFrame* frame = &vm->fiber->frames[vm->fiber->frame_count - 1];
+    from_path = frame->closure->fn->owner->path == NULL
+                    ? NULL
+                    : frame->closure->fn->owner->path->data;
+  }
+
+  char* resolve_path = vm->config.resolve_path_fn(vm, from_path, path->data);
+  printf("Resolved path: %s\n", resolve_path);
+
+  if (resolve_path == NULL)
+    return;
+
+  // Convert the resolved path to a module name by replacing '/' with '.'
+  String* _name = newString(vm, resolve_path);
+  vmPushTempRef(vm, &_name->_super);
+  for (char* c = _name->data; c < _name->data + _name->length; c++) {
+    if (*c == '/')
+      *c = '.';
+  }
+  _name->hash = utilHashString(_name->data);
+
+  String* resolve = newString(vm, resolve_path);
+  vmPushTempRef(vm, &_name->_super);
+
+  Module* module = vmimportScript(vm, resolve, _name);
+
+  // Check if the module was imported successfully,
+  // if not, pop the temporary references and return.
+  if (VM_HAS_ERROR(vm)) {
+    vmPopTempRef(vm); // _name.
+    vmPopTempRef(vm); // resolve.
+    return;
+  }
 
   Var ret = VAR_NULL;
   vmCallFunction(vm, module->body, 0, NULL, &ret);
 
-  if (ret != VAR_NULL)
-    RET(ret);
-  else
-    RET(_imported);
+  vmPopTempRef(vm); // _name.
+  vmPopTempRef(vm); // resolve.
+
+  RET(VAR_OBJ(module));
 }
 
 static void initializeCoreModules(VM* vm) {
@@ -1430,6 +1477,7 @@ static void initializeCoreModules(VM* vm) {
 
   NEW_MODULE(package, "package");
   MODULE_ADD_FN(package, "load", stdModuleLoad, 1);
+  MODULE_ADD_FN(package, "loadfile", stdModuleLoadFile, 1);
   moduleSetGlobal(vm, package, "path", 4, VAR_OBJ(vm->search_paths));
 
   moduleSetGlobal(vm, package, "searchers", 9, VAR_OBJ(vm->searchers));
