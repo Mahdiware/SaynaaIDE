@@ -25,6 +25,8 @@
 
 #define access _access
 #define getcwd _getcwd
+#define lstat stat
+#define stat _stat
 
 #else
 #include <unistd.h>
@@ -415,7 +417,7 @@ saynaa_function(_pathListDir, "path.listdir(path:String='.') -> List",
     if (!strcmp(dir->d_name, ".") || !strcmp(dir->d_name, ".."))
       continue;
 
-    char fullpath[PATH_MAX];
+    char fullpath[MAX_PATH_LEN];
 
     snprintf(fullpath, sizeof(fullpath), "%s/%s", path, dir->d_name);
 
@@ -426,8 +428,16 @@ saynaa_function(_pathListDir, "path.listdir(path:String='.') -> List",
 
     const char* type = "unknown";
 
+#ifndef S_ISREG
+#define S_ISREG(m) (((m) & S_IFMT) == S_IFREG)
+#endif
+
     if (S_ISREG(st.st_mode))
       type = "file";
+
+#ifndef S_ISDIR
+#define S_ISDIR(m) (((m) & S_IFMT) == S_IFDIR)
+#endif
 
     else if (S_ISDIR(st.st_mode))
       type = "directory";
@@ -467,7 +477,7 @@ saynaa_function(_pathListDir, "path.listdir(path:String='.') -> List",
 
     canRead = _access(fullpath, 4) == 0;
     canWrite = _access(fullpath, 2) == 0;
-    canExecute = _access(fullpath, 0) == 0;
+    canExecute = false; // Windows _access doesn't support execution checks (X_OK)
 
 #else
 

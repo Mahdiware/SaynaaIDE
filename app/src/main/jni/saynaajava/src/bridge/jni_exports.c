@@ -1312,7 +1312,7 @@ JNIEXPORT void JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1close(J
 
   // Best-effort cleanup: ensure no dangling handles block VM shutdown.
   while (vm->handles != NULL) {
-    // releaseHandle(vm, vm->handles);
+    releaseHandle(vm, vm->handles);
   }
 
   FreeVM(vm);

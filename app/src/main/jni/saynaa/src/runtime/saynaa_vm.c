@@ -142,7 +142,8 @@ void vmInternString(VM* vm, String* string) {
     vmResizeStringPool(vm, INTERN_POOL_INITIAL_CAPACITY);
   }
 
-  if ((vm->interned_strings_count + 1) * 100 > vm->interned_strings_capacity * INTERN_POOL_LOAD_PERCENT) {
+  if ((vm->interned_strings_count + 1) * 100
+      > vm->interned_strings_capacity * INTERN_POOL_LOAD_PERCENT) {
     vmResizeStringPool(vm, vm->interned_strings_capacity * 2);
   }
 
@@ -186,7 +187,8 @@ static inline VMAttribInlineCacheEntry* vmAttribInlineCacheAt(VM* vm, const uint
 
 // Build a dotted module name from wildcard base path and filename.
 // Example: base="foo.bar.*", name="file1.sa" -> "foo.bar.file1.sa"
-static void buildWildcardModuleName(const String* base, const char* name, char* out, size_t out_size) {
+static void buildWildcardModuleName(const String* base, const char* name,
+                                    char* out, size_t out_size) {
   ASSERT(base != NULL && name != NULL && out != NULL, OOPS);
   ASSERT(out_size > 0, OOPS);
 
@@ -216,7 +218,8 @@ static void wildcardImportToFsPath(const String* import_path, char* out, size_t 
   ASSERT(out_size > 0, OOPS);
 
   int fs_len = (int) import_path->length;
-  if (fs_len >= 2 && import_path->data[fs_len - 2] == '.' && import_path->data[fs_len - 1] == '*') {
+  if (fs_len >= 2 && import_path->data[fs_len - 2] == '.'
+      && import_path->data[fs_len - 1] == '*') {
     fs_len -= 2;
   }
 
@@ -311,7 +314,7 @@ void* vmRealloc(VM* vm, void* memory, size_t old_size, size_t new_size) {
 
   // If we're garbage collecting no new allocation is allowed.
   ASSERT(!vm->collecting_garbage || new_size == 0,
-      "No new allocation is allowed while garbage collection is running.");
+         "No new allocation is allowed while garbage collection is running.");
 
   // Trigger GC only when an operation grows memory.
   if (new_size > old_size && vm->bytes_allocated > vm->next_gc) {
@@ -344,13 +347,15 @@ void vmInvalidateInlineCaches(VM* vm) {
 }
 
 void vmPopTempRef(VM* vm) {
-  // ASSERT(vm->temp_reference_count > 0, "Temporary reference is empty to pop.");
-  // vm->temp_reference_count--;
+  // ASSERT(vm->temp_reference_count > 0, "Temporary reference is empty to
+  // pop."); vm->temp_reference_count--;
   vm->temp_reference.count -= 1;
 }
 
 void vmRegisterModule(VM* vm, Module* module, String* key) {
-  ASSERT((((module->name != NULL) && IS_STR_EQ(module->name, key)) || IS_STR_EQ(module->path, key)), OOPS);
+  ASSERT((((module->name != NULL) && IS_STR_EQ(module->name, key))
+          || IS_STR_EQ(module->path, key)),
+         OOPS);
 
   // FIXME:
   // Not sure what to do, if a module the the same key already exists. Should
@@ -487,7 +492,8 @@ void vmCollectGarbage(VM* vm) {
   } while (false)
 
 bool vmPrepareFiber(VM* vm, Fiber* fiber, int argc, Var* argv) {
-  ASSERT(fiber->closure->fn->arity >= -1, OOPS " (Forget to initialize arity.)");
+  ASSERT(fiber->closure->fn->arity >= -1,
+         OOPS " (Forget to initialize arity.)");
 
   // Current call semantics: extra arguments are dropped; missing ones become null.
   int nulls = 0;
@@ -501,15 +507,15 @@ bool vmPrepareFiber(VM* vm, Fiber* fiber, int argc, Var* argv) {
 
   if (fiber->state != FIBER_NEW) {
     switch (fiber->state) {
-    case FIBER_NEW:
-      UNREACHABLE();
-    case FIBER_RUNNING:
-      _ERR_FAIL(newString(vm, "The fiber has already been running."));
-    case FIBER_YIELDED:
-      _ERR_FAIL(newString(vm, "Cannot run a fiber which is yielded, use "
-                              "fiber_resume() instead."));
-    case FIBER_DONE:
-      _ERR_FAIL(newString(vm, "The fiber has done running."));
+      case FIBER_NEW:
+        UNREACHABLE();
+      case FIBER_RUNNING:
+        _ERR_FAIL(newString(vm, "The fiber has already been running."));
+      case FIBER_YIELDED:
+        _ERR_FAIL(newString(vm, "Cannot run a fiber which is yielded, use "
+                                "fiber_resume() instead."));
+      case FIBER_DONE:
+        _ERR_FAIL(newString(vm, "The fiber has done running."));
     }
     UNREACHABLE();
   }
@@ -553,15 +559,15 @@ bool vmPrepareFiber(VM* vm, Fiber* fiber, int argc, Var* argv) {
 bool vmSwitchFiber(VM* vm, Fiber* fiber, Var* value) {
   if (fiber->state != FIBER_YIELDED) {
     switch (fiber->state) {
-    case FIBER_NEW:
-      _ERR_FAIL(newString(vm, "The fiber hasn't started. call fiber_run() "
-                              "to start."));
-    case FIBER_RUNNING:
-      _ERR_FAIL(newString(vm, "The fiber has already been running."));
-    case FIBER_YIELDED:
-      UNREACHABLE();
-    case FIBER_DONE:
-      _ERR_FAIL(newString(vm, "The fiber has done running."));
+      case FIBER_NEW:
+        _ERR_FAIL(newString(vm, "The fiber hasn't started. call fiber_run() "
+                                "to start."));
+      case FIBER_RUNNING:
+        _ERR_FAIL(newString(vm, "The fiber has already been running."));
+      case FIBER_YIELDED:
+        UNREACHABLE();
+      case FIBER_DONE:
+        _ERR_FAIL(newString(vm, "The fiber has done running."));
     }
     UNREACHABLE();
   }
@@ -683,7 +689,8 @@ static void _dlCacheFree(VM* vm, void* ptr) {
 }
 
 static NativeLibCacheEntry* _dlCacheFind(VM* vm, const char* resolved_path) {
-  for (NativeLibCacheEntry* entry = vm->native_dl_cache; entry != NULL; entry = entry->next) {
+  for (NativeLibCacheEntry* entry = vm->native_dl_cache; entry != NULL;
+       entry = entry->next) {
     if (strcmp(entry->path, resolved_path) == 0) {
       return entry;
     }
@@ -808,9 +815,9 @@ static Module* _importDL(VM* vm, String* resolved, String* name) {
     releaseHandle(vm, lhandle);
     vmUnloadDlHandle(vm, lib_entry);
     VM_SET_ERROR(vm, stringFormat(vm,
-                         "Returned handle wasn't a "
-                         "module at \"@\"",
-                         resolved));
+                                  "Returned handle wasn't a "
+                                  "module at \"@\"",
+                                  resolved));
     return NULL;
   }
 
@@ -908,8 +915,9 @@ static Module* _importResolved(VM* vm, String* resolved, String* name) {
   if (vm->config.load_script_fn == NULL) {
 #endif
 
-    VM_SET_ERROR(vm, newString(vm, "Cannot import. The hosting application "
-                                   "haven't registered the module loading API"));
+    VM_SET_ERROR(vm,
+                 newString(vm, "Cannot import. The hosting application "
+                               "haven't registered the module loading API"));
     return NULL;
   }
 
@@ -1018,7 +1026,8 @@ static void _resolvePathCacheSet(VM* vm, Var from_key, String* path, String* res
     vm->import_resolve_cache_entries++;
 }
 
-static String* _resolvePathWithCache(VM* vm, Var from_key, const char* from_path, String* path) {
+static String* _resolvePathWithCache(VM* vm, Var from_key,
+                                     const char* from_path, String* path) {
   String* resolved = NULL;
   if (_resolvePathCacheGet(vm, from_key, path, &resolved)) {
     return resolved;
@@ -1101,8 +1110,9 @@ Var vmImportModule(VM* vm, String* from, String* path) {
 
   // Relative Import Logic
   if (vm->config.resolve_path_fn == NULL) {
-    VM_SET_ERROR(vm, newString(vm, "Cannot import. The hosting application "
-                                   "haven't registered the module loading API"));
+    VM_SET_ERROR(vm,
+                 newString(vm, "Cannot import. The hosting application "
+                               "haven't registered the module loading API"));
     return VAR_NULL;
   }
 
@@ -1182,7 +1192,8 @@ void vmEnsureStackSize(VM* vm, Fiber* fiber, int size) {
   // allocation moves to a different memory location.
   Var* old_rbp = fiber->stack;
 
-  fiber->stack = (Var*) vmRealloc(vm, fiber->stack, sizeof(Var) * fiber->stack_size, sizeof(Var) * new_size);
+  fiber->stack = (Var*) vmRealloc(vm, fiber->stack, sizeof(Var) * fiber->stack_size,
+                                  sizeof(Var) * new_size);
 
   fiber->stack_size = new_size;
 
@@ -1238,7 +1249,8 @@ static inline void pushCallFrame(VM* vm, const Closure* closure) {
       new_capacity = 1;
 
     vm->fiber->frames = (CallFrame*) vmRealloc(vm, vm->fiber->frames,
-        sizeof(CallFrame) * vm->fiber->frame_capacity, sizeof(CallFrame) * new_capacity);
+                                               sizeof(CallFrame) * vm->fiber->frame_capacity,
+                                               sizeof(CallFrame) * new_capacity);
     vm->fiber->frame_capacity = new_capacity;
   }
 
@@ -1636,7 +1648,8 @@ L_vm_main_loop:
       OPCODE(PUSH_LOCAL_2) :
       OPCODE(PUSH_LOCAL_3) :
       OPCODE(PUSH_LOCAL_4) :
-      OPCODE(PUSH_LOCAL_5) : OPCODE(PUSH_LOCAL_6) : OPCODE(PUSH_LOCAL_7) : OPCODE(PUSH_LOCAL_8) : {
+      OPCODE(PUSH_LOCAL_5) :
+      OPCODE(PUSH_LOCAL_6) : OPCODE(PUSH_LOCAL_7) : OPCODE(PUSH_LOCAL_8) : {
     int index = (int) (instruction - OP_PUSH_LOCAL_0);
     PUSH(rbp[index + 1]); // +1: rbp[0] is return value.
     DISPATCH();
@@ -1680,13 +1693,15 @@ L_vm_main_loop:
 
     int g_index = moduleGetGlobalIndexByName(vm, module, name);
     if (g_index == -1) {
-      int missing_index = moduleGetGlobalIndex(module, LITS__missing, (uint32_t) strlen(LITS__missing));
+      int missing_index = moduleGetGlobalIndex(module, LITS__missing,
+                                               (uint32_t) strlen(LITS__missing));
       if (missing_index != -1) {
         Var missing = module->globals.data[missing_index];
         if (IS_OBJ_TYPE(missing, OBJ_CLOSURE)) {
           Var args[1] = {VAR_OBJ(name)};
           Var result = VAR_NULL;
-          Result call_result = vmCallFunction(vm, (Closure*) AS_OBJ(missing), 1, args, &result);
+          Result call_result = vmCallFunction(vm, (Closure*) AS_OBJ(missing), 1,
+                                              args, &result);
           if (call_result != RESULT_SUCCESS) {
             CHECK_ERROR();
           }
@@ -1789,7 +1804,8 @@ L_vm_main_loop:
     // All Builtin type class except for Object are "final" ie. cannot
     // be inherited from.
     if (base->class_of != vINSTANCE && base->class_of != vOBJECT) {
-      RUNTIME_ERROR(stringFormat(vm, "$ type cannot be inherited.", getVarTypeName(base->class_of)));
+      RUNTIME_ERROR(stringFormat(vm, "$ type cannot be inherited.",
+                                 getVarTypeName(base->class_of)));
     }
 
     uint16_t index = READ_SHORT();
@@ -1858,7 +1874,8 @@ L_vm_main_loop:
     // Update frame before external call to ensure IP is saved (for GC safety).
     UPDATE_FRAME();
 
-    bool success = utilWalkDirectory(search_path, SAYNAA_FILE_EXT, wildcardRuntimeCallback, &data);
+    bool success = utilWalkDirectory(search_path, SAYNAA_FILE_EXT,
+                                     wildcardRuntimeCallback, &data);
     if (!success) {
       // Not a directory? Try single module import.
       // Pass the ORIGINAL import path (e.g. "path.to.module"), NOT proper path.
@@ -1961,9 +1978,9 @@ L_vm_main_loop:
     if (IS_BOOL(_imported) && AS_BOOL(_imported) == true) {
       if (!has_target_global && (Opcode) (*ip) != OP_STORE_GLOBAL_NAME) {
         RUNTIME_ERROR(stringFormat(vm,
-            "Invalid import instruction state for '@': "
-            "missing STORE_GLOBAL target.",
-            name));
+                                   "Invalid import instruction state for '@': "
+                                   "missing STORE_GLOBAL target.",
+                                   name));
       }
 
       if ((Opcode) (*ip) == OP_STORE_GLOBAL) {
@@ -1973,7 +1990,8 @@ L_vm_main_loop:
         uint16_t name_index = (uint16_t) ((ip[1] << 8) | ip[2]);
         String* gname = moduleGetStringAt(module, (int) name_index);
         if (gname == NULL) {
-          RUNTIME_ERROR(stringFormat(vm, "Invalid import target name in module data."));
+          RUNTIME_ERROR(
+              stringFormat(vm, "Invalid import target name in module data."));
         }
 
         int g_index = moduleGetGlobalIndexByName(vm, module, gname);
@@ -2047,8 +2065,8 @@ L_vm_main_loop:
 
       Class* recv_cls = getClass(vm, fiber->thiz);
       VMMethodInlineCacheEntry* mic = vmMethodInlineCacheAt(vm, call_site);
-      if (mic->site == call_site && mic->epoch == vm->inline_cache_epoch && mic->cls == recv_cls
-          && mic->name == name && mic->method != NULL) {
+      if (mic->site == call_site && mic->epoch == vm->inline_cache_epoch
+          && mic->cls == recv_cls && mic->name == name && mic->method != NULL) {
         callable = VAR_OBJ(mic->method);
         goto L_do_call;
       }
@@ -2101,7 +2119,8 @@ L_vm_main_loop:
       Closure* new_method = getMagicMethod(cls, METHOD_NEW);
       if (new_method != NULL) {
         Var new_instance = VAR_NULL;
-        Result new_result = vmCallMethod(vm, VAR_OBJ(cls), new_method, argc, fiber->ret + 1, &new_instance);
+        Result new_result = vmCallMethod(vm, VAR_OBJ(cls), new_method, argc,
+                                         fiber->ret + 1, &new_instance);
         if (new_result != RESULT_SUCCESS) {
           CHECK_ERROR();
         }
@@ -2115,9 +2134,9 @@ L_vm_main_loop:
           if (closure == NULL) {
             if (argc != 0) {
               String* msg = stringFormat(vm,
-                  "Expected exactly 0 argument(s) "
-                  "for constructor $.",
-                  cls->name->data);
+                                         "Expected exactly 0 argument(s) "
+                                         "for constructor $.",
+                                         cls->name->data);
               RUNTIME_ERROR(msg);
             }
             fiber->thiz = VAR_UNDEFINED;
@@ -2153,9 +2172,9 @@ L_vm_main_loop:
         if (closure == NULL) {
           if (argc != 0) {
             String* msg = stringFormat(vm,
-                "Expected exactly 0 argument(s) "
-                "for constructor $.",
-                cls->name->data);
+                                       "Expected exactly 0 argument(s) "
+                                       "for constructor $.",
+                                       cls->name->data);
             RUNTIME_ERROR(msg);
           }
 
@@ -2175,9 +2194,9 @@ L_vm_main_loop:
 
       if (closure == NULL) {
         RUNTIME_ERROR(stringFormat(vm, "$ '$'.",
-            "Expected a callable to "
-            "call, instead got",
-            varTypeName(callable)));
+                                   "Expected a callable to "
+                                   "call, instead got",
+                                   varTypeName(callable)));
 
       } else {
         fiber->thiz = callable;
@@ -2201,7 +2220,8 @@ L_vm_main_loop:
 
     if (closure->fn->is_native) {
       if (closure->fn->native == NULL) {
-        RUNTIME_ERROR(stringFormat(vm, "Native function pointer of $ was NULL.", closure->fn->name));
+        RUNTIME_ERROR(stringFormat(vm, "Native function pointer of $ was NULL.",
+                                   closure->fn->name));
       }
 
       // Update the current frame's ip.
@@ -2227,8 +2247,9 @@ L_vm_main_loop:
         // A switched fiber must have at least one VM frame to resume.
         // Native-only fibers (frame_count == 0) cannot be resumed here.
         if (fiber == NULL || fiber->frame_count == 0) {
-          RUNTIME_ERROR(newString(vm, "Cannot continue: switched fiber has no VM call frame. "
-                                      "Start it with fiber_run() before resuming."));
+          RUNTIME_ERROR(newString(
+              vm, "Cannot continue: switched fiber has no VM call frame. "
+                  "Start it with fiber_run() before resuming."));
         }
 
         LOAD_FRAME();
@@ -2242,7 +2263,9 @@ L_vm_main_loop:
         LOAD_FRAME(); //< Re-load the frame to vm's execution variables.
 
       } else {
-        ASSERT((instruction == OP_CALL) || (instruction == OP_METHOD_CALL) || (instruction == OP_SUPER_CALL), OOPS);
+        ASSERT((instruction == OP_CALL) || (instruction == OP_METHOD_CALL)
+                   || (instruction == OP_SUPER_CALL),
+               OOPS);
 
         UPDATE_FRAME(); //< Update the current frame's ip.
         pushCallFrame(vm, closure);
@@ -2375,12 +2398,14 @@ L_vm_main_loop:
 
     } else {
       Var* return_slot = rbp;
-      if (return_slot == NULL || return_slot < fiber->stack || return_slot >= (fiber->stack + fiber->stack_size)) {
+      if (return_slot == NULL || return_slot < fiber->stack
+          || return_slot >= (fiber->stack + fiber->stack_size)) {
         // Fallback for rare stale frame-base states.
         return_slot = fiber->ret;
       }
 
-      if (return_slot == NULL || return_slot < fiber->stack || return_slot >= (fiber->stack + fiber->stack_size)) {
+      if (return_slot == NULL || return_slot < fiber->stack
+          || return_slot >= (fiber->stack + fiber->stack_size)) {
         RUNTIME_ERROR(newString(vm, "Invalid frame base pointer state."));
       }
 
@@ -2406,35 +2431,35 @@ L_vm_main_loop:
 
     if (aic->site == attrib_site && aic->epoch == vm->inline_cache_epoch && aic->name == name) {
       switch (aic->kind) {
-      case VM_ATTRIB_IC_INST_INLINE:
-        if (IS_OBJ_TYPE(on, OBJ_INST)) {
-          Instance* inst = (Instance*) AS_OBJ(on);
-          uint32_t slot = aic->slot_or_index;
-          if (inst->cls == aic->receiver_cls && slot < inst->inline_attrib_count) {
-            String* slot_name = inst->inline_attrib_names[slot];
-            if (slot_name == name) {
-              value = inst->inline_attrib_values[slot];
-              cache_hit = true;
+        case VM_ATTRIB_IC_INST_INLINE:
+          if (IS_OBJ_TYPE(on, OBJ_INST)) {
+            Instance* inst = (Instance*) AS_OBJ(on);
+            uint32_t slot = aic->slot_or_index;
+            if (inst->cls == aic->receiver_cls && slot < inst->inline_attrib_count) {
+              String* slot_name = inst->inline_attrib_names[slot];
+              if (slot_name == name) {
+                value = inst->inline_attrib_values[slot];
+                cache_hit = true;
+              }
             }
           }
-        }
-        break;
+          break;
 
-      case VM_ATTRIB_IC_METHOD_BIND:
-        if (aic->method != NULL && getClass(vm, on) == aic->receiver_cls
-            && (aic->receiver_obj == NULL || (IS_OBJ(on) && AS_OBJ(on) == aic->receiver_obj))) {
-          MethodBind* mb = newMethodBind(vm, aic->method);
-          vmPushTempRef(vm, &mb->_super); // mb.
-          mb->instance = on;
-          value = VAR_OBJ(mb);
-          vmPopTempRef(vm); // mb.
-          cache_hit = true;
-        }
-        break;
+        case VM_ATTRIB_IC_METHOD_BIND:
+          if (aic->method != NULL && getClass(vm, on) == aic->receiver_cls
+              && (aic->receiver_obj == NULL || (IS_OBJ(on) && AS_OBJ(on) == aic->receiver_obj))) {
+            MethodBind* mb = newMethodBind(vm, aic->method);
+            vmPushTempRef(vm, &mb->_super); // mb.
+            mb->instance = on;
+            value = VAR_OBJ(mb);
+            vmPopTempRef(vm); // mb.
+            cache_hit = true;
+          }
+          break;
 
-      case VM_ATTRIB_IC_NONE:
-      default:
-        break;
+        case VM_ATTRIB_IC_NONE:
+        default:
+          break;
       }
     }
 
@@ -2492,35 +2517,35 @@ L_vm_main_loop:
 
     if (aic->site == attrib_site && aic->epoch == vm->inline_cache_epoch && aic->name == name) {
       switch (aic->kind) {
-      case VM_ATTRIB_IC_INST_INLINE:
-        if (IS_OBJ_TYPE(on, OBJ_INST)) {
-          Instance* inst = (Instance*) AS_OBJ(on);
-          uint32_t slot = aic->slot_or_index;
-          if (inst->cls == aic->receiver_cls && slot < inst->inline_attrib_count) {
-            String* slot_name = inst->inline_attrib_names[slot];
-            if (slot_name == name) {
-              value = inst->inline_attrib_values[slot];
-              cache_hit = true;
+        case VM_ATTRIB_IC_INST_INLINE:
+          if (IS_OBJ_TYPE(on, OBJ_INST)) {
+            Instance* inst = (Instance*) AS_OBJ(on);
+            uint32_t slot = aic->slot_or_index;
+            if (inst->cls == aic->receiver_cls && slot < inst->inline_attrib_count) {
+              String* slot_name = inst->inline_attrib_names[slot];
+              if (slot_name == name) {
+                value = inst->inline_attrib_values[slot];
+                cache_hit = true;
+              }
             }
           }
-        }
-        break;
+          break;
 
-      case VM_ATTRIB_IC_METHOD_BIND:
-        if (aic->method != NULL && getClass(vm, on) == aic->receiver_cls
-            && (aic->receiver_obj == NULL || (IS_OBJ(on) && AS_OBJ(on) == aic->receiver_obj))) {
-          MethodBind* mb = newMethodBind(vm, aic->method);
-          vmPushTempRef(vm, &mb->_super); // mb.
-          mb->instance = on;
-          value = VAR_OBJ(mb);
-          vmPopTempRef(vm); // mb.
-          cache_hit = true;
-        }
-        break;
+        case VM_ATTRIB_IC_METHOD_BIND:
+          if (aic->method != NULL && getClass(vm, on) == aic->receiver_cls
+              && (aic->receiver_obj == NULL || (IS_OBJ(on) && AS_OBJ(on) == aic->receiver_obj))) {
+            MethodBind* mb = newMethodBind(vm, aic->method);
+            vmPushTempRef(vm, &mb->_super); // mb.
+            mb->instance = on;
+            value = VAR_OBJ(mb);
+            vmPopTempRef(vm); // mb.
+            cache_hit = true;
+          }
+          break;
 
-      case VM_ATTRIB_IC_NONE:
-      default:
-        break;
+        case VM_ATTRIB_IC_NONE:
+        default:
+          break;
       }
     }
 
@@ -3104,8 +3129,8 @@ L_vm_main_loop:
 #if !USE_COMPUTED_GOTO
   break;
 
-default:
-  UNREACHABLE();
+  default:
+    UNREACHABLE();
 #endif
 #if !USE_COMPUTED_GOTO
 }

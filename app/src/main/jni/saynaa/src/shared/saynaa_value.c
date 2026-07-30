@@ -105,7 +105,6 @@ void varInitObject(Object* thiz, VM* vm, ObjectType type) {
   vm->first = thiz;
 }
 
- 
 void markObject(VM* vm, Object* thiz) {
   if (thiz == NULL || thiz->is_marked)
     return;
@@ -566,7 +565,7 @@ Closure* newClosureSafe(VM* vm, Function* fn) {
 
 Closure* newClosure(VM* vm, Function* fn) {
   Closure* closure = ALLOCATE_DYNAMIC(vm, Closure, fn->upvalue_count, Upvalue*);
-  //newHandle(vm, VAR_OBJ(closure));
+  // newHandle(vm, VAR_OBJ(closure));
   varInitObject(&closure->_super, vm, OBJ_CLOSURE);
 
   closure->fn = fn;
