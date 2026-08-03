@@ -5,4 +5,144 @@
     </style>
     <style name="AppTheme" parent="Base.AppTheme">
     </style>
+    
+    <style name="LightTheme1" parent="@android:style/Theme.Material.Light.DarkActionBar">
+        <item name="android:colorPrimary">#2196F3</item>
+        <item name="android:colorPrimaryDark">#1976D2</item>
+        <item name="android:colorAccent">#03A9F4</item>
+        <item name="android:statusBarColor">#1976D2</item>
+    </style>
+
+    <style name="LightTheme2" parent="@android:style/Theme.Material.Light.DarkActionBar">
+        <item name="android:colorPrimary">#4CAF50</item>
+        <item name="android:colorPrimaryDark">#2E7D32</item>
+        <item name="android:colorAccent">#8BC34A</item>
+        <item name="android:statusBarColor">#2E7D32</item>
+    </style>
+
+    <style name="LightTheme3" parent="@android:style/Theme.Material.Light.DarkActionBar">
+        <item name="android:colorPrimary">#9C27B0</item>
+        <item name="android:colorPrimaryDark">#6A1B9A</item>
+        <item name="android:colorAccent">#E040FB</item>
+        <item name="android:statusBarColor">#6A1B9A</item>
+    </style>
+
+    <style name="LightTheme4" parent="@android:style/Theme.Material.Light.DarkActionBar">
+        <item name="android:colorPrimary">#FF5722</item>
+        <item name="android:colorPrimaryDark">#E64A19</item>
+        <item name="android:colorAccent">#FF9800</item>
+        <item name="android:statusBarColor">#E64A19</item>
+    </style>
+
+    <style name="LightTheme5" parent="@android:style/Theme.Material.Light.DarkActionBar">
+        <item name="android:colorPrimary">#009688</item>
+        <item name="android:colorPrimaryDark">#00695C</item>
+        <item name="android:colorAccent">#26A69A</item>
+        <item name="android:statusBarColor">#00695C</item>
+    </style>
+
+    <style name="LightTheme6" parent="@android:style/Theme.Material.Light.DarkActionBar">
+        <item name="android:colorPrimary">#3F51B5</item>
+        <item name="android:colorPrimaryDark">#283593</item>
+        <item name="android:colorAccent">#5C6BC0</item>
+        <item name="android:statusBarColor">#283593</item>
+    </style>
+
+    <style name="LightTheme7" parent="@android:style/Theme.Material.Light.DarkActionBar">
+        <item name="android:colorPrimary">#795548</item>
+        <item name="android:colorPrimaryDark">#5D4037</item>
+        <item name="android:colorAccent">#A1887F</item>
+        <item name="android:statusBarColor">#5D4037</item>
+    </style>
+
+    <style name="LightTheme8" parent="@android:style/Theme.Material.Light.DarkActionBar">
+        <item name="android:colorPrimary">#E91E63</item>
+        <item name="android:colorPrimaryDark">#C2185B</item>
+        <item name="android:colorAccent">#FF4081</item>
+        <item name="android:statusBarColor">#C2185B</item>
+    </style>
+
+    <style name="LightTheme9" parent="@android:style/Theme.Material.Light.DarkActionBar">
+        <item name="android:colorPrimary">#607D8B</item>
+        <item name="android:colorPrimaryDark">#455A64</item>
+        <item name="android:colorAccent">#90A4AE</item>
+        <item name="android:statusBarColor">#455A64</item>
+    </style>
+
+    <style name="LightTheme10" parent="@android:style/Theme.Material.Light.DarkActionBar">
+        <item name="android:colorPrimary">#FFC107</item>
+        <item name="android:colorPrimaryDark">#FFA000</item>
+        <item name="android:colorAccent">#FFD54F</item>
+        <item name="android:statusBarColor">#FFA000</item>
+    </style>
+
+    <style name="DarkTheme1" parent="@android:style/Theme.Material">
+        <item name="android:colorPrimary">#121212</item>
+        <item name="android:colorPrimaryDark">#000000</item>
+        <item name="android:colorAccent">#2196F3</item>
+        <item name="android:statusBarColor">#000000</item>
+    </style>
+
+    <style name="DarkTheme2" parent="@android:style/Theme.Material">
+        <item name="android:colorPrimary">#1E1E1E</item>
+        <item name="android:colorPrimaryDark">#000000</item>
+        <item name="android:colorAccent">#4CAF50</item>
+        <item name="android:statusBarColor">#000000</item>
+    </style>
+
+    <style name="DarkTheme3" parent="@android:style/Theme.Material">
+        <item name="android:colorPrimary">#212121</item>
+        <item name="android:colorPrimaryDark">#000000</item>
+        <item name="android:colorAccent">#9C27B0</item>
+        <item name="android:statusBarColor">#000000</item>
+    </style>
+
+    <style name="DarkTheme4" parent="@android:style/Theme.Material">
+        <item name="android:colorPrimary">#263238</item>
+        <item name="android:colorPrimaryDark">#111111</item>
+        <item name="android:colorAccent">#00BCD4</item>
+        <item name="android:statusBarColor">#111111</item>
+    </style>
+
+    <style name="DarkTheme5" parent="@android:style/Theme.Material">
+        <item name="android:colorPrimary">#2E2E2E</item>
+        <item name="android:colorPrimaryDark">#111111</item>
+        <item name="android:colorAccent">#FF5722</item>
+        <item name="android:statusBarColor">#111111</item>
+    </style>
+
+    <style name="DarkTheme6" parent="@android:style/Theme.Material">
+        <item name="android:colorPrimary">#1B1B1B</item>
+        <item name="android:colorPrimaryDark">#000000</item>
+        <item name="android:colorAccent">#E91E63</item>
+        <item name="android:statusBarColor">#000000</item>
+    </style>
+
+    <style name="DarkTheme7" parent="@android:style/Theme.Material">
+        <item name="android:colorPrimary">#202124</item>
+        <item name="android:colorPrimaryDark">#000000</item>
+        <item name="android:colorAccent">#FFC107</item>
+        <item name="android:statusBarColor">#000000</item>
+    </style>
+
+    <style name="DarkTheme8" parent="@android:style/Theme.Material">
+        <item name="android:colorPrimary">#181818</item>
+        <item name="android:colorPrimaryDark">#000000</item>
+        <item name="android:colorAccent">#8BC34A</item>
+        <item name="android:statusBarColor">#000000</item>
+    </style>
+
+    <style name="DarkTheme9" parent="@android:style/Theme.Material">
+        <item name="android:colorPrimary">#252525</item>
+        <item name="android:colorPrimaryDark">#000000</item>
+        <item name="android:colorAccent">#FF9800</item>
+        <item name="android:statusBarColor">#000000</item>
+    </style>
+
+    <style name="DarkTheme10" parent="@android:style/Theme.Material">
+        <item name="android:colorPrimary">#101010</item>
+        <item name="android:colorPrimaryDark">#000000</item>
+        <item name="android:colorAccent">#03DAC5</item>
+        <item name="android:statusBarColor">#000000</item>
+    </style>
 </resources>
