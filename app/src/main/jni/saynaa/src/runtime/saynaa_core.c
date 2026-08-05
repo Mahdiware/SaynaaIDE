@@ -3149,7 +3149,7 @@ bool varIsType(VM* vm, Var inst, Var type) {
   Class* cls_inst = getClass(vm, inst);
 
   do {
-    if (cls_inst == cls)
+    if (cls_inst == cls || PTR_EQ(cls_inst, cls))
       return true;
     cls_inst = cls_inst->super_class;
   } while (cls_inst != NULL);

@@ -70,71 +70,84 @@ public class SaynaaDexLoader {
     }
   }
 
-  public void loadLib(String name) throws SaynaaException {
-    String fn = name;
-    int i = name.indexOf(".");
-    if (i > 0) {
-      fn = name.substring(0, i);
-    }
-    if (fn.startsWith("lib")) {
-      fn = fn.substring(3);
-    }
-
-    String libDir = context.getContext().getDir(fn, Context.MODE_PRIVATE).getAbsolutePath();
-    String libPath = libDir + "/lib" + fn + ".so";
-    File target = new File(libPath);
-    if (!target.exists()) {
-      File source = new File(new File(saynaaDir, "libs"), "lib" + fn + ".so");
-      if (!source.exists()) {
-        throw new SaynaaException("can not find lib " + name);
-      }
-      try {
-        copyFile(source, target);
-      } catch (IOException e) {
-        throw new SaynaaException(e);
-      }
-    }
-    libCache.put(fn, libPath);
-  }
-
+  /**
+   * Loads a dex/jar file.
+   *
+   * Android 14+ require dynamically loaded code to come from
+   * the app's private storage. This function copies the dex/jar into the app's
+   * code cache directory, marks it read-only, and then loads it.
+   */
   public SaynaaDexClassLoader loadDex(String path) throws SaynaaException {
+    // Check if this dex is already loaded.
     SaynaaDexClassLoader dex = dexCache.get(path);
+
     if (dex == null) {
       try {
+        // Try loading as an installed application package.
         dex = loadApp(path);
       } catch (SaynaaException ignored) {
-        // Not a package name; fall through to file path logic.
+        // Not a package name.
       }
     }
 
     if (dex == null) {
       String name = path;
+
+      // Convert relative path to an absolute path.
       if (path.charAt(0) != '/') {
         path = new File(saynaaDir, path).getAbsolutePath();
       }
+
       File dexFile = new File(path);
+
+      // Try common extensions if the file doesn't exist.
       if (!dexFile.exists()) {
         if (new File(path + ".dex").exists()) {
-          path += ".dex";
+          dexFile = new File(path + ".dex");
         } else if (new File(path + ".jar").exists()) {
-          path += ".jar";
+          dexFile = new File(path + ".jar");
         } else {
           throw new SaynaaException(path + " not found");
         }
       }
 
-      dex = dexCache.get(name);
-      if (dex == null) {
-        dex = new SaynaaDexClassLoader(path, odexDir,
-            SaynaaApplication.getInstance().getApplicationInfo().nativeLibraryDir,
-            context.getContext().getClassLoader());
-        dexCache.put(name, dex);
+      /*
+       * Android 14+:
+       * Dynamic code must be loaded from the application's private storage.
+       * Copy the file into codeCacheDir and load it from there.
+       */
+      File codeCache = context.getContext().getCodeCacheDir();
+
+      // Keep the original extension.
+      String ext = dexFile.getName().endsWith(".jar") ? ".jar" : ".dex";
+
+      // Generate a unique filename to avoid collisions.
+      File internalDex = new File(codeCache, "dex_" + System.nanoTime() + "_" + Integer.toHexString((int) (Math.random() * Integer.MAX_VALUE)) + ext);
+
+      try {
+        // Copy the dex/jar into the private code cache.
+        copyFile(dexFile, internalDex);
+
+        /*
+         * Android 14+:
+         * The copied file should be read-only before loading.
+         */
+        internalDex.setReadOnly();
+      } catch (Exception e) {
+        throw new SaynaaException(e);
       }
+
+      // Load the copied dex.
+      dex = new SaynaaDexClassLoader(internalDex.getAbsolutePath(), null, SaynaaApplication.getInstance().getApplicationInfo().nativeLibraryDir, context.getContext().getClassLoader());
+
+      dexCache.put(name, dex);
     }
 
+    // Keep track of loaded class loaders.
     if (!dexList.contains(dex)) {
       dexList.add(dex);
     }
+
     return dex;
   }
 
@@ -143,12 +156,21 @@ public class SaynaaDexLoader {
     if (parent != null && !parent.exists()) {
       parent.mkdirs();
     }
-    try (FileInputStream in = new FileInputStream(source); FileOutputStream out = new FileOutputStream(target)) {
+
+    try (FileInputStream in = new FileInputStream(source);
+      FileOutputStream out = new FileOutputStream(target)) {
+
       byte[] buffer = new byte[8192];
       int read;
+
       while ((read = in.read(buffer)) != -1) {
         out.write(buffer, 0, read);
       }
+
+      out.flush();
     }
+
+    // Preserve the source file timestamp.
+    target.setLastModified(source.lastModified());
   }
 }

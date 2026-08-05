@@ -143,6 +143,19 @@ typedef struct Var Var;
   (((str)->length == len) \
    && (memcmp((const void*) (str)->data, (const void*) (cstr), len) == 0))
 
+// For Var values.
+#define VAR_EQ(a, b) ((a) == (b))
+
+// Compare object pointers while ignoring the ARM64 top-byte tag (TBI/MTE).
+// arm64 may return tagged heap pointers (e.g. 0xb4xxxxxxxxxxxxxx),
+// while NaN-tag decoding produces the canonical untagged address.
+// Masking the top byte allows both representations of the same object
+// to compare equal.
+//   (For decoded object pointers.)
+#define PTR_EQ(a, b) \
+  ((((uintptr_t)(a)) & 0x00FFFFFFFFFFFFFFULL) == \
+   (((uintptr_t)(b)) & 0x00FFFFFFFFFFFFFFULL))
+
 // Decode types.
 #define AS_BOOL(value) ((value) == VAR_TRUE)
 #define AS_INT(value) ((int32_t) ((value) & _PAYLOAD_INTEGER))
