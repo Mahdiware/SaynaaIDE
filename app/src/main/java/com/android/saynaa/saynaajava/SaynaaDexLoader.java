@@ -62,11 +62,7 @@ public class SaynaaDexLoader {
       if (f.isDirectory()) {
         continue;
       }
-      if (f.getAbsolutePath().endsWith(".so")) {
-        loadLib(f.getName());
-      } else {
-        loadDex(f.getAbsolutePath());
-      }
+      loadDex(f.getAbsolutePath());
     }
   }
 
