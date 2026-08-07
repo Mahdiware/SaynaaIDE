@@ -498,12 +498,10 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
     return super.onContextItemSelected(item);
   }
 
-  @Override
   public void setContentView(Map<Object, Object> layout) {
     Object result = runFunc(LOADLAYOUT_NAME, layout);
     if (result instanceof View) {
-      isSetViewed = true;
-      super.setContentView((View)result);
+      setContentView((View)result);
     }
   }
 
