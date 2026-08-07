@@ -140,7 +140,7 @@ public class JavaBridge {
       return new SaynaaModule(saynaa, slot);
 
     default:
-      return null;
+      return new SaynaaObject(saynaa, slot);;
     }
   }
 
@@ -626,6 +626,12 @@ public class JavaBridge {
     // SaynaaModule
     if (normalized instanceof SaynaaModule) {
       saynaa.setSlotHandle(slot, ((SaynaaModule) normalized).getSlot());
+      return true;
+    }
+    
+    // SaynaaObject
+    if (normalized instanceof SaynaaObject) {
+      saynaa.setSlotHandle(slot, ((SaynaaObject) normalized).getSlot());
       return true;
     }
 
