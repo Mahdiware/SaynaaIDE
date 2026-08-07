@@ -48,6 +48,7 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
   public static final String DATA = "data";
   public static final String NAME = "name";
   private static final String TAG = "SaynaaActivity";
+  private static final String LOADLAYOUT_NAME = "loadlayout";
 
   // Compatibility-style properties (mirroring SaynaaActivity naming where possible)
   private static final ArrayList<String> prjCache = new ArrayList<>();
@@ -495,6 +496,15 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
     if (ret instanceof Boolean && (Boolean) ret)
       return true;
     return super.onContextItemSelected(item);
+  }
+
+  @Override
+  public void setContentView(Map<Object, Object> layout) {
+    Object result = runFunc(LOADLAYOUT_NAME, layout);
+    if (result instanceof View) {
+      isSetViewed = true;
+      super.setContentView((View)result);
+    }
   }
 
   @Override

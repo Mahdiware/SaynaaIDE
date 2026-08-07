@@ -4,6 +4,10 @@ import android.content.Context;
 import android.os.Environment;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.Locale;
+import java.util.TimeZone;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
@@ -20,7 +24,7 @@ import java.util.Comparator;
 import java.util.List;
 
 public class FileUtil {
-  public final static String SDCARD_PATH = "/sdcard/saynaa/";
+  public final static String SDCARD_PATH = "/sdcard/";
 
   public static void saveDebug(Context context, String content) {
     try {
@@ -56,7 +60,7 @@ public class FileUtil {
       }
 
       File files = context.getFilesDir();
-      deleteDirectory(files);
+      deleteRecursive(files);
 
       if (!files.exists()) {
         files.mkdirs();
@@ -70,7 +74,7 @@ public class FileUtil {
     }
   }
   
-  private static void deleteDirectory(File file) {
+  public static void deleteRecursive(File file) {
     if (file == null || !file.exists()) {
       return;
     }
@@ -79,7 +83,7 @@ public class FileUtil {
       File[] children = file.listFiles();
       if (children != null) {
         for (File child : children) {
-          deleteDirectory(child);
+          deleteRecursive(child);
         }
       }
     }
@@ -112,7 +116,14 @@ public class FileUtil {
     });
     
     return files;
-}
+  }
+  
+  public static String formatDate(long unixTimestamp, String format) {
+    SimpleDateFormat sdf = new SimpleDateFormat(format, Locale.getDefault());
+    sdf.setTimeZone(TimeZone.getDefault());
+
+    return sdf.format(new Date(unixTimestamp * 1000L));
+  }
 
   /*
     * Unzip a ZIP file from assets to the specified output directory.
@@ -178,7 +189,7 @@ public class FileUtil {
     zipInputStream.close();
   }
 
-  private static void copyAssetFileIfMissing(Context context, String assetPath, File outDir) throws IOException {
+  public static void copyAssetFileIfMissing(Context context, String assetPath, File outDir) throws IOException {
     File outFile = new File(outDir, assetPath);
     if (outFile.exists())
       return;
@@ -192,7 +203,7 @@ public class FileUtil {
    * @param assetPath path inside assets ("" for root)
    * @param outDir output directory in internal storage
    */
-  private static void copyAssetFolder(Context context, String assetPath, File outDir) throws IOException {
+  public static void copyAssetFolder(Context context, String assetPath, File outDir) throws IOException {
     String[] assets = context.getAssets().list(assetPath);
 
     if (assets == null || assets.length == 0) {
@@ -219,7 +230,7 @@ public class FileUtil {
    * @param assetPath path of asset file inside assets folder
    * @param outDir output directory in internal storage
    */
-  private static void copyAssetFile(Context context, String assetPath, File outDir) throws IOException {
+  public static void copyAssetFile(Context context, String assetPath, File outDir) throws IOException {
     File outFile = new File(outDir, assetPath);
 
     // Ensure parent directories exist
