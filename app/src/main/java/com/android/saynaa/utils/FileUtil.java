@@ -2,7 +2,6 @@ package com.android.saynaa.utils;
 
 import android.content.Context;
 import android.os.Environment;
-import android.widget.Toast;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
@@ -13,15 +12,15 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
+import android.content.SharedPreferences;
+import android.content.pm.PackageInfo;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.List;
 
 public class FileUtil {
   public final static String SDCARD_PATH = "/sdcard/saynaa/";
-  private static final String ASSETS_VERSION_MARKER = "saynaa_assets_version";
-  private static final int ASSETS_COPY_VERSION = 15;
-
-  /**
-   * Copy all assets to internal storage.
-   */
 
   public static void saveDebug(Context context, String content) {
     try {
@@ -41,26 +40,79 @@ public class FileUtil {
       e.printStackTrace();
     }
   }
-
+  
+  /**
+   * Copy all assets to internal storage.
+   */
   public static void copyAllAssets(Context context) {
-    File outDir = context.getFilesDir(); // /data/data/<package>/files
-    if (outDir == null)
-      return;
-
-    if (!outDir.exists() && !outDir.mkdirs())
-      return;
-
-    File marker = new File(outDir, ASSETS_VERSION_MARKER);
-    if (readAssetsVersion(marker) == ASSETS_COPY_VERSION)
-      return;
-
     try {
-      copyAssetFolder(context, "", outDir);
-      writeAssetsVersion(marker, ASSETS_COPY_VERSION);
-    } catch (IOException e) {
+      PackageInfo info = context.getPackageManager().getPackageInfo(context.getPackageName(), 0);
+      long updateTime = info.lastUpdateTime;
+      SharedPreferences prefs = context.getSharedPreferences("assets", Context.MODE_PRIVATE);
+      long savedTime = prefs.getLong("lastUpdateTime", -1);
+
+      if (savedTime == updateTime) {
+        return;
+      }
+
+      File files = context.getFilesDir();
+      deleteDirectory(files);
+
+      if (!files.exists()) {
+        files.mkdirs();
+      }
+
+      copyAssetFolder(context, "", files);
+
+      prefs.edit().putLong("lastUpdateTime", updateTime).apply();
+    } catch (Exception e) {
       e.printStackTrace();
     }
   }
+  
+  private static void deleteDirectory(File file) {
+    if (file == null || !file.exists()) {
+      return;
+    }
+
+    if (file.isDirectory()) {
+      File[] children = file.listFiles();
+      if (children != null) {
+        for (File child : children) {
+          deleteDirectory(child);
+        }
+      }
+    }
+
+    file.delete();
+  }
+  
+  public static List<File> listDir(String path) {
+    List<File> files = new ArrayList<>();
+    
+    File dir = new File(path);
+    if (!dir.exists() || !dir.isDirectory()) {
+      return files;
+    }
+    
+    File[] list = dir.listFiles();
+    if (list == null) {
+      return files;
+    }
+    
+    Collections.addAll(files, list);
+    
+    Collections.sort(files, new Comparator<File>() {
+      @Override
+      public int compare(File a, File b) {
+        if (a.isDirectory() && !b.isDirectory()) return -1;
+        if (!a.isDirectory() && b.isDirectory()) return 1;
+        return a.getName().compareToIgnoreCase(b.getName());
+      }
+    });
+    
+    return files;
+}
 
   /*
     * Unzip a ZIP file from assets to the specified output directory.
@@ -124,30 +176,6 @@ public class FileUtil {
     }
 
     zipInputStream.close();
-  }
-
-  private static int readAssetsVersion(File marker) {
-    if (!marker.exists())
-      return -1;
-
-    try (FileInputStream input = new FileInputStream(marker);
-        ByteArrayOutputStream output = new ByteArrayOutputStream()) {
-      byte[] buffer = new byte[64];
-      int read;
-      while ((read = input.read(buffer)) != -1) {
-        output.write(buffer, 0, read);
-      }
-      return Integer.parseInt(output.toString().trim());
-    } catch (Exception e) {
-      return -1;
-    }
-  }
-
-  private static void writeAssetsVersion(File marker, int version) throws IOException {
-    try (FileOutputStream output = new FileOutputStream(marker, false)) {
-      output.write(String.valueOf(version).getBytes());
-      output.flush();
-    }
   }
 
   private static void copyAssetFileIfMissing(Context context, String assetPath, File outDir) throws IOException {

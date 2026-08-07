@@ -9,6 +9,8 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 
 public class SaynaaDexLoader {
   private static final HashMap<String, SaynaaDexClassLoader> dexCache = new HashMap<>();
@@ -74,29 +76,24 @@ public class SaynaaDexLoader {
    * code cache directory, marks it read-only, and then loads it.
    */
   public SaynaaDexClassLoader loadDex(String path) throws SaynaaException {
-    // Check if this dex is already loaded.
     SaynaaDexClassLoader dex = dexCache.get(path);
-
+    
     if (dex == null) {
       try {
-        // Try loading as an installed application package.
         dex = loadApp(path);
       } catch (SaynaaException ignored) {
-        // Not a package name.
       }
     }
-
+    
     if (dex == null) {
       String name = path;
-
-      // Convert relative path to an absolute path.
+      
       if (path.charAt(0) != '/') {
         path = new File(saynaaDir, path).getAbsolutePath();
       }
-
+      
       File dexFile = new File(path);
-
-      // Try common extensions if the file doesn't exist.
+      
       if (!dexFile.exists()) {
         if (new File(path + ".dex").exists()) {
           dexFile = new File(path + ".dex");
@@ -106,45 +103,68 @@ public class SaynaaDexLoader {
           throw new SaynaaException(path + " not found");
         }
       }
-
+      
       /*
-       * Android 14+:
-       * Dynamic code must be loaded from the application's private storage.
-       * Copy the file into codeCacheDir and load it from there.
-       */
+      ** Android 14+:
+      ** Load dynamic code from the app's private code cache directory.
+      */      
       File codeCache = context.getContext().getCodeCacheDir();
-
-      // Keep the original extension.
-      String ext = dexFile.getName().endsWith(".jar") ? ".jar" : ".dex";
-
-      // Generate a unique filename to avoid collisions.
-      File internalDex = new File(codeCache, "dex_" + System.nanoTime() + "_" + Integer.toHexString((int) (Math.random() * Integer.MAX_VALUE)) + ext);
-
-      try {
-        // Copy the dex/jar into the private code cache.
-        copyFile(dexFile, internalDex);
-
-        /*
-         * Android 14+:
-         * The copied file should be read-only before loading.
-         */
-        internalDex.setReadOnly();
-      } catch (Exception e) {
-        throw new SaynaaException(e);
+      
+      File internalDex = new File(codeCache, getDexCacheName(dexFile));
+      
+      if (!internalDex.exists()) {
+        try {
+          copyFile(dexFile, internalDex);
+          internalDex.setReadOnly();
+        } catch (IOException e) {
+          throw new SaynaaException(e);
+        }
       }
-
-      // Load the copied dex.
-      dex = new SaynaaDexClassLoader(internalDex.getAbsolutePath(), null, SaynaaApplication.getInstance().getApplicationInfo().nativeLibraryDir, context.getContext().getClassLoader());
-
-      dexCache.put(name, dex);
+      
+      dex = dexCache.get(name);
+      
+      if (dex == null) {
+        dex = new SaynaaDexClassLoader(
+        internalDex.getAbsolutePath(),
+        null,
+        SaynaaApplication.getInstance()
+        .getApplicationInfo().nativeLibraryDir,
+        context.getContext().getClassLoader());
+        
+        dexCache.put(name, dex);
+      }
     }
-
-    // Keep track of loaded class loaders.
+    
     if (!dexList.contains(dex)) {
       dexList.add(dex);
     }
-
+    
     return dex;
+  }
+  
+  private static String getDexCacheName(File file) {
+    try {
+      MessageDigest md = MessageDigest.getInstance("SHA-256");
+      
+      String key = file.getAbsolutePath()
+      + ":"
+      + file.length()
+      + ":"
+      + file.lastModified();
+      
+      byte[] hash = md.digest(key.getBytes(StandardCharsets.UTF_8));
+      
+      StringBuilder sb = new StringBuilder();
+      for (byte b : hash) {
+        sb.append(String.format("%02x", b));
+      }
+      
+      String ext = file.getName().endsWith(".jar") ? ".jar" : ".dex";
+      return sb.toString() + ext;
+      
+    } catch (Exception e) {
+      throw new RuntimeException(e);
+    }
   }
 
   private static void copyFile(File source, File target) throws IOException {
