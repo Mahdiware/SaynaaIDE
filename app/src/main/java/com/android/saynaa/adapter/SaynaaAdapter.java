@@ -22,6 +22,7 @@ import android.widget.TextView;
 import com.android.saynaa.activity.SaynaaActivity;
 import com.android.saynaa.saynaajava.Saynaa;
 import com.android.saynaa.saynaajava.SaynaaException;
+import com.android.saynaa.saynaajava.datatype.SaynaaObject;
 import java.io.File;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
@@ -445,6 +446,11 @@ public class SaynaaAdapter extends BaseAdapter implements Filterable {
   private static Object cleanValue(Object val) {
     if (val == null)
       return null;
+
+    if (val instanceof SaynaaObject) {
+      // Preserve bridge wrappers so JavaBridge can round-trip them back to native handles.
+      return val;
+    }
 
     if (val instanceof String || val instanceof Number || val instanceof Boolean
         || val instanceof Bitmap || val instanceof Drawable) {

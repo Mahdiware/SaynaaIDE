@@ -117,7 +117,7 @@ DemoLayout = {
 
 AdapterData = {
   { text: '1) Mahdi', icon: 'image1.png' },
-  { text: '2) Ahmed', icon: 'image2.png' },
+  { text: {text: '2) Ahmed', textColor: "#254898", onClick: function() toast("Ahmed clicked") end}, icon: 'image2.png' },
   { text: '3) Ali', icon: 'image3.png' },
 
   { text: '4) Hassan', icon: 'image1.png' },

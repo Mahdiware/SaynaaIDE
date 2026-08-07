@@ -81,6 +81,12 @@ public class JavaBridge {
     }
 
     int type = saynaa.getSlotType(slot);
+    int pinnedHandleId = 0;
+    if (type == Saynaa.SLOT_TYPE_MODULE || type == Saynaa.SLOT_TYPE_CLOSURE || type == Saynaa.SLOT_TYPE_OBJECT
+        || type == Saynaa.SLOT_TYPE_METHOD_BIND || type == Saynaa.SLOT_TYPE_FIBER
+        || type == Saynaa.SLOT_TYPE_CLASS || type == Saynaa.SLOT_TYPE_RANGE) {
+      pinnedHandleId = saynaa.captureSlotHandle(slot);
+    }
 
     switch (type) {
     case Saynaa.SLOT_TYPE_NULL:
@@ -105,7 +111,7 @@ public class JavaBridge {
 
       for (int i = 0; i < size; i++) {
         int valueSlot = scratchSlot;
-        //saynaa.reserveSlots(valueSlot + 1);
+        // saynaa.reserveSlots(valueSlot + 1);
 
         if (saynaa.listGetToSlot(slot, i, valueSlot)) {
           // Offsets the child scratch space by 1 to protect valueSlot
@@ -124,7 +130,7 @@ public class JavaBridge {
       for (int i = 0; i < size; i++) {
         int keySlot = scratchSlot;
         int valueSlot = scratchSlot + 1;
-        //saynaa.reserveSlots(valueSlot + 1);
+        // saynaa.reserveSlots(valueSlot + 1);
 
         if (saynaa.mapEntryToSlots(slot, i, keySlot, valueSlot)) {
           // Offsets child scratch space by 2 to protect both key and value slots
@@ -137,10 +143,10 @@ public class JavaBridge {
     }
 
     case Saynaa.SLOT_TYPE_MODULE:
-      return new SaynaaModule(saynaa, slot);
+      return new SaynaaModule(saynaa, slot, pinnedHandleId);
 
     default:
-      return new SaynaaObject(saynaa, slot);
+      return new SaynaaObject(saynaa, slot, pinnedHandleId);
     }
   }
 
@@ -625,13 +631,23 @@ public class JavaBridge {
 
     // SaynaaModule
     if (normalized instanceof SaynaaModule) {
-      saynaa.setSlotHandle(slot, ((SaynaaModule) normalized).getSlot());
+      SaynaaModule module = (SaynaaModule) normalized;
+      if (module.getHandleId() > 0) {
+        saynaa.setSlotPinnedHandle(slot, module.getHandleId());
+      } else {
+        saynaa.setSlotHandle(slot, module.getSlot());
+      }
       return true;
     }
-    
+
     // SaynaaObject
     if (normalized instanceof SaynaaObject) {
-      saynaa.setSlotHandle(slot, ((SaynaaObject) normalized).getSlot());
+      SaynaaObject object = (SaynaaObject) normalized;
+      if (object.getHandleId() > 0) {
+        saynaa.setSlotPinnedHandle(slot, object.getHandleId());
+      } else {
+        saynaa.setSlotHandle(slot, object.getSlot());
+      }
       return true;
     }
 
@@ -685,7 +701,6 @@ public class JavaBridge {
         saynaa.freeSlot(argStart, argc + 4);
         return null;
       }
-      
     }
 
     return saynaa.invokeCallbackMethodWithResultFromSlots(callbackId, methodName, argStart, argc);

@@ -9,6 +9,10 @@ public final class SaynaaModule extends SaynaaObject {
     super(saynaa, slot);
   }
 
+  public SaynaaModule(Saynaa saynaa, int slot, int handleId) {
+    super(saynaa, slot, handleId);
+  }
+
   public int getSlot() {
     return slot;
   }

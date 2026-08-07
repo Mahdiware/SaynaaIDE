@@ -593,6 +593,34 @@ JNIEXPORT void JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1setSlot
   setSlotHandle(vm, slot, handle);
 }
 
+JNIEXPORT jint JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1captureSlotHandle(
+    JNIEnv* env, jobject thiz, jint slot) {
+  VM* vm = vm_from_saynaa(env, thiz);
+  if (vm == NULL || slot < 0)
+    return 0;
+
+  reserveSlots(vm, slot + 1);
+  Handle* handle = GetSlotHandle(vm, slot);
+  if (handle == NULL)
+    return 0;
+
+  return (jint) register_pinned_handle(vm, handle);
+}
+
+JNIEXPORT void JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1setSlotPinnedHandle(
+    JNIEnv* env, jobject thiz, jint slot, jint pinnedHandleId) {
+  VM* vm = vm_from_saynaa(env, thiz);
+  if (vm == NULL || pinnedHandleId <= 0)
+    return;
+
+  reserveSlots(vm, slot + 1);
+  Handle* handle = find_pinned_handle(vm, (int) pinnedHandleId);
+  if (handle == NULL)
+    return;
+
+  setSlotHandle(vm, slot, handle);
+}
+
 JNIEXPORT void JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1newList(
     JNIEnv* env, jobject thiz, jint slot) {
   VM* vm = vm_from_saynaa(env, thiz);
@@ -1292,6 +1320,7 @@ JNIEXPORT void JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1close(J
       return;
     bridge->closing = true;
     clear_callbacks(vm);
+    clear_pinned_handles(vm);
     release_bridge_handle(vm, &bridge->mainModule);
     release_bridge_handle(vm, &bridge->javaWrapperModule);
     release_bridge_handle(vm, &bridge->clsJavaMethod);

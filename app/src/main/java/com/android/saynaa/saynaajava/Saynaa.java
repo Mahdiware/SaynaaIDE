@@ -184,6 +184,14 @@ public class Saynaa {
     saynaa_setSlotHandle(slot, handleId);
   }
 
+  public synchronized int captureSlotHandle(int slot) {
+    return saynaa_captureSlotHandle(slot);
+  }
+
+  public synchronized void setSlotPinnedHandle(int slot, int pinnedHandleId) {
+    saynaa_setSlotPinnedHandle(slot, pinnedHandleId);
+  }
+
   public synchronized void newList(int slot) {
     saynaa_newList(slot);
   }
@@ -346,6 +354,8 @@ public class Saynaa {
   private synchronized native void saynaa_setSlotNumber(int slot, double value);
   private synchronized native void saynaa_setSlotString(int slot, String value);
   private synchronized native void saynaa_setSlotHandle(int slot, int handleId);
+  private synchronized native int saynaa_captureSlotHandle(int slot);
+  private synchronized native void saynaa_setSlotPinnedHandle(int slot, int pinnedHandleId);
   private synchronized native void saynaa_addSearchPath(String path);
   private synchronized native void saynaa_newList(int slot);
   private synchronized native void saynaa_newMap(int slot);

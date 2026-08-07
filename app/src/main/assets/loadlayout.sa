@@ -8,6 +8,7 @@ target_module = null
 
 ViewGroup = java.bindClass('android.view.ViewGroup')
 View = java.bindClass('android.view.View')
+Toast = java.bindClass('android.widget.Toast')
 LinearLayout = java.bindClass('android.widget.LinearLayout')
 LinearLayoutParams = java.bindClass('android.widget.LinearLayout$LayoutParams')
 RelativeLayout = java.bindClass('android.widget.RelativeLayout')
@@ -251,6 +252,10 @@ gravity = {
   start: 8388611,
   'end': 8388613
 }
+
+function toast(msg)
+	Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+end
 
 
 function as_numeric(value)
@@ -824,10 +829,16 @@ function apply_attrs(view, node, data)
   if node_id != null and data != null and type(data) == 'Map' then
     value = data.get(node_id)
     if value != null then
-      if java.instanceof(view, TextView) then
-        view.setText(value)
-      elif java.instanceof(view, ImageView) then
-        apply_image(view, value)
+      if value is String then
+        if java.instanceof(view, TextView) then
+          view.setText(value)
+        elif java.instanceof(view, ImageView) then
+          apply_image(view, value)
+        end
+      elif value is Map then
+        debug("value is map and data is: $value")
+        apply_attrs(view, value, null)
+        apply_auto_attrs(view, value)
       end
     end
   end

@@ -25,6 +25,7 @@ typedef struct JavaRef {
 } JavaRef;
 
 typedef struct CallbackEntry CallbackEntry;
+typedef struct PinnedHandleEntry PinnedHandleEntry;
 
 typedef struct BridgeState {
   JavaVM* jvm;
@@ -54,6 +55,8 @@ typedef struct BridgeState {
 
   int nextCallbackId;
   CallbackEntry* callbacks;
+  int nextPinnedHandleId;
+  PinnedHandleEntry* pinnedHandles;
   bool filesSearchPathAdded;
   bool closing;
 } BridgeState;
@@ -64,6 +67,12 @@ struct CallbackEntry {
   Handle* mapHandle;
   char* methodName;
   CallbackEntry* next;
+};
+
+struct PinnedHandleEntry {
+  int id;
+  Handle* handle;
+  PinnedHandleEntry* next;
 };
 
 typedef enum { JAVA_CLASS, JAVA_OBJECT, JAVA_METHOD } JavaNativeType;
@@ -126,6 +135,9 @@ extern void clear_callbacks(VM* vm);
 extern int register_callback(VM* vm, int slot);
 extern int register_map_callback(VM* vm, int mapSlot, const char* methodName);
 extern CallbackEntry* find_callback(VM* vm, int callbackId);
+extern int register_pinned_handle(VM* vm, Handle* handle);
+extern Handle* find_pinned_handle(VM* vm, int handleId);
+extern void clear_pinned_handles(VM* vm);
 extern bool invoke_registered_callback(JNIEnv* env, VM* vm, BridgeState* bridge,
     CallbackEntry* entry, const char* runtimeMethodName, jobject args, jobject* outResult);
 extern bool invoke_registered_callback_from_slots(JNIEnv* env, VM* vm, BridgeState* bridge,

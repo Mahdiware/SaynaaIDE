@@ -69,6 +69,62 @@ void clear_callbacks(VM* vm) {
   bridge->nextCallbackId = 1;
 }
 
+void clear_pinned_handles(VM* vm) {
+  BridgeState* bridge = bridge_from_vm(vm);
+  if (bridge == NULL)
+    return;
+
+  PinnedHandleEntry* it = bridge->pinnedHandles;
+  while (it != NULL) {
+    PinnedHandleEntry* next = it->next;
+    if (it->handle != NULL)
+      releaseHandle(vm, it->handle);
+    free(it);
+    it = next;
+  }
+
+  bridge->pinnedHandles = NULL;
+  bridge->nextPinnedHandleId = 1;
+}
+
+int register_pinned_handle(VM* vm, Handle* handle) {
+  BridgeState* bridge = bridge_from_vm(vm);
+  if (bridge == NULL || handle == NULL)
+    return 0;
+
+  PinnedHandleEntry* entry = (PinnedHandleEntry*) calloc(1, sizeof(PinnedHandleEntry));
+  if (entry == NULL) {
+    releaseHandle(vm, handle);
+    SetRuntimeError(vm, "Out of memory while pinning handle.");
+    return 0;
+  }
+
+  if (bridge->nextPinnedHandleId <= 0)
+    bridge->nextPinnedHandleId = 1;
+
+  entry->id = bridge->nextPinnedHandleId++;
+  entry->handle = handle;
+  entry->next = bridge->pinnedHandles;
+  bridge->pinnedHandles = entry;
+
+  return entry->id;
+}
+
+Handle* find_pinned_handle(VM* vm, int handleId) {
+  BridgeState* bridge = bridge_from_vm(vm);
+  if (bridge == NULL || handleId <= 0)
+    return NULL;
+
+  PinnedHandleEntry* it = bridge->pinnedHandles;
+  while (it != NULL) {
+    if (it->id == handleId)
+      return it->handle;
+    it = it->next;
+  }
+
+  return NULL;
+}
+
 int register_callback(VM* vm, int slot) {
   BridgeState* bridge = bridge_from_vm(vm);
   if (bridge == NULL)
