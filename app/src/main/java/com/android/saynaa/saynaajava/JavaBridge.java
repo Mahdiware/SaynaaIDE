@@ -140,7 +140,7 @@ public class JavaBridge {
       return new SaynaaModule(saynaa, slot);
 
     default:
-      return new SaynaaObject(saynaa, slot);;
+      return new SaynaaObject(saynaa, slot);
     }
   }
 
