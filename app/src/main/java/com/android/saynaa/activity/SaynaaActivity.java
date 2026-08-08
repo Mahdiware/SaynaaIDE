@@ -499,7 +499,7 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
   }
 
   public void setContentView(Map<Object, Object> layout) {
-    Object result = runFunc(LOADLAYOUT_NAME, layout);
+    Object result = runFunc(LOADLAYOUT_NAME, this, layout);
     if (result instanceof View) {
       setContentView((View)result);
     }
