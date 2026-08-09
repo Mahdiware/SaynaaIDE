@@ -65,9 +65,10 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
   protected int mWidth;
   protected int mHeight;
 
+  protected Intent saynaaIntent;
   protected boolean isCreate = false;
   protected boolean isSetViewed = false;
-  protected boolean mDebug = true;
+  protected boolean DebugMode = false;
 
   private ArrayList<SaynaaGcable> gclist = new ArrayList<SaynaaGcable>();
 
@@ -105,7 +106,7 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
     localDir = getFilesDir().getAbsolutePath();
     saynaaExtDir = getDefaultExtDir();
 
-    FileUtil.copyAllAssets(this);
+    FileUtil.installSaynaaCode(this);
 
     try {
       saynaaPath = getSaynaaPath();
@@ -173,22 +174,7 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
           launchBundle = launchIntent.getBundleExtra(ARG);
         }
       }
-      if (launchArgs != null && launchArgs.length > 0) {
-        if (!"main".equals(pageName)) {
-          runFunc("main", launchArgs);
-        }
-        runFunc(pageName, launchArgs);
-      } else if (launchBundle != null) {
-        if (!"main".equals(pageName)) {
-          runFunc("main", launchBundle);
-        }
-        runFunc(pageName, launchBundle);
-      } else {
-        if (!"main".equals(pageName)) {
-          runFunc("main");
-        }
-        runFunc(pageName);
-      }
+
       if (launchArgs != null && launchArgs.length > 0) {
         runFunc("onCreate", launchArgs);
       } else if (launchBundle != null) {
@@ -498,7 +484,7 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
     return super.onContextItemSelected(item);
   }
 
-  public void setContentView(Map<Object, Object> layout) {
+  public void setContentView(HashMap<Object, Object> layout) {
     Object result = runFunc(LOADLAYOUT_NAME, this, layout);
     if (result instanceof View) {
       setContentView((View)result);
@@ -718,17 +704,15 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
       }
 
     } catch (Exception e) {
-      if (mDebug) {
-        Log.w(TAG, "runFunc failed for hook=" + funcName, e);
-      }
       showScriptError("Hook error", funcName + ": " + e.getMessage());
     } catch (Throwable t) {
-      if (mDebug) {
-        Log.w(TAG, "runFunc failed for hook=" + funcName, t);
-      }
       showScriptError("Hook error", funcName + ": " + t.getMessage());
     }
     return null;
+  }
+  
+  public void setDebugMode(boolean mode) {
+    DebugMode = mode;
   }
 
   public void onNativeError(String msg) {
@@ -741,7 +725,10 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
         nativeErrorBuffer.append('\n');
       }
     }
-    if (!isSetViewed) {
+    
+    // Set the layout if the view has NOT been set yet
+    // OR DebugMode is enabled.
+    if (!isSetViewed || DebugMode) {
       setContentView(layout);
     }
   }
@@ -783,6 +770,13 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
       return "Unknown error " + error;
     }
   }
+  
+  public void addActivityFlag(int flag) {
+    if (saynaaIntent == null) {
+      saynaaIntent = new Intent(this, SaynaaActivity.class);
+    }
+    saynaaIntent.addFlags(flag);
+  }
 
   public void newActivity(String path, Object[] arg, boolean newDocument) {
     try {
@@ -791,8 +785,11 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
         return;
       }
 
-      Intent intent = new Intent(this, SaynaaActivity.class);
-      intent.putExtra(NAME, path);
+      if (saynaaIntent == null) {
+        saynaaIntent = new Intent(this, SaynaaActivity.class);
+      }
+
+      saynaaIntent.putExtra(NAME, path);
 
       if (path.charAt(0) != '/') {
         path = getSaynaaDir() + "/" + path;
@@ -810,20 +807,20 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
         return;
       }
 
-      intent.setData(Uri.parse("file://" + path));
+      saynaaIntent.setData(Uri.parse("file://" + path));
 
       if (arg != null) {
-        intent.putExtra(ARG, arg);
+        saynaaIntent.putExtra(ARG, arg);
       }
 
       if (newDocument) {
-        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_DOCUMENT);
-        intent.addFlags(Intent.FLAG_ACTIVITY_MULTIPLE_TASK);
+        saynaaIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_DOCUMENT);
+        saynaaIntent.addFlags(Intent.FLAG_ACTIVITY_MULTIPLE_TASK);
       } else {
-        intent.addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION);
+        saynaaIntent.addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION);
       }
 
-      startActivity(intent);
+      startActivity(saynaaIntent);
     } catch (Throwable t) {
       sendMsg("newActivity error: " + t.getMessage());
       Log.e(TAG, "newActivity failed", t);
@@ -841,8 +838,11 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
         return;
       }
 
-      Intent intent = new Intent(this, SaynaaActivity.class);
-      intent.putExtra(NAME, path);
+      if (saynaaIntent == null) {
+        saynaaIntent = new Intent(this, SaynaaActivity.class);
+      }
+
+      saynaaIntent.putExtra(NAME, path);
 
       if (path.charAt(0) != '/') {
         path = getSaynaaDir() + "/" + path;
@@ -860,13 +860,13 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
         return;
       }
 
-      intent.setData(Uri.parse("file://" + path));
+      saynaaIntent.setData(Uri.parse("file://" + path));
 
       if (arg != null) {
-        intent.putExtra(ARG, arg);
+        saynaaIntent.putExtra(ARG, arg);
       }
 
-      startActivity(intent);
+      startActivity(saynaaIntent);
     } catch (Throwable t) {
       sendMsg("newActivity error: " + t.getMessage());
       Log.e(TAG, "newActivity failed", t);
