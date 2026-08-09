@@ -131,22 +131,14 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
       if (initFile.exists()) {
         int initResult = saynaa.runFile(initFile.getAbsolutePath());
         if (initResult != 0) {
-          showScriptError(errorReason(initResult),
-              "Startup failed @ " + initFile.getAbsolutePath() + "\n" + drainNativeErrors());
+          sendMsg("Startup failed @ " + initFile.getAbsolutePath() + "\n");
           setContentView(layout);
           return;
         }
       }
       int result = saynaa.runFile(saynaaPath);
       if (result != 0) {
-        showScriptError(errorReason(result), "Startup failed @ " + saynaaPath + "\n" + drainNativeErrors());
-        setContentView(layout);
-        return;
-      }
-
-      String startupErr = drainNativeErrors();
-      if (!startupErr.isEmpty()) {
-        showScriptError("Startup error", startupErr);
+        sendMsg("Startup failed @ " + saynaaPath + "\n");
         setContentView(layout);
         return;
       }
@@ -177,7 +169,7 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
       }
     } catch (Throwable t) {
       Log.e(TAG, "onCreate failed", t);
-      showScriptError("onCreate error", t.getMessage());
+      sendMsg("onCreate error: " + t.toString());
       setContentView(layout);
     }
     // runTest();
@@ -192,7 +184,7 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
   //     // print result
   //     if (result != 0) {
   //       showScriptError(errorReason(result),
-  //           "Failed to run test.sa @ " + testFile.getAbsolutePath() + "\n" + drainNativeErrors());
+  //           "Failed to run test.sa @ " + testFile.getAbsolutePath() + "\n");
   //     }
   //   } catch (Exception e) {
   //     Log.e(TAG, "runTest failed", e);
@@ -300,6 +292,7 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
       return saynaa.getModule();
     } catch (Exception e) {
       e.printStackTrace();
+      sendError("getModule", e);
       return null;
     }
   }
@@ -659,15 +652,15 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
 
       int result = saynaa.runFile(filePath);
       if (result != 0) {
-        showScriptError(errorReason(result), "doFile failed @ " + filePath + "\n" + drainNativeErrors());
+        sendMsg("doFile failed @ " + filePath + "\n");
       }
 
       return null;
     } catch (Exception e) {
-      showScriptError("doFile error", e.getMessage());
+      sendError("doFile error", e);
       return null;
     } catch (Throwable t) {
-      showScriptError("doFile error", t.getMessage());
+      sendMsg("doFile error " + t.toString());
       return null;
     }
   }
@@ -682,20 +675,13 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
       int id = saynaa.getGlobalFunctionId(funcName);
 
       if (id != -1) {
-        Object result = saynaa.callFunctionById(id, args);
-
-        String errMsg = drainNativeErrors();
-        if (!errMsg.isEmpty()) {
-          showScriptError("Hook error", funcName + ": " + errMsg);
-        }
-
-        return result;
+        return saynaa.callFunctionById(id, args);
       }
 
     } catch (Exception e) {
-      showScriptError("Hook error", funcName + ": " + e.getMessage());
+      sendError("Hook error: " + funcName, e);
     } catch (Throwable t) {
-      showScriptError("Hook error", funcName + ": " + t.getMessage());
+      sendMsg("Hook error " + funcName + ": " + t.toString());
     }
     return null;
   }
@@ -720,14 +706,6 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
     if (!isSetViewed || DebugMode) {
       setContentView(layout);
       sendMsg(nativeErrorBuffer.toString().trim());
-    }
-  }
-
-  public String drainNativeErrors() {
-    synchronized (nativeErrorBuffer) {
-      String out = nativeErrorBuffer.toString().trim();
-      nativeErrorBuffer.setLength(0);
-      return out;
     }
   }
 
