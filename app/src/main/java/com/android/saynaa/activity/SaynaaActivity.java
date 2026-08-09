@@ -82,7 +82,6 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
 
   // Saynaa runtime
   protected Saynaa saynaa;
-  protected String source;
   protected StringBuilder nativeErrorBuffer = new StringBuilder();
 
   private SaynaaDexLoader dexLoader;
@@ -121,17 +120,6 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
         pageName = pageName.substring(0, idx);
       }
       saynaaDir = f.getParent();
-
-      source = FileUtil.readFile((saynaaDir == null ? localDir : saynaaDir) + "/", f.getName());
-      if (source == null) {
-        source = FileUtil.readFile(localDir + "/", "main.sa");
-      }
-
-      if (source == null || source.trim().isEmpty()) {
-        sendMsg("Script not found or empty: " + saynaaPath);
-        setContentView(layout);
-        return;
-      }
 
       initSaynaa();
       dexLoader = new SaynaaDexLoader(this);
