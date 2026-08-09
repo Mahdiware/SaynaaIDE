@@ -37,6 +37,7 @@ import java.io.File;
 import java.io.FileNotFoundException;
 import java.util.ArrayList;
 import java.util.HashMap;
+import android.util.TypedValue;
 import java.util.Map;
 
 /**
@@ -65,7 +66,7 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
   protected int mWidth;
   protected int mHeight;
 
-  protected Intent saynaaIntent;
+  private int activityFlags = 0;
   protected boolean isCreate = false;
   protected boolean isSetViewed = false;
   protected boolean DebugMode = false;
@@ -718,6 +719,7 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
     // OR DebugMode is enabled.
     if (!isSetViewed || DebugMode) {
       setContentView(layout);
+      sendMsg(nativeErrorBuffer.toString().trim());
     }
   }
 
@@ -760,10 +762,7 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
   }
   
   public void addActivityFlag(int flag) {
-    if (saynaaIntent == null) {
-      saynaaIntent = new Intent(this, SaynaaActivity.class);
-    }
-    saynaaIntent.addFlags(flag);
+    activityFlags |= flag;
   }
 
   public void newActivity(String path, Object[] arg, boolean newDocument) {
@@ -773,11 +772,13 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
         return;
       }
 
-      if (saynaaIntent == null) {
-        saynaaIntent = new Intent(this, SaynaaActivity.class);
-      }
+      int flags = activityFlags;
+      activityFlags = 0;
 
-      saynaaIntent.putExtra(NAME, path);
+      Intent intent = new Intent(this, SaynaaActivity.class);
+      intent.addFlags(flags);
+
+      intent.putExtra(NAME, path);
 
       if (path.charAt(0) != '/') {
         path = getSaynaaDir() + "/" + path;
@@ -795,20 +796,20 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
         return;
       }
 
-      saynaaIntent.setData(Uri.parse("file://" + path));
+      intent.setData(Uri.parse("file://" + path));
 
       if (arg != null) {
-        saynaaIntent.putExtra(ARG, arg);
+        intent.putExtra(ARG, arg);
       }
 
       if (newDocument) {
-        saynaaIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_DOCUMENT);
-        saynaaIntent.addFlags(Intent.FLAG_ACTIVITY_MULTIPLE_TASK);
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_DOCUMENT);
+        intent.addFlags(Intent.FLAG_ACTIVITY_MULTIPLE_TASK);
       } else {
-        saynaaIntent.addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION);
+        intent.addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION);
       }
 
-      startActivity(saynaaIntent);
+      startActivity(intent);
     } catch (Throwable t) {
       sendMsg("newActivity error: " + t.getMessage());
       Log.e(TAG, "newActivity failed", t);
@@ -826,11 +827,13 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
         return;
       }
 
-      if (saynaaIntent == null) {
-        saynaaIntent = new Intent(this, SaynaaActivity.class);
-      }
+      int flags = activityFlags;
+      activityFlags = 0;
 
-      saynaaIntent.putExtra(NAME, path);
+      Intent intent = new Intent(this, SaynaaActivity.class);
+      intent.addFlags(flags);
+
+      intent.putExtra(NAME, path);
 
       if (path.charAt(0) != '/') {
         path = getSaynaaDir() + "/" + path;
@@ -848,13 +851,13 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
         return;
       }
 
-      saynaaIntent.setData(Uri.parse("file://" + path));
+      intent.setData(Uri.parse("file://" + path));
 
       if (arg != null) {
-        saynaaIntent.putExtra(ARG, arg);
+        intent.putExtra(ARG, arg);
       }
 
-      startActivity(saynaaIntent);
+      startActivity(intent);
     } catch (Throwable t) {
       sendMsg("newActivity error: " + t.getMessage());
       Log.e(TAG, "newActivity failed", t);
@@ -867,6 +870,12 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
 
   public Menu getOptionsMenu() {
     return optionsMenu;
+  }
+  
+  private int getThemeColor(int attr) {
+    TypedValue value = new TypedValue();
+    getTheme().resolveAttribute(attr, value, true);
+    return getResources().getColor(value.resourceId, getTheme());
   }
 
   @SuppressLint("ShowToast")
@@ -947,7 +956,6 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
     scroll.setFillViewport(true);
 
     status = new TextView(this);
-    status.setTextColor(Color.BLACK);
     status.setText("");
     status.setTextIsSelectable(true);
     scroll.addView(status, new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
@@ -969,7 +977,7 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
         // Some sources send escaped newlines ("\\n") instead of real LF.
         // Normalize before rendering so TextView shows proper line breaks.
         data = data.replace("\\r\\n", "\n").replace("\\n", "\n").replace("\\r", "\n");
-
+        status.setTextColor(getThemeColor(android.R.attr.textColorPrimary));
         status.append(data + "\n");
       }
     }
