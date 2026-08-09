@@ -83,7 +83,6 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
 
   // Saynaa runtime
   protected Saynaa saynaa;
-  protected StringBuilder nativeErrorBuffer = new StringBuilder();
 
   private SaynaaDexLoader dexLoader;
 
@@ -164,9 +163,6 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
         runFunc("onCreate", savedInstanceState != null ? savedInstanceState : new Bundle());
       }
 
-      if (!isSetViewed) {
-        setContentView(layout);
-      }
     } catch (Throwable t) {
       Log.e(TAG, "onCreate failed", t);
       sendMsg("onCreate error: " + t.toString());
@@ -183,8 +179,7 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
   //     int result = saynaa.runFile(module2, testFile.getAbsolutePath());
   //     // print result
   //     if (result != 0) {
-  //       showScriptError(errorReason(result),
-  //           "Failed to run test.sa @ " + testFile.getAbsolutePath() + "\n");
+  //       sendMsg("Failed to run test.sa @ " + testFile.getAbsolutePath() + "\n");
   //     }
   //   } catch (Exception e) {
   //     Log.e(TAG, "runTest failed", e);
@@ -694,48 +689,17 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
     if (msg == null || msg.trim().isEmpty()) {
       return;
     }
-    synchronized (nativeErrorBuffer) {
-      nativeErrorBuffer.append(msg);
-      if (!msg.endsWith("\n")) {
-        nativeErrorBuffer.append('\n');
-      }
+
+    String error = msg;
+    if (!error.endsWith("\n")) {
+      error += "\n";
     }
-    
+
     // Set the layout if the view has NOT been set yet
     // OR DebugMode is enabled.
     if (!isSetViewed || DebugMode) {
       setContentView(layout);
-      sendMsg(nativeErrorBuffer.toString().trim());
-    }
-  }
-
-  private void showScriptError(String title, String detail) {
-    String t = (title == null || title.trim().isEmpty()) ? "Script error" : title;
-    String d = (detail == null) ? "<no details>" : detail;
-    FileUtil.saveDebug(this, t + ": " + d);
-    if (!isSetViewed) {
-      setTitle(t);
-      setContentView(layout);
-    }
-    sendMsg(t + "\n" + d);
-  }
-
-  private String errorReason(int error) {
-    switch (error) {
-    case 6:
-      return "Error";
-    case 5:
-      return "GC error";
-    case 4:
-      return "Out of memory";
-    case 3:
-      return "Syntax error";
-    case 2:
-      return "Runtime error";
-    case 1:
-      return "Yield error";
-    default:
-      return "Unknown error " + error;
+      sendMsg(error);
     }
   }
   
