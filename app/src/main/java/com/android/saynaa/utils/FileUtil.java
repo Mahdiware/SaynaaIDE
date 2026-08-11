@@ -372,6 +372,37 @@ public class FileUtil {
     return files;
   }
   
+  public static List<File> listDirByRecent(String path) {
+    List<File> files = new ArrayList<>();
+
+    File dir = new File(path);
+    if (!dir.exists() || !dir.isDirectory()) {
+      return files;
+    }
+
+    File[] list = dir.listFiles();
+    if (list == null) {
+      return files;
+    }
+
+    Collections.addAll(files, list);
+
+    Collections.sort(files, new Comparator<File>() {
+      @Override
+      public int compare(File a, File b) {
+
+        // Folders first
+        if (a.isDirectory() && !b.isDirectory()) return -1;
+        if (!a.isDirectory() && b.isDirectory()) return 1;
+
+        // Newest modified first
+        return Long.compare(b.lastModified(), a.lastModified());
+      }
+    });
+
+    return files;
+  }
+  
   public static boolean isDirectory(String path) {
     if (!isExistFile(path)) return false;
     return new File(path).isDirectory();
