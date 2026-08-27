@@ -50,7 +50,6 @@ public class SaynaaAdapter extends BaseAdapter implements Filterable {
   private int mLayoutResId = 0;
 
   private final SaynaaMap mItems;
-  private final SaynaaList mBaseData;
   private SaynaaList mData;
   private Map<String, Object> mTheme;
 
@@ -79,9 +78,9 @@ public class SaynaaAdapter extends BaseAdapter implements Filterable {
       try {
         // List<Map<String, Object>> filtered = new ArrayList<>();
         // if (mRowFilter != null) {
-        //   mRowFilter.filter(mBaseData, filtered, mPrefix);
+        //   mRowFilter.filter(mData, filtered, mPrefix);
         // } else {
-        //   filtered.addAll(mBaseData);
+        //   filtered.addAll(mData);
         // }
         // mData = filtered;
         notifyDataSetChanged();
@@ -108,8 +107,7 @@ public class SaynaaAdapter extends BaseAdapter implements Filterable {
     mInflater = LayoutInflater.from(context);
 
     mItems = layoutSpec;
-    mBaseData = data;
-    mData = mBaseData;
+    mData = data;
   }
 
   public void setAnimation(Animation animation) {
@@ -130,17 +128,12 @@ public class SaynaaAdapter extends BaseAdapter implements Filterable {
     mRowFilter = filter;
   }
 
-  public void setData(List<Map<String, Object>> data) {
-    mBaseData.clear();
+  public void setData(int index, Object data) {
+    mData.clear();
     if (data != null) {
-      mBaseData.addAll(data);
+      mData.set(index, data);
     }
-    mData = mBaseData;
     notifyDataSetChanged();
-  }
-
-  public void setData(Object data) {
-    setData(data);
   }
 
   public List<Map<String, Object>> getData() {
@@ -148,7 +141,7 @@ public class SaynaaAdapter extends BaseAdapter implements Filterable {
   }
 
   public void add(Map<String, Object> item) {
-    mBaseData.add(item);
+    mData.add(item);
     if (mNotifyOnChange) {
       notifyDataSetChanged();
     }
@@ -156,7 +149,7 @@ public class SaynaaAdapter extends BaseAdapter implements Filterable {
 
   public void addAll(List<Map<String, Object>> items) {
     if (items != null && !items.isEmpty()) {
-      mBaseData.addAll(items);
+      mData.addAll(items);
       if (mNotifyOnChange) {
         notifyDataSetChanged();
       }
@@ -168,21 +161,21 @@ public class SaynaaAdapter extends BaseAdapter implements Filterable {
   }
 
   public void insert(int position, Map<String, Object> item) {
-    mBaseData.add(position, item);
+    mData.add(position, item);
     if (mNotifyOnChange) {
       notifyDataSetChanged();
     }
   }
 
   public void remove(int position) {
-    mBaseData.remove(position);
+    mData.remove(position);
     if (mNotifyOnChange) {
       notifyDataSetChanged();
     }
   }
 
   public void clear() {
-    mBaseData.clear();
+    mData.clear();
     if (mNotifyOnChange) {
       notifyDataSetChanged();
     }

@@ -62,16 +62,20 @@ public final class SaynaaList extends SaynaaObject implements List {
     return result;
   }
 
-  public void replace(int p1, Object p2) {
+  @Override
+  public Object set(int p1, Object p2) {
+    Object oldValue = get(p1);
+  
     // TODO: Implement this method
     int valueSlot = saynaa.nextSlot();
     if (!JavaBridge.pushToSlot(saynaa, valueSlot, p2)) {
       saynaa.freeSlot(valueSlot);
       Log.e(TAG, "Failed to push value to slot: " + valueSlot);
-      return;
+      return oldValue;
     }
     boolean result = saynaa.listReplace(handleId, p1, valueSlot);
     saynaa.freeSlot(valueSlot);
+    return oldValue;
   }
 
   @Override
@@ -158,12 +162,6 @@ public final class SaynaaList extends SaynaaObject implements List {
   public boolean retainAll(Collection p1) {
     // TODO: Implement this method
     return false;
-  }
-
-  @Override
-  public Object set(int p1, Object p2) {
-    // TODO: Implement this method
-    return null;
   }
 
   @Override
