@@ -258,7 +258,7 @@ public class SaynaaAdapter extends BaseAdapter implements Filterable {
 
     holder.call("bind", rowMap);
 
-    if (mData == null || position < 0 || position >= mData.size()) {
+    if (mUpdating) {
       return view;
     }
 
