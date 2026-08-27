@@ -3,7 +3,7 @@
  * Distributed Under The MIT License
  */
 
-#include "path/saynaa_path.h"
+#include "../shared/saynaa_path.h"
 #include "saynaa_optionals.h"
 
 #include <sys/stat.h>
@@ -58,183 +58,15 @@
 // value as needed.
 #define MAX_JOIN_PATHS 8
 
-static inline size_t pathAbs(const char* path, char* buff, size_t buffsz);
-static inline bool pathIsFile(const char* path);
-static inline bool pathIsDir(const char* path);
-
-/*****************************************************************************/
-/* PATH SHARED FUNCTIONS                                                     */
-/*****************************************************************************/
-
-// check if path + ext exists. If not return 0, otherwise path + ext will
-// written to the buffer and return the total length.
-//
-// [path] and [buff] should be char array with size of FILENAME_MAX. This
-// function will write path + ext to the buff. If the path exists it'll return
-// true.
-static inline size_t checkImportExists(char* path, const char* ext, char* buff) {
-  size_t path_size = strlen(path);
-  size_t ext_size = strlen(ext);
-
-  // If the path size is too large we're bailing out.
-  if (path_size + ext_size + 1 >= FILENAME_MAX)
-    return 0;
-
-  // Now we're safe to use strcpy.
-  strcpy(buff, path);
-  strcpy(buff + path_size, ext);
-
-  if (!pathIsFile(buff))
-    return 0;
-  return path_size + ext_size;
-}
-
-// Try all import paths by appending supported extensions to the
-// path (ex: path + ".sa", path + ".dll", path + ".so", path + "/_init.sa", ...
-// if such a path exists it'll allocate string and return it.
-//
-// Note that [path] and [buff] should be char array with size of FILENAME_MAX.
-// The buffer will be used as a working memory.
-static char* tryImportPaths(VM* vm, char* path, char* buff) {
-  size_t path_size = 0;
-  size_t raw_size = strlen(path);
-  static const char* EXT[] = {
-      // Prefer bytecode if present.
-      SAYNAA_BYTECODE_EXT,
-
-      // Path can already end with '.sa' or anything when running from
-      // RunFile() so it's mandatory for the bellow empty string.
-      SAYNAA_FILE_EXT,
-      "",
-
-#ifdef _WIN32
-      "\\_init" SAYNAA_BYTECODE_EXT,
-      "\\_init" SAYNAA_FILE_EXT,
-#else
-      "/_init" SAYNAA_BYTECODE_EXT,
-      "/_init" SAYNAA_FILE_EXT,
-#endif
-
-#ifndef NO_DL
-#if defined(_WIN32)
-      ".dll",
-      "\\_init.dll",
-
-#elif defined(__APPLE__)
-      ".dylib",
-      "/_init.dylib",
-
-#elif defined(__linux__)
-      ".so",
-      "/_init.so",
-#endif
-#endif
-      NULL, // Sentinal to mark the array end.
-  };
-
-  if (pathIsFile(path)) {
-    char* ret = Realloc(vm, NULL, raw_size + 1);
-    memcpy(ret, path, raw_size + 1);
-    return ret;
-  }
-
-  for (const char** ext = EXT; *ext != NULL; ext++) {
-    if ((path_size = checkImportExists(path, *ext, buff)) != 0) {
-      break;
-    }
-  }
-
-  char* ret = NULL;
-  if (path_size != 0) {
-    ret = Realloc(vm, NULL, path_size + 1);
-    memcpy(ret, buff, path_size + 1);
-  }
-  return ret;
-}
-
-// Implementation import path resolving function.
-char* pathResolveImport(VM* vm, const char* from, const char* path) {
-  // Buffers to store intermediate path results.
-  char buff1[FILENAME_MAX];
-  char buff2[FILENAME_MAX];
-
-  // If the path is absolute, Just normalize and return it. Resolve path will
-  // only be absolute when the path is provided from the command line.
-  if (saynaa_path_is_absolute(path)) {
-    // buff1 = normalized path. +1 for null terminator.
-    saynaa_path_normalize(path, buff1, sizeof(buff1));
-
-    return tryImportPaths(vm, buff1, buff2);
-  }
-
-  if (from == NULL) { //< [path] is relative to cwd.
-
-    // buff1 = absolute path of [path].
-    pathAbs(path, buff1, sizeof(buff1));
-
-    // buff2 = normalized path. +1 for null terminator.
-    saynaa_path_normalize(buff1, buff2, sizeof(buff2));
-
-    return tryImportPaths(vm, buff2, buff1);
-  }
-
-  // Regardless of the platform both '/' and '\\' will be used
-  // to indicate its the path of a directory.
-  char last = from[strlen(from) - 1];
-
-  // buff1 = absolute path of [from].
-  pathAbs(from, buff1, sizeof(buff1));
-
-  // If the [from] path isn't a directory we use the dirname of the from
-  // script.
-  if (last != '/' && last != '\\' && !pathIsDir(buff1)) {
-    size_t from_dir_length = 0;
-    saynaa_path_dirname(buff1, &from_dir_length);
-    if (from_dir_length == 0)
-      return NULL;
-    buff1[from_dir_length] = '\0';
-  }
-
-  // buff2 = absolute joined path.
-  saynaa_path_join(buff1, path, buff2, sizeof(buff2));
-
-  // buff1 = normalized absolute path. +1 for null terminator
-  saynaa_path_normalize(buff2, buff1, sizeof(buff1));
-
-  return tryImportPaths(vm, buff1, buff2);
-}
-
 /*****************************************************************************/
 /* PATH INTERNAL FUNCTIONS                                                   */
 /*****************************************************************************/
-
-static inline bool pathIsFile(const char* path) {
-  struct stat st;
-
-  if (stat(path, &st) != 0)
-    return false;
-
-  return S_ISREG(st.st_mode);
-}
-
-static inline bool pathIsDir(const char* path) {
-  struct stat st;
-
-  if (stat(path, &st) != 0)
-    return false;
-
-  return S_ISDIR(st.st_mode);
-}
 
 static inline time_t pathMtime(const char* path) {
   struct stat path_stat;
   if (stat(path, &path_stat))
     return 0; // Error: might be path not exists.
   return path_stat.st_mtime;
-}
-
-static inline bool pathIsExists(const char* path) {
-  return access(path, F_OK) == 0;
 }
 
 static inline size_t pathAbs(const char* path, char* buff, size_t buffsz) {
@@ -244,7 +76,7 @@ static inline size_t pathAbs(const char* path, char* buff, size_t buffsz) {
     // TODO: handle error.
   }
 
-  return saynaa_path_get_absolute(cwd, path, buff, buffsz);
+  return path_get_absolute(cwd, path, buff, buffsz);
 }
 
 /*****************************************************************************/
@@ -287,8 +119,7 @@ saynaa_function(
   pathAbs(from, abs_from, sizeof(abs_from));
 
   char result[MAX_PATH_LEN];
-  uint32_t len = (uint32_t) saynaa_path_get_relative(abs_from, abs_path, result,
-                                                     sizeof(result));
+  uint32_t len = (uint32_t) path_get_relative(abs_from, abs_path, result, sizeof(result));
   setSlotStringLength(vm, 0, result, len);
 }
 
@@ -315,9 +146,9 @@ saynaa_function(
 
   if (argc > 0) {
     strcpy(result, paths[0]);
-    saynaa_path_normalize(result, result, sizeof(result));
+    path_normalize(result, result, sizeof(result));
     for (int i = 1; i < argc; i++) {
-      saynaa_path_join(result, paths[i], result, sizeof(result));
+      path_join(result, paths[i], result, sizeof(result));
     }
   }
   setSlotStringLength(vm, 0, result, (uint32_t) strlen(result));
@@ -330,7 +161,7 @@ saynaa_function(_pathNormpath, "path.normpath(path:String) -> String",
     return;
 
   char result[MAX_PATH_LEN];
-  uint32_t len = (uint32_t) saynaa_path_normalize(path, result, sizeof(result));
+  uint32_t len = (uint32_t) path_normalize(path, result, sizeof(result));
   setSlotStringLength(vm, 0, result, len);
 }
 
@@ -342,7 +173,7 @@ saynaa_function(_pathBaseName, "path.basename(path:String) -> String",
 
   const char* base_name;
   size_t length;
-  saynaa_path_basename(path, &base_name, &length);
+  path_basename(path, &base_name, &length);
   setSlotStringLength(vm, 0, base_name, (uint32_t) length);
 }
 
@@ -353,7 +184,7 @@ saynaa_function(_pathDirName, "path.dirname(path:String) -> String",
     return;
 
   size_t length;
-  saynaa_path_dirname(path, &length);
+  path_dirname(path, &length);
   setSlotStringLength(vm, 0, path, (uint32_t) length);
 }
 
@@ -363,7 +194,7 @@ saynaa_function(_pathIsPathAbs, "path.isabspath(path:String) -> Bool",
   if (!ValidateSlotString(vm, 1, &path, NULL))
     return;
 
-  setSlotBool(vm, 0, saynaa_path_is_absolute(path));
+  setSlotBool(vm, 0, path_is_absolute(path));
 }
 
 saynaa_function(_pathGetExtension, "path.getext(path:String) -> String",
@@ -374,7 +205,7 @@ saynaa_function(_pathGetExtension, "path.getext(path:String) -> String",
 
   const char* ext;
   size_t length;
-  if (saynaa_path_extension(path, &ext, &length)) {
+  if (path_extension(path, &ext, &length)) {
     setSlotStringLength(vm, 0, ext, (uint32_t) length);
   } else {
     setSlotStringLength(vm, 0, NULL, 0);
@@ -386,7 +217,7 @@ saynaa_function(_pathExists, "path.exists(path:String) -> String",
   const char* path;
   if (!ValidateSlotString(vm, 1, &path, NULL))
     return;
-  setSlotBool(vm, 0, pathIsExists(path));
+  setSlotBool(vm, 0, path_is_exists(path));
 }
 
 saynaa_function(_pathIsFile, "path.isfile(path:String) -> Bool",
@@ -394,7 +225,7 @@ saynaa_function(_pathIsFile, "path.isfile(path:String) -> Bool",
   const char* path;
   if (!ValidateSlotString(vm, 1, &path, NULL))
     return;
-  setSlotBool(vm, 0, pathIsFile(path));
+  setSlotBool(vm, 0, path_is_file(path));
 }
 
 saynaa_function(_pathIsDir, "path.isdir(path:String) -> Bool",
@@ -402,7 +233,7 @@ saynaa_function(_pathIsDir, "path.isdir(path:String) -> Bool",
   const char* path;
   if (!ValidateSlotString(vm, 1, &path, NULL))
     return;
-  setSlotBool(vm, 0, pathIsDir(path));
+  setSlotBool(vm, 0, path_is_dir(path));
 }
 
 saynaa_function(_pathListDir, "path.listdir(path:String='.') -> List",
@@ -575,7 +406,7 @@ saynaa_function(_pathListDir, "path.listdir(path:String='.') -> List",
 // Add the executables path and exe_path + 'libs/' as a search path for
 // the VM.
 void _registerSearchPaths(VM* vm) {
-  char sep = saynaa_path_separator();
+  char sep = path_separator();
 
   char cwd[MAX_PATH_LEN];
   if (getcwd(cwd, sizeof(cwd)) != NULL) {
@@ -591,7 +422,7 @@ void _registerSearchPaths(VM* vm) {
   if (!osGetExeFilePath(buff, MAX_PATH_LEN))
     return;
   size_t length;
-  saynaa_path_dirname(buff, &length);
+  path_dirname(buff, &length);
   if (length == 0)
     return;
 
@@ -637,5 +468,4 @@ void registerModulePath(VM* vm) {
   releaseHandle(vm, path);
 }
 
-#undef MAX_PATH_LEN
 #undef MAX_JOIN_PATHS

@@ -33,6 +33,7 @@ typedef struct BridgeState {
   jobject saynaaObject;
 
   Handle* javaWrapperModule;
+  Handle* clsJavaBase;
   Handle* clsJavaClass;
   Handle* clsJavaObject;
   Handle* clsJavaMethod;

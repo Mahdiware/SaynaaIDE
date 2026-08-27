@@ -131,14 +131,14 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
         int initResult = saynaa.runFile(initFile.getAbsolutePath());
         if (initResult != 0) {
           sendMsg("Startup failed @ " + initFile.getAbsolutePath() + "\n");
-          setContentView(layout);
+          //setContentView(layout);
           return;
         }
       }
       int result = saynaa.runFile(saynaaPath);
       if (result != 0) {
         sendMsg("Startup failed @ " + saynaaPath + "\n");
-        setContentView(layout);
+        //setContentView(layout);
         return;
       }
 
@@ -166,7 +166,7 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
     } catch (Throwable t) {
       Log.e(TAG, "onCreate failed", t);
       sendMsg("onCreate error: " + t.toString());
-      setContentView(layout);
+      //setContentView(layout);
     }
     // runTest();
   }

@@ -17,7 +17,7 @@
 // relative include.
 //
 
-#include "../cli/saynaa.h"
+#include "../saynaa/saynaa.h"
 #include "../runtime/saynaa_core.h"
 #include "../runtime/saynaa_vm.h"
 #include "../shared/saynaa_common.h"

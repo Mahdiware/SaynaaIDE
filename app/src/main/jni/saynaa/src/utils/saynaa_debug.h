@@ -15,8 +15,11 @@ void reportCompileTimeError(VM* vm, const char* path, int line, const char* sour
 // Pretty print runtime error.
 void reportRuntimeError(VM* vm, Fiber* fiber);
 
-// Dump opcodes of the given function to the stdout.
-void dumpFunctionCode(VM* vm, Function* func);
+// Produce the disassembled opcodes string for the given function.
+// Returns a newly allocated `String*` (managed by VM) containing the
+// disassembly. Caller should push it to temp refs if it needs to keep it
+// across allocations.
+String* dumpFunctionCode(VM* vm, Function* func);
 
 // Dump the all the global values of the script to the stdout.
 void dumpGlobalValues(VM* vm);

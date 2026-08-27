@@ -80,17 +80,17 @@ static Var resolve_repl_variable(VM* vm, const char* name) {
   if (!module)
     return VAR_UNDEFINED;
 
-  for (int i = 0; i < module->global_names.count; i++) {
-    uint32_t name_idx = module->global_names.data[i];
-    if (name_idx >= module->constants.count)
+  for (int i = 0; i < module->context->global_names.count; i++) {
+    uint32_t name_idx = module->context->global_names.data[i];
+    if (name_idx >= module->context->constants.count)
       continue;
 
-    Var name_var = module->constants.data[name_idx];
+    Var name_var = module->context->constants.data[name_idx];
     if (IS_OBJ_TYPE(name_var, OBJ_STRING)) {
       String* s = (String*) AS_OBJ(name_var);
       if (s && s->data && strcmp(s->data, name) == 0) {
-        if (i < module->globals.count)
-          return module->globals.data[i];
+        if (i < module->context->globals.count)
+          return module->context->globals.data[i];
       }
     }
   }
@@ -114,12 +114,12 @@ static char* generate_member_completion(const char* text, int state) {
 
   if (IS_OBJ_TYPE(g_resolved_obj, OBJ_MODULE)) {
     Module* module = (Module*) AS_OBJ(g_resolved_obj);
-    while (current_index < module->global_names.count) {
-      uint32_t name_idx = module->global_names.data[current_index++];
-      if (name_idx >= module->constants.count)
+    while (current_index < module->context->global_names.count) {
+      uint32_t name_idx = module->context->global_names.data[current_index++];
+      if (name_idx >= module->context->constants.count)
         continue;
 
-      Var name_var = module->constants.data[name_idx];
+      Var name_var = module->context->constants.data[name_idx];
       if (IS_OBJ_TYPE(name_var, OBJ_STRING)) {
         String* s = (String*) AS_OBJ(name_var);
         if (s && s->data && strncmp(s->data, text, text_len) == 0) {
@@ -175,12 +175,12 @@ static char* generate_global_completion(const char* text, int state) {
 
   // 3. User Globals
   if (repl_module_ref) {
-    while (repl_global_idx < repl_module_ref->global_names.count) {
-      uint32_t name_idx = repl_module_ref->global_names.data[repl_global_idx++];
-      if (name_idx >= repl_module_ref->constants.count)
+    while (repl_global_idx < repl_module_ref->context->global_names.count) {
+      uint32_t name_idx = repl_module_ref->context->global_names.data[repl_global_idx++];
+      if (name_idx >= repl_module_ref->context->constants.count)
         continue;
 
-      Var name_var = repl_module_ref->constants.data[name_idx];
+      Var name_var = repl_module_ref->context->constants.data[name_idx];
       if (IS_OBJ_TYPE(name_var, OBJ_STRING)) {
         String* s = (String*) AS_OBJ(name_var);
         if (s && s->data && strncmp(s->data, text, text_len) == 0) {

@@ -4,6 +4,7 @@
  */
 
 #include "saynaa_utils.h"
+
 #include "../shared/saynaa_common.h"
 
 #include <assert.h>
@@ -465,45 +466,213 @@ int utf8_encodeValue(int value, uint8_t* bytes) {
   return 0;
 }
 
+String* utf8_slice(VM* vm, const char* str, int start, int length, bool reversed) {
+  int start_byte = utf8_byteOffset(str, (size_t) start);
+
+  int end_byte = utf8_byteOffset(str, (size_t) (start + length));
+
+  if (start_byte < 0 || end_byte < 0)
+    return NULL;
+
+  int byte_length = end_byte - start_byte;
+
+  String* result = newStringLength(vm, str + start_byte, byte_length);
+
+  if (reversed)
+    utf8_reverse(result->data, byte_length);
+
+  return result;
+}
+
+// Returns the Unicode character index corresponding to a byte offset.
+// Returns -1 if the string is invalid UTF-8 or byte_offset is not
+// a valid UTF-8 character boundary.
+int utf8_charIndexAtByteOffset(const char* str, size_t byte_offset) {
+  size_t offset = 0;
+  int index = 0;
+
+  while (offset < byte_offset) {
+    int value;
+
+    int bytes = utf8_decodeBytes((const uint8_t*) (str + offset), &value);
+
+    if (bytes <= 0)
+      return -1;
+
+    offset += (size_t) bytes;
+    index++;
+  }
+
+  if (offset != byte_offset)
+    return -1;
+
+  return index;
+}
+
+void utf8_reverse(char* str, size_t byte_length) {
+  if (byte_length <= 1)
+    return;
+
+  // Reverse all bytes.
+  for (size_t i = 0; i < byte_length / 2; i++) {
+    char tmp = str[i];
+    str[i] = str[byte_length - i - 1];
+    str[byte_length - i - 1] = tmp;
+  }
+
+  /*
+   * After reversing the bytes, UTF-8 characters look like:
+   *
+   * ASCII:
+   *   41
+   *
+   * 2-byte:
+   *   80 C3
+   *
+   * 3-byte:
+   *   80 98 E2
+   *
+   * 4-byte:
+   *   80 98 9F F0
+   *
+   * The original leading byte is now the LAST byte.
+   */
+
+  size_t start = 0;
+
+  while (start < byte_length) {
+    size_t end = start;
+
+    // Find the original leading byte.
+    while (end < byte_length) {
+      uint8_t byte = (uint8_t) str[end];
+
+      if ((byte & 0xC0) != 0x80)
+        break;
+
+      end++;
+    }
+
+    if (end >= byte_length)
+      return;
+
+    /*
+     * Reverse this character's bytes back.
+     */
+    for (size_t i = 0; i < (end - start + 1) / 2; i++) {
+      char tmp = str[start + i];
+
+      str[start + i] = str[end - i];
+
+      str[end - i] = tmp;
+    }
+
+    start = end + 1;
+  }
+}
+
+int utf8_charAt(const char* str, size_t index, int* value) {
+  size_t offset = 0;
+  size_t current = 0;
+
+  while (str[offset] != '\0') {
+    int codepoint;
+
+    int bytes = utf8_decodeBytes((const uint8_t*) (str + offset), &codepoint);
+
+    if (bytes <= 0)
+      return -1;
+
+    if (current == index) {
+      if (value != NULL)
+        *value = codepoint;
+
+      return (int) offset;
+    }
+
+    offset += bytes;
+    current++;
+  }
+
+  return -1;
+}
+
+int utf8_byteOffset(const char* str, size_t index) {
+  size_t offset = 0;
+  size_t current = 0;
+
+  while (current < index) {
+    int value;
+
+    int bytes = utf8_decodeBytes((const uint8_t*) (str + offset), &value);
+
+    if (bytes <= 0)
+      return -1;
+
+    offset += bytes;
+    current++;
+  }
+
+  return (int) offset;
+}
+
 // Function implementation, see utils.h for description.
-int utf8_decodeBytes(uint8_t* bytes, int* value) {
+int utf8_length(const char* str) {
+  int length = 0;
+  size_t offset = 0;
+
+  while (str[offset] != '\0') {
+    int value;
+
+    int bytes = utf8_decodeBytes((const uint8_t*) (str + offset), &value);
+
+    if (bytes <= 0)
+      return -1;
+
+    offset += bytes;
+    length++;
+  }
+
+  return length;
+}
+
+// Function implementation, see utils.h for description.
+int utf8_decodeBytes(const uint8_t* bytes, int* value) {
   int continue_bytes = 0;
   int byte_count = 1;
   int _value = 0;
 
-  if ((*bytes & 0b11000000) == 0b10000000) {
+  if ((*bytes & 0b10000000) == 0) {
+    // ASCII: 0xxxxxxx
     *value = *bytes;
-    return byte_count;
+    return 1;
   }
 
-  else if ((*bytes & 0b11100000) == 0b11000000) {
+  if ((*bytes & 0b11100000) == 0b11000000) {
+    // 110xxxxx
     continue_bytes = 1;
-    _value = (*bytes & 0b11111);
-  }
-
-  else if ((*bytes & 0b11110000) == 0b11100000) {
+    _value = *bytes & 0b00011111;
+  } else if ((*bytes & 0b11110000) == 0b11100000) {
+    // 1110xxxx
     continue_bytes = 2;
-    _value = (*bytes & 0b1111);
-  }
-
-  else if ((*bytes & 0b11111000) == 0b11110000) {
+    _value = *bytes & 0b00001111;
+  } else if ((*bytes & 0b11111000) == 0b11110000) {
+    // 11110xxx
     continue_bytes = 3;
-    _value = (*bytes & 0b111);
-  }
-
-  else {
-    // Invalid leading byte
+    _value = *bytes & 0b00000111;
+  } else {
+    // Invalid UTF-8 leading byte
     return -1;
   }
 
-  // now add the continuation bytes to the _value
-  while (continue_bytes--) {
-    bytes++, byte_count++;
+  for (int i = 0; i < continue_bytes; i++) {
+    bytes++;
 
     if ((*bytes & 0b11000000) != 0b10000000)
       return -1;
 
     _value = (_value << 6) | (*bytes & 0b00111111);
+    byte_count++;
   }
 
   *value = _value;

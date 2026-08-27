@@ -28,10 +28,10 @@ JNIEXPORT void JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1setSlot
     JNIEnv* env, jobject thiz, jint slot, jdouble value);
 JNIEXPORT void JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1setSlotString(
     JNIEnv* env, jobject thiz, jint slot, jstring value);
-JNIEXPORT void JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1newList(
-    JNIEnv* env, jobject thiz, jint slot);
-JNIEXPORT void JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1newMap(
-    JNIEnv* env, jobject thiz, jint slot);
+JNIEXPORT jint JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1newList(
+    JNIEnv* env, jobject thiz);
+JNIEXPORT jint JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1newMap(
+    JNIEnv* env, jobject thiz);
 JNIEXPORT jboolean JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1listInsert(
     JNIEnv* env, jobject thiz, jint listSlot, jint index, jint valueSlot);
 JNIEXPORT jboolean JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1mapSet(

@@ -2,7 +2,7 @@ import java
 import os
 import package
 package.path.append(java.saynaadir)
-from loadlayout import loadlayout
+from loadlayout import loadlayout, LoadLayout
 
 
 # Classpath prefixes for fallback resolution

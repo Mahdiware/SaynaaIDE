@@ -7,7 +7,7 @@
 
 #pragma once
 
-#include "../cli/saynaa.h"
+#include "../saynaa/saynaa.h"
 typedef Configuration (*NewConfiguration_t)();
 typedef VM* (*NewVM_t)(Configuration*);
 typedef void (*FreeVM_t)(VM*);

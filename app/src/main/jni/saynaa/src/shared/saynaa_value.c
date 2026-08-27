@@ -5,6 +5,7 @@
 
 #include "saynaa_value.h"
 
+#include "../runtime/saynaa_import.h"
 #include "../runtime/saynaa_vm.h"
 #include "../utils/saynaa_utils.h"
 
@@ -198,20 +199,7 @@ static void popMarkedObjectsInternal(Object* obj, VM* vm) {
 
         markObject(vm, &module->path->_super);
         markObject(vm, &module->name->_super);
-
-        if (module->global_indices != NULL) {
-          markObject(vm, &module->global_indices->_super);
-        }
-
-        markVarBuffer(vm, &module->globals);
-        vm->bytes_allocated += sizeof(Var) * module->globals.capacity;
-
-        // Integer buffer has no mark call.
-        vm->bytes_allocated += sizeof(uint32_t) * module->global_names.capacity;
-
-        markVarBuffer(vm, &module->constants);
-        vm->bytes_allocated += sizeof(Var) * module->constants.capacity;
-
+        markObject(vm, &module->context->_super);
         markObject(vm, &module->body->_super);
       }
       break;
@@ -314,7 +302,24 @@ static void popMarkedObjectsInternal(Object* obj, VM* vm) {
         vm->bytes_allocated += sizeof(Closure) * cls->methods.capacity;
       }
       break;
+    case OBJ_CONTEXT:
+      {
+        Context* context = (Context*) obj;
+        vm->bytes_allocated += sizeof(Context);
 
+        markVarBuffer(vm, &context->globals);
+        vm->bytes_allocated += sizeof(Var) * context->globals.capacity;
+
+        // Integer buffer has no mark call.
+        vm->bytes_allocated += sizeof(uint32_t) * context->global_names.capacity;
+
+        markVarBuffer(vm, &context->constants);
+        vm->bytes_allocated += sizeof(Var) * context->constants.capacity;
+
+        if (context->global_indices != NULL)
+          markObject(vm, &context->global_indices->_super);
+      }
+      break;
     case OBJ_INST:
       {
         Instance* inst = (Instance*) obj;
@@ -450,23 +455,30 @@ Range* newRange(VM* vm, double from, double to) {
   return range;
 }
 
+Context* newContext(VM* vm) {
+  Context* context = ALLOCATE(vm, Context);
+  varInitObject(&context->_super, vm, OBJ_CONTEXT);
+  vmPushTempRef(vm, &context->_super); // context.
+
+  VarBufferInit(&context->globals);
+  UintBufferInit(&context->global_names);
+  VarBufferInit(&context->constants);
+
+  context->global_indices = newMap(vm);
+  context->global_indices_dirty = true;
+  context->global_lookup_name_cache = NULL;
+  context->global_lookup_index_cache = -1;
+
+  vmPopTempRef(vm); // context.
+  return context;
+}
+
 Module* newModule(VM* vm) {
   Module* module = ALLOCATE(vm, Module);
   memset(module, 0, sizeof(Module));
   varInitObject(&module->_super, vm, OBJ_MODULE);
 
-  vmPushTempRef(vm, &module->_super); // module.
-
-  VarBufferInit(&module->globals);
-  UintBufferInit(&module->global_names);
-  VarBufferInit(&module->constants);
-
-  module->global_indices = newMap(vm);
-  module->global_indices_dirty = true;
-  module->global_lookup_name_cache = NULL;
-  module->global_lookup_index_cache = -1;
-
-  vmPopTempRef(vm); // module.
+  module->context = NULL;
 
   return module;
 }
@@ -1671,9 +1683,6 @@ void freeObject(VM* vm, Object* thiz) {
     case OBJ_MODULE:
       {
         Module* module = (Module*) thiz;
-        VarBufferClear(&module->globals, vm);
-        UintBufferClear(&module->global_names, vm);
-        VarBufferClear(&module->constants, vm);
 #ifndef NO_DL
         if (module->handle)
           vmUnloadDlHandle(vm, module->handle);
@@ -1739,6 +1748,15 @@ void freeObject(VM* vm, Object* thiz) {
         return;
       }
 
+    case OBJ_CONTEXT:
+      {
+        Context* context = (Context*) thiz;
+        VarBufferClear(&context->globals, vm);
+        UintBufferClear(&context->global_names, vm);
+        VarBufferClear(&context->constants, vm);
+        DEALLOCATE(vm, context, Context);
+        return;
+      }
     case OBJ_INST:
       {
         Instance* inst = (Instance*) thiz;
@@ -1760,21 +1778,21 @@ void freeObject(VM* vm, Object* thiz) {
 }
 
 uint32_t moduleAddConstant(VM* vm, Module* module, Var value) {
-  for (uint32_t i = 0; i < module->constants.count; i++) {
-    if (isValuesSame(module->constants.data[i], value)) {
+  for (uint32_t i = 0; i < module->context->constants.count; i++) {
+    if (isValuesSame(module->context->constants.data[i], value)) {
       return i;
     }
   }
-  VarBufferWrite(&module->constants, vm, value);
-  return (int) module->constants.count - 1;
+  VarBufferWrite(&module->context->constants, vm, value);
+  return (int) module->context->constants.count - 1;
 }
 
 String* moduleAddString(Module* module, VM* vm, const char* name,
                         uint32_t length, int* index) {
-  for (uint32_t i = 0; i < module->constants.count; i++) {
-    if (!IS_OBJ_TYPE(module->constants.data[i], OBJ_STRING))
+  for (uint32_t i = 0; i < module->context->constants.count; i++) {
+    if (!IS_OBJ_TYPE(module->context->constants.data[i], OBJ_STRING))
       continue;
-    String* _name = (String*) AS_OBJ(module->constants.data[i]);
+    String* _name = (String*) AS_OBJ(module->context->constants.data[i]);
     if (_name->length == length && strncmp(_name->data, name, length) == 0) {
       // Name already exists in the buffer.
       if (index)
@@ -1787,18 +1805,18 @@ String* moduleAddString(Module* module, VM* vm, const char* name,
   // return the index.
   String* new_name = newInternedStringLength(vm, name, length);
   vmPushTempRef(vm, &new_name->_super); // new_name
-  VarBufferWrite(&module->constants, vm, VAR_OBJ(new_name));
+  VarBufferWrite(&module->context->constants, vm, VAR_OBJ(new_name));
   vmPopTempRef(vm); // new_name
   if (index)
-    *index = module->constants.count - 1;
+    *index = module->context->constants.count - 1;
   return new_name;
 }
 
 String* moduleGetStringAt(Module* module, int index) {
   ASSERT(index >= 0, OOPS);
-  if (index >= (int) module->constants.count)
+  if (index >= (int) module->context->constants.count)
     return NULL;
-  Var constant = module->constants.data[index];
+  Var constant = module->context->constants.data[index];
   if (IS_OBJ_TYPE(constant, OBJ_STRING)) {
     return (String*) AS_OBJ(constant);
   }
@@ -1806,54 +1824,55 @@ String* moduleGetStringAt(Module* module, int index) {
 }
 
 static void _moduleRebuildGlobalIndices(VM* vm, Module* module) {
-  ASSERT(module != NULL && module->global_indices != NULL, OOPS);
+  ASSERT(module != NULL && module->context->global_indices != NULL, OOPS);
 
-  mapClear(vm, module->global_indices);
+  mapClear(vm, module->context->global_indices);
 
-  for (uint32_t i = 0; i < module->global_names.count; i++) {
-    uint32_t name_index = module->global_names.data[i];
+  for (uint32_t i = 0; i < module->context->global_names.count; i++) {
+    uint32_t name_index = module->context->global_names.data[i];
     String* g_name = moduleGetStringAt(module, (int) name_index);
     if (g_name != NULL) {
-      mapSetStringKey(vm, module->global_indices, g_name, VAR_INT((int32_t) i));
+      mapSetStringKey(vm, module->context->global_indices, g_name, VAR_INT((int32_t) i));
     }
   }
 
-  module->global_indices_dirty = false;
-  module->global_lookup_name_cache = NULL;
-  module->global_lookup_index_cache = -1;
+  module->context->global_indices_dirty = false;
+  module->context->global_lookup_name_cache = NULL;
+  module->context->global_lookup_index_cache = -1;
 }
 
 int moduleGetGlobalIndexByName(VM* vm, Module* module, String* name) {
   ASSERT(vm != NULL && module != NULL && name != NULL, OOPS);
 
-  if (!module->global_indices_dirty && module->global_lookup_name_cache == name) {
-    int32_t g_index = module->global_lookup_index_cache;
-    if (g_index >= 0 && (uint32_t) g_index < module->globals.count) {
+  if (!module->context->global_indices_dirty
+      && module->context->global_lookup_name_cache == name) {
+    int32_t g_index = module->context->global_lookup_index_cache;
+    if (g_index >= 0 && (uint32_t) g_index < module->context->globals.count) {
       return g_index;
     }
   }
 
-  if (module->global_indices == NULL) {
-    module->global_indices = newMap(vm);
-    module->global_indices_dirty = true;
+  if (module->context->global_indices == NULL) {
+    module->context->global_indices = newMap(vm);
+    module->context->global_indices_dirty = true;
   }
 
-  if (module->global_indices_dirty) {
+  if (module->context->global_indices_dirty) {
     _moduleRebuildGlobalIndices(vm, module);
   }
 
-  Var index = mapGetStringKey(module->global_indices, name);
+  Var index = mapGetStringKey(module->context->global_indices, name);
   if (IS_INT(index)) {
     int32_t g_index = AS_INT(index);
-    if (g_index >= 0 && (uint32_t) g_index < module->globals.count) {
-      module->global_lookup_name_cache = name;
-      module->global_lookup_index_cache = g_index;
+    if (g_index >= 0 && (uint32_t) g_index < module->context->globals.count) {
+      module->context->global_lookup_name_cache = name;
+      module->context->global_lookup_index_cache = g_index;
       return g_index;
     }
   }
 
-  module->global_lookup_name_cache = name;
-  module->global_lookup_index_cache = -1;
+  module->context->global_lookup_name_cache = name;
+  module->context->global_lookup_index_cache = -1;
 
   return -1;
 }
@@ -1868,11 +1887,11 @@ uint32_t moduleSetGlobal(VM* vm, Module* module, const char* name, uint32_t leng
   // If already exists update the value.
   int g_index = moduleGetGlobalIndex(module, name, length);
   if (g_index != -1) {
-    ASSERT(g_index < (int) module->globals.count, OOPS);
-    module->globals.data[g_index] = value;
-    module->global_lookup_name_cache = moduleGetStringAt(
-        module, (int) module->global_names.data[g_index]);
-    module->global_lookup_index_cache = g_index;
+    ASSERT(g_index < (int) module->context->globals.count, OOPS);
+    module->context->globals.data[g_index] = value;
+    module->context->global_lookup_name_cache = moduleGetStringAt(
+        module, (int) module->context->global_names.data[g_index]);
+    module->context->global_lookup_index_cache = g_index;
     if (IS_OBJ(value))
       vmPopTempRef(vm);
     return g_index;
@@ -1882,20 +1901,20 @@ uint32_t moduleSetGlobal(VM* vm, Module* module, const char* name, uint32_t leng
   // that name, create new one and set the value.
   int name_index = 0;
   moduleAddString(module, vm, name, length, &name_index);
-  UintBufferWrite(&module->global_names, vm, name_index);
-  VarBufferWrite(&module->globals, vm, value);
-  module->global_indices_dirty = true;
-  module->global_lookup_name_cache = NULL;
-  module->global_lookup_index_cache = -1;
+  UintBufferWrite(&module->context->global_names, vm, name_index);
+  VarBufferWrite(&module->context->globals, vm, value);
+  module->context->global_indices_dirty = true;
+  module->context->global_lookup_name_cache = NULL;
+  module->context->global_lookup_index_cache = -1;
 
   if (IS_OBJ(value))
     vmPopTempRef(vm);
-  return module->globals.count - 1;
+  return module->context->globals.count - 1;
 }
 
 int moduleGetGlobalIndex(Module* module, const char* name, uint32_t length) {
-  for (uint32_t i = 0; i < module->global_names.count; i++) {
-    uint32_t name_index = module->global_names.data[i];
+  for (uint32_t i = 0; i < module->context->global_names.count; i++) {
+    uint32_t name_index = module->context->global_names.data[i];
     String* g_name = moduleGetStringAt(module, name_index);
     if (g_name == NULL) {
       continue;
@@ -1916,21 +1935,22 @@ bool moduleDeleteGlobal(VM* vm, Module* module, const char* name, uint32_t lengt
   }
 
   uint32_t idx = (uint32_t) g_index;
-  if (idx + 1 < module->globals.count) {
-    memmove(&module->globals.data[idx], &module->globals.data[idx + 1],
-            (module->globals.count - idx - 1) * sizeof(Var));
-    memmove(&module->global_names.data[idx], &module->global_names.data[idx + 1],
-            (module->global_names.count - idx - 1) * sizeof(uint32_t));
+  if (idx + 1 < module->context->globals.count) {
+    memmove(&module->context->globals.data[idx], &module->context->globals.data[idx + 1],
+            (module->context->globals.count - idx - 1) * sizeof(Var));
+    memmove(&module->context->global_names.data[idx],
+            &module->context->global_names.data[idx + 1],
+            (module->context->global_names.count - idx - 1) * sizeof(uint32_t));
   }
 
-  if (module->globals.count > 0)
-    module->globals.count--;
-  if (module->global_names.count > 0)
-    module->global_names.count--;
+  if (module->context->globals.count > 0)
+    module->context->globals.count--;
+  if (module->context->global_names.count > 0)
+    module->context->global_names.count--;
 
-  module->global_indices_dirty = true;
-  module->global_lookup_name_cache = NULL;
-  module->global_lookup_index_cache = -1;
+  module->context->global_indices_dirty = true;
+  module->context->global_lookup_name_cache = NULL;
+  module->context->global_lookup_index_cache = -1;
 
   return true;
 }
@@ -2019,6 +2039,8 @@ ObjectType getVarObjType(VarType type) {
       return OBJ_CLASS;
     case vPOINTER:
       return OBJ_POINTER;
+    case vCONTEXT:
+      return OBJ_CONTEXT;
     case vINSTANCE:
       return OBJ_INST;
   }
@@ -2071,6 +2093,8 @@ const char* getObjectTypeName(ObjectType type) {
       return "Class";
     case OBJ_POINTER:
       return "Pointer";
+    case OBJ_CONTEXT:
+      return "Context";
     case OBJ_INST:
       return "Inst";
   }
@@ -2099,7 +2123,7 @@ const char* varTypeName(Var v) {
 }
 
 VarType getVarType(Var v) {
-  if (IS_NULL(v))
+  if (IS_NULL(v) || IS_UNDEF(v))
     return vNULL;
   if (IS_BOOL(v))
     return vBOOL;

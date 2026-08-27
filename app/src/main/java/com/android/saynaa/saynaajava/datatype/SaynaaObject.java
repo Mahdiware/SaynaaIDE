@@ -3,27 +3,34 @@ package com.android.saynaa.saynaajava.datatype;
 import com.android.saynaa.saynaajava.*;
 
 public class SaynaaObject {
-  // private final Object value;
-
   protected final Saynaa saynaa;
-  protected final int slot;
   protected final int handleId;
+  protected final int type;
+  protected Object tag;
 
-  public SaynaaObject(Saynaa saynaa, int slot) {
-    this(saynaa, slot, 0);
-  }
-
-  public SaynaaObject(Saynaa saynaa, int slot, int handleId) {
+  public SaynaaObject(Saynaa saynaa, int type, int handleId) {
     this.saynaa = saynaa;
-    this.slot = slot;
+    this.type = type;
     this.handleId = handleId;
-  }
-
-  public int getSlot() {
-    return slot;
   }
 
   public int getHandleId() {
     return handleId;
+  }
+
+  public Object getme(String attrName) {
+    return getme(attrName, true);
+  }
+
+  public void setTag(Object value) {
+    this.tag = value;
+  }
+
+  public Object getTag() {
+    return this.tag;
+  }
+
+  public Object getme(String attrName, boolean skipGetter) {
+    return saynaa.objGetattr(handleId, attrName, skipGetter);
   }
 }

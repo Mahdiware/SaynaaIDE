@@ -9,6 +9,7 @@ import com.android.saynaa.saynaajava.PCallResult;
 import com.android.saynaa.saynaajava.datatype.*;
 
 public class Saynaa {
+
   public static final int SLOT_TYPE_OBJECT = 0;
   public static final int SLOT_TYPE_NULL = 1;
   public static final int SLOT_TYPE_BOOL = 2;
@@ -23,7 +24,8 @@ public class Saynaa {
   public static final int SLOT_TYPE_FIBER = 11;
   public static final int SLOT_TYPE_CLASS = 12;
   public static final int SLOT_TYPE_POINTER = 13;
-  public static final int SLOT_TYPE_INSTANCE = 14;
+  public static final int SLOT_TYPE_CONTEXT = 14;
+  public static final int SLOT_TYPE_INSTANCE = 15;
   public Context context;
 
   static {
@@ -192,46 +194,60 @@ public class Saynaa {
     saynaa_setSlotPinnedHandle(slot, pinnedHandleId);
   }
 
-  public synchronized void newList(int slot) {
-    saynaa_newList(slot);
+  public synchronized SaynaaList newList() {
+    return new SaynaaList(this, SLOT_TYPE_LIST, saynaa_newList());
   }
 
-  public synchronized void newMap(int slot) {
-    saynaa_newMap(slot);
+  public synchronized SaynaaMap newMap() {
+    return new SaynaaMap(this, SLOT_TYPE_MAP, saynaa_newMap());
+  }
+
+  public synchronized boolean newInstance(int classHandleId, int argStart, int argCount, int retSlot) {
+    return saynaa_newInstance(classHandleId, argStart, argCount, retSlot);
+  }
+
+  public synchronized Object objGetattr(int handleId, String attrName, boolean skipGetter) {
+    return saynaa_objGetattr(handleId, attrName, skipGetter);
+  }
+
+  public synchronized boolean callMethod(int handleId, String methodName, int argStart, int argCount, int retSlot) {
+    return saynaa_callMethod(handleId, methodName, argStart, argCount, retSlot);
+  }
+
+  public synchronized boolean isSlotJava(int slot) {
+    return saynaa_isSlotJava(slot);
   }
 
   public synchronized SaynaaModule newModule(String name) {
-    Object module = saynaa_newModule(name);
-    // module is istance of SaynaaModule
-    if (module instanceof SaynaaModule) {
-      return (SaynaaModule) module;
-    } else {
-      return null;
-    }
+    return new SaynaaModule(this, SLOT_TYPE_MODULE, saynaa_newModule(name));
   }
 
   public synchronized boolean moduleSetGlobal(SaynaaModule module, String name, Object value) {
-    return saynaa_moduleSetGlobal(module.getSlot(), name, value);
+    return saynaa_moduleSetGlobal(module.getHandleId(), name, value);
   }
 
   public synchronized boolean moduleSetGlobal(SaynaaModule module, String name, Object clazz, String methodName) {
-    return saynaa_moduleSetGlobal(module.getSlot(), name, new JavaMethodBinding(clazz, methodName));
+    return saynaa_moduleSetGlobal(module.getHandleId(), name, new JavaMethodBinding(clazz, methodName));
   }
 
   public synchronized boolean registerModule(SaynaaModule module) {
-    return saynaa_registerModule(module.getSlot());
+    return saynaa_registerModule(module.getHandleId());
   }
 
   public synchronized int runFile(SaynaaModule module, String path) {
-    return saynaa_runFile(module.getSlot(), path);
+    return saynaa_runFile(module.getHandleId(), path);
   }
 
-  public synchronized boolean listInsert(int listSlot, int index, int valueSlot) {
-    return saynaa_listInsert(listSlot, index, valueSlot);
+  public synchronized boolean listInsert(int handleId, int index, int valueSlot) {
+    return saynaa_listInsert(handleId, index, valueSlot);
   }
 
-  public synchronized boolean mapSet(int mapSlot, int keySlot, int valueSlot) {
-    return saynaa_mapSet(mapSlot, keySlot, valueSlot);
+  public synchronized boolean listReplace(int handleId, int index, int valueSlot) {
+    return saynaa_listReplace(handleId, index, valueSlot);
+  }
+
+  public synchronized boolean mapSet(int handleId, int keySlot, int valueSlot) {
+    return saynaa_mapSet(handleId, keySlot, valueSlot);
   }
 
   public synchronized boolean bindJavaObject(int slot, Object value) {
@@ -272,20 +288,24 @@ public class Saynaa {
     return saynaa_getSlotJavaObject(slot);
   }
 
-  public synchronized int getListSize(int listSlot) {
-    return saynaa_getListSize(listSlot);
+  public synchronized int getListSize(int handleId) {
+    return saynaa_getListSize(handleId);
   }
 
-  public synchronized boolean listGetToSlot(int listSlot, int index, int valueSlot) {
-    return saynaa_listGetToSlot(listSlot, index, valueSlot);
+  public synchronized boolean listGetToSlot(int handleId, int index, int valueSlot) {
+    return saynaa_listGetToSlot(handleId, index, valueSlot);
   }
 
-  public synchronized int getMapSize(int mapSlot) {
-    return saynaa_getMapSize(mapSlot);
+  public synchronized int getMapSize(int handleId) {
+    return saynaa_getMapSize(handleId);
   }
 
-  public synchronized boolean mapEntryToSlots(int mapSlot, int entryIndex, int keySlot, int valueSlot) {
-    return saynaa_mapEntryToSlots(mapSlot, entryIndex, keySlot, valueSlot);
+  public synchronized boolean mapEntryToSlots(int handleId, int entryIndex, int keySlot, int valueSlot) {
+    return saynaa_mapEntryToSlots(handleId, entryIndex, keySlot, valueSlot);
+  }
+
+  public synchronized boolean mapGetToSlots(int handleId, int keySlot, int valueSlot) {
+    return saynaa_mapGetToSlots(handleId, keySlot, valueSlot);
   }
 
   public synchronized int doFile(String fileName) {
@@ -357,14 +377,21 @@ public class Saynaa {
   private synchronized native int saynaa_captureSlotHandle(int slot);
   private synchronized native void saynaa_setSlotPinnedHandle(int slot, int pinnedHandleId);
   private synchronized native void saynaa_addSearchPath(String path);
-  private synchronized native void saynaa_newList(int slot);
-  private synchronized native void saynaa_newMap(int slot);
-  private synchronized native Object saynaa_newModule(String name);
+  private synchronized native int saynaa_newList();
+  private synchronized native int saynaa_newMap();
+  private synchronized native boolean saynaa_isSlotJava(int slot);
+  private synchronized native int saynaa_newModule(String name);
+  private synchronized native boolean saynaa_callMethod(
+      int handleId, String methodName, int argStart, int argCount, int retSlot);
+  private synchronized native Object saynaa_objGetattr(int handleId, String attrName, boolean skipGetter);
+  private synchronized native boolean saynaa_newInstance(
+      int classHandleId, int argStart, int argCount, int retSlot);
   private synchronized native boolean saynaa_moduleSetGlobal(int moduleSlot, String name, Object value);
-  private synchronized native boolean saynaa_registerModule(int moduleSlot);
+  private synchronized native boolean saynaa_registerModule(int handleId);
   private synchronized native int saynaa_runFile(int moduleSlot, String path);
-  private synchronized native boolean saynaa_listInsert(int listSlot, int index, int valueSlot);
-  private synchronized native boolean saynaa_mapSet(int mapSlot, int keySlot, int valueSlot);
+  private synchronized native boolean saynaa_listReplace(int handleId, int index, int valueSlot);
+  private synchronized native boolean saynaa_listInsert(int handleId, int index, int valueSlot);
+  private synchronized native boolean saynaa_mapSet(int handleId, int keySlot, int valueSlot);
   private synchronized native boolean saynaa_bindJavaObject(int slot, Object value);
   private synchronized native boolean saynaa_bindJavaClass(int slot, Class<?> clazz);
   private synchronized native boolean saynaa_bindJavaMethod(
@@ -374,11 +401,12 @@ public class Saynaa {
   private synchronized native double saynaa_getSlotNumber(int slot);
   private synchronized native String saynaa_getSlotString(int slot);
   private synchronized native Object saynaa_getSlotJavaObject(int slot);
-  private synchronized native int saynaa_getListSize(int listSlot);
-  private synchronized native boolean saynaa_listGetToSlot(int listSlot, int index, int valueSlot);
+  private synchronized native int saynaa_getListSize(int handleId);
+  private synchronized native boolean saynaa_listGetToSlot(int handleId, int index, int valueSlot);
   private synchronized native int saynaa_getMapSize(int mapSlot);
   private synchronized native boolean saynaa_mapEntryToSlots(
-      int mapSlot, int entryIndex, int keySlot, int valueSlot);
+      int handleId, int entryIndex, int keySlot, int valueSlot);
+  private synchronized native boolean saynaa_mapGetToSlots(int handleId, int keySlot, int valueSlot);
   private synchronized native void saynaa_close();
   @SuppressWarnings("unused") private String source;
   @SuppressWarnings("unused") private String scriptPath;

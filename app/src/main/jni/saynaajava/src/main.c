@@ -693,7 +693,12 @@ bool register_java_wrapper_classes(VM* vm) {
     return false;
   bridge->javaWrapperModule = mod;
 
-  Handle* clsJavaClass = NewClass(vm, "JavaClass", NULL, mod, new_java_class_instance,
+  Handle* clsJavaBase = NewClass(vm, "JavaBase", NULL, mod, NULL, NULL, "Java base wrapper");
+  if (clsJavaBase == NULL)
+    return false;
+  bridge->clsJavaBase = clsJavaBase;
+
+  Handle* clsJavaClass = NewClass(vm, "JavaClass", clsJavaBase, mod, new_java_class_instance,
       delete_java_instance, "Java class wrapper");
   if (clsJavaClass == NULL)
     return false;
@@ -703,7 +708,7 @@ bool register_java_wrapper_classes(VM* vm) {
   ClassAddMethod(vm, clsJavaClass, "_str", java_class_str, 0, "");
   bridge->clsJavaClass = clsJavaClass;
 
-  Handle* clsJavaObject = NewClass(vm, "JavaObject", NULL, mod, new_java_object_instance,
+  Handle* clsJavaObject = NewClass(vm, "JavaObject", clsJavaBase, mod, new_java_object_instance,
       delete_java_instance, "Java object wrapper");
   if (clsJavaObject == NULL)
     return false;
@@ -713,7 +718,7 @@ bool register_java_wrapper_classes(VM* vm) {
   ClassAddMethod(vm, clsJavaObject, "_str", java_object_str, 0, "");
   bridge->clsJavaObject = clsJavaObject;
 
-  Handle* clsJavaMethod = NewClass(vm, "JavaMethod", NULL, mod, new_java_method_instance,
+  Handle* clsJavaMethod = NewClass(vm, "JavaMethod", clsJavaBase, mod, new_java_method_instance,
       delete_java_instance, "Java method wrapper");
   if (clsJavaMethod == NULL)
     return false;

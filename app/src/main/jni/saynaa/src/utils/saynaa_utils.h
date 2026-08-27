@@ -6,6 +6,7 @@
 #pragma once
 
 #include "../optionals/dirent/saynaa_dirent.h"
+#include "../runtime/saynaa_vm.h"
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -166,4 +167,40 @@ int utf8_encodeValue(int value, uint8_t* bytes);
 // Decodes from the leading [byte] and write the value to param [value] and
 // returns the number of bytes the value decoded, if invalid write -1 to the
 // value.
-int utf8_decodeBytes(uint8_t* bytes, int* value);
+int utf8_decodeBytes(const uint8_t* bytes, int* value);
+
+// Returns the byte offset of the character at index.
+// Stores the Unicode code point in value.
+// Returns -1 if invalid UTF-8 or index is out of bounds.
+int utf8_charAt(const char* str, size_t index, int* value);
+
+// Returns the byte offset of a UTF-8 character boundary.
+//
+// index == character count is valid and returns the
+// byte offset immediately after the last character.
+//
+// Returns -1 for invalid UTF-8 or invalid index.
+int utf8_byteOffset(const char* str, size_t index);
+
+// Creates a UTF-8 slice.
+//
+// start  = Unicode character index
+// length = number of Unicode characters
+// reversed = reverse characters if true
+//
+// Returns NULL on invalid UTF-8 or invalid range.
+String* utf8_slice(VM* vm, const char* str, int start, int length, bool reversed);
+
+// Reverses the order of the UTF-8 characters in the string.
+// The string is modified in place. The string must be valid UTF-8.
+// If the string is not valid UTF-8, the behavior is undefined.
+void utf8_reverse(char* str, size_t byte_length);
+
+// Returns the Unicode character index corresponding to a byte offset.
+// Returns -1 if the string is invalid UTF-8 or byte_offset is not
+// a valid UTF-8 character boundary.
+int utf8_charIndexAtByteOffset(const char* str, size_t byte_offset);
+
+// Returns the number of UTF-8 characters in str.
+// Returns -1 if str contains invalid UTF-8.
+int utf8_length(const char* str);

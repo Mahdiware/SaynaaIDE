@@ -73,6 +73,8 @@ extern "C" {
 // heap, and manage memory allocations.
 typedef struct VM VM;
 
+typedef struct Object Object;
+
 typedef struct Module Module;
 
 // A handle to the variables. It'll hold the reference to the
@@ -183,8 +185,27 @@ typedef enum VarType {
   vFIBER,
   vCLASS,
   vPOINTER,
+  vCONTEXT,
   vINSTANCE,
 } VarType;
+
+// Type enums of the heap allocated types.
+typedef enum ObjectType {
+  OBJ_STRING = 0,
+  OBJ_LIST,
+  OBJ_MAP,
+  OBJ_RANGE,
+  OBJ_MODULE,
+  OBJ_FUNC,
+  OBJ_CLOSURE,
+  OBJ_METHOD_BIND,
+  OBJ_UPVALUE,
+  OBJ_FIBER,
+  OBJ_CLASS,
+  OBJ_POINTER,
+  OBJ_CONTEXT,
+  OBJ_INST, // OBJ_INST should be the last element of this enums (don't move).
+} ObjectType;
 
 // Result that will return after a compilation or running a script
 // or a function or evaluating an expression.

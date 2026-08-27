@@ -86,7 +86,7 @@ bool osGetExeFilePath(char* buff, int size) {
   _NSGetExecutablePath(buff, &sz);
   return true;
 
-#elif defined(_OS_LINUX_)
+#elif defined(_OS_LINUX_) || defined(_OS_ANDROID)
   char tmp[MAX_PATH_LEN];
   sprintf(tmp, "/proc/%d/exe", getpid());
   int len = readlink(tmp, buff, size);

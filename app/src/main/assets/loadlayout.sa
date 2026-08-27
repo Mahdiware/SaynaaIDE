@@ -1,10 +1,6 @@
 import java
-
-context = null
-ids = {}
-idmap = {}
-next_id = 0x7f000000
-target_module = null
+import re
+import package
 
 ViewGroup = java.bindClass('android.view.ViewGroup')
 View = java.bindClass('android.view.View')
@@ -29,10 +25,6 @@ Context = java.bindClass('android.content.Context')
 DisplayMetrics = java.bindClass('android.util.DisplayMetrics')
 BitmapFactory = java.bindClass('android.graphics.BitmapFactory')
 BitmapDrawable = java.bindClass('android.graphics.drawable.BitmapDrawable')
-GravityLayoutParams = java.bindClass('android.view.Gravity$LayoutParams')
-FrameLayout = java.bindClass('android.widget.FrameLayout')
-FrameLayoutParams = java.bindClass('android.widget.FrameLayout$LayoutParams')
-
 
 RelativeLayoutRule = {
   layout_above: 2,
@@ -58,6 +50,7 @@ RelativeLayoutRule = {
   layout_alignParentStart: 20,
   layout_alignParentEnd: 21
 }
+
 InputTypeFlag = {
   none: 0x00000000,
   text: 0x00000001,
@@ -87,6 +80,7 @@ InputTypeFlag = {
   date: 0x00000014,
   time: 0x00000024
 }
+
 ImeOptionFlag = {
   normal: 0x00000000,
   actionUnspecified: 0x00000000,
@@ -105,6 +99,7 @@ ImeOptionFlag = {
   flagNoEnterAction: 0x40000000,
   flagForceAscii: 0x80000000
 }
+
 AutoLinkFlag = {
   none: 0x00,
   web: 0x01,
@@ -113,6 +108,7 @@ AutoLinkFlag = {
   map: 0x08,
   all: 0x0f
 }
+
 ScaleTypeMap = {
   matrix: ImageView.ScaleType.MATRIX,
   fitXY: ImageView.ScaleType.FIT_XY,
@@ -123,11 +119,6 @@ ScaleTypeMap = {
   centerCrop: ImageView.ScaleType.CENTER_CROP,
   centerInside: ImageView.ScaleType.CENTER_INSIDE
 }
-
-
-dm = null
-W = 0
-H = 0
 
 toint = {
   auto: 0,
@@ -253,725 +244,731 @@ gravity = {
   'end': 8388613
 }
 
-function toast(msg)
-	Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
-end
+class LoadLayout
+  function _init(context)
+    this.context = context
+    
+    this.dm = this.context.getResources().getDisplayMetrics()
+    wm = this.context.getSystemService(Context.WINDOW_SERVICE)
+    out = DisplayMetrics()
+    wm.getDefaultDisplay().getMetrics(out)
+    this.WIDTH = out.widthPixels
+    this.HEIGHT = out.heightPixels
+    
+    this.saynaadir = this.context.getSaynaaDir()
+    
+    this.module = null
+    this.next_id = 0x7f000000
+    this.ids = {}
+    this.idmap = {}
+  end
+  
+  function setModule(module)
+    this.module = module
+  end
 
+  function getObjects()
+    return this.ids
+  end
+  
+  function toast(msg)
+	Toast.makeText(this.context, msg, Toast.LENGTH_SHORT).show()
+  end
 
-function as_numeric(value)
-  result = pcall(function(numb) return Number(numb) end, value)
-  if result[0] then
-    return result[1]
-  else
-    return 0
+  function as_numeric(value)
+    result = pcall(function(numb) return Number(numb) end, value)
+    if result[0] then
+      return result[1]
+    else
+      return 0
+    end
   end
-end
 
-function check_type(value)
-  if type(value) != 'String' then
-    return null
-  end
-  result = value.match('^(%-?%d+)(%a%a)$')
-  if result == null then
-    return null
-  end
-  n = Number(result[1])
-  ty = types.get(result[2])
-  if n == null or ty == null then
-    return null
-  end
-  return { n, ty }
-end
-
-function check_percent(value)
-  if type(value) != 'String' then
-    return null
-  end
-  result = value.match('^(%-?[%.%d]+)%%([wh])$')
-  if result == null then
-    return null
-  end
-  n = Number(result[1])
-  if n == null then
-    return null
-  end
-  if result[2] == 'w' then
-    return n * W / 100
-  end
-  if result[2] == 'h' then
-    return n * H / 100
-  end
-  return null
-end
-
-function parse_size(value)
-  if type(value) == 'Number' then
-    return value
-  end
-  if type(value) != 'String' then
-    return value
-  end
-  if value == 'match_parent' or value == 'fill_parent' then
-    return -1
-  end
-  if value == 'wrap_content' or value == 'wrap' then
-    return -2
-  end
-  percent = check_percent(value)
-  if percent != null then
-    return percent
-  end
-  typed = check_type(value)
-  if typed != null then
-    return TypedValue.applyDimension(typed[1], typed[0], dm)
-  end
-  if value.endswith('dp') then
-    num_str = value.split('dp')[0]
-    num = as_numeric(num_str)
-    return TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, num, dm)
-  end
-  if value.endswith('sp') then
-    num_str = value.split('sp')[0]
-    num = as_numeric(num_str)
-    return TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, num, dm)
-  end
-  if value.endswith('px') then
-    num_str = value.split('px')[0]
-    return as_numeric(num_str)
-  end
-  return as_numeric(value)
-end
-
-function parse_color(value)
-  if type(value) == 'Number' then
-    return value
-  end
-  if type(value) == 'String' and value.startswith('#') then
-    return Color.parseColor(value)
-  end
-  return value
-end
-
-function split_flags(value)
-  parts = []
-  if type(value) != 'String' then
-    return parts
-  end
-  return parts.split('|')
-end
-
-function parse_flags(value, map)
-  if type(value) == 'Number' then
-    return value
-  end
-  parts = split_flags(value)
-  if parts.length == 0 then
-    return null
-  end
-  out = 0
-  i = 0
-  while i < parts.length do
-    key = parts[i]
-    flag = map.get(key)
-    if flag == null then
+  function check_type(value)
+    if not value is String then
       return null
     end
-    out = out | flag
-    i = i + 1
-  end
-  return out
-end
-
-function get_identifier(name)
-  return context.getResources().getIdentifier(name, null, null)
-end
-
-function checkattr(name)
-  if name == null then
-    return null
-  end
-  result = pcall(function(k) return AndroidR.attr[k] end, name)
-  if result[0] then
-    return result[1]
-  end
-  return null
-end
-
-function parse_gravity(value)
-    flags = value.split('|')
-    result = 0
-    for flag in flags do
-        flag = flag.strip()
-        if gravity.has(flag) then
-            result = result | gravity.get(flag)
-        end
-    end
-    return result
-end
-
-function set_text_style(view, style)
-  if style == 'bold' then
-    view.setTypeface(Typeface.DEFAULT_BOLD)
-    return
-  end
-  if style == 'italic' then
-    view.setTypeface(Typeface.defaultFromStyle(Typeface.ITALIC))
-    return
-  end
-  if style == 'bold_italic' then
-    view.setTypeface(Typeface.defaultFromStyle(Typeface.BOLD_ITALIC))
-    return
-  end
-end
-
-function checkint(value)
-  if type(value) != 'String' then
-    return null
-  end
-  parts = value.split('|')
-  if parts == null or parts.length == 0 then
-    return null
-  end
-  out = 0
-  i = 0
-  while i < parts.length do
-    v = toint.get(parts[i])
-    if v == null then
+    result = re.extract('^(-?\d+)([A-Za-z]{2})$', value)
+    if result == null then
       return null
     end
-    out = out | v
-    i = i + 1
+    n = Number(result[1])
+    ty = types.get(result[2])
+    if n == null or ty == null then
+      return null
+    end
+    return { n, ty }
   end
-  return out
-end
-
-function check_value(value)
-  if type(value) == 'String' then
-    if value == 'true' then
-      return true
+  
+  function normalizeColor(color)
+    // If alpha is missing (0xRRGGBB), add FF alpha.
+    if ((color & 0xFF000000) == 0)
+      color |= 0xFF000000;
     end
-    if value == 'false' then
-      return false
+    return color;
+  end
+  
+  function check_percent(value)
+    if not value is String then
+      return null
     end
-    direct = toint.get(value)
-    if direct != null then
-      return direct
+    result = re.extract('^(-?[\.\d]+)%([wh])$', value)
+    if result == null then
+      return null
     end
-    flags = checkint(value)
-    if flags != null then
-      return flags
+    n = Number(result[1])
+    if n == null then
+      return null
     end
-    percent = check_percent(value)
+    if result[2] == 'w' then
+      return n * this.WIDTH / 100
+    end
+    if result[2] == 'h' then
+      return n * this.HEIGHT / 100
+    end
+    return null
+  end
+  
+  function parse_size(value)
+    if value is Number then
+      return value
+    end
+    if not value is String then
+      return value
+    end
+    if value == 'match_parent' or value == 'fill_parent' then
+      return -1
+    end
+    if value == 'wrap_content' or value == 'wrap' then
+      return -2
+    end
+    percent = this.check_percent(value)
     if percent != null then
       return percent
     end
-  end
-  num = pcall(function(v) return Number(v) end, value)
-  if num[0] then
-    return num[1]
-  end
-  return value
-end
-
-function capitalize_first(key)
-  if key == null or key.length == 0 then
-    return key
-  end
-  return key.sub(0, 1).upper() + key.sub(1)
-end
-
-function new_layout_params(parent, width, height)
-  if parent != null and java.instanceof(parent, LinearLayout) then
-    return LinearLayoutParams(width, height)
-  end
-
-  if parent != null and java.instanceof(parent, RelativeLayout) then
-    return RelativeLayoutParams(width, height)
-  end
-
-  if parent != null and java.instanceof(parent, FrameLayout) then
-    return FrameLayoutParams(width, height)
-  end
-
-  return ViewGroup.LayoutParams(width, height)
-end
-
-function collect_children(node, start_index)
-  if start_index == null then
-    return null
-  end
-  children = []
-  i = start_index
-  while true do
-    child = node.get(i)
-    if child == null then
-      break
+    typed = this.check_type(value)
+    if typed != null then
+      return TypedValue.applyDimension(typed[1], typed[0], this.dm)
     end
-    children.append(child)
-    i = i + 1
+    if value.endswith('dp') then
+      num_str = value.split('dp')[0]
+      num = this.as_numeric(num_str)
+      return TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, num, this.dm)
+    end
+    if value.endswith('sp') then
+      num_str = value.split('sp')[0]
+      num = this.as_numeric(num_str)
+      return TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, num, this.dm)
+    end
+    if value.endswith('px') then
+      num_str = value.split('px')[0]
+      return this.as_numeric(num_str)
+    end
+    return this.as_numeric(value)
   end
-  if children.length == 0 then
-    return null
-  end
-  return children
-end
-
-function apply_layout(view, params, node)
-  layout_weight = node.get('layout_weight')
-  if layout_weight != null and java.instanceof(params, LinearLayoutParams) then
-    params.weight = check_value(layout_weight)
-  end
-
-  layout_gravity = node.get('layout_gravity')
-
-  if layout_gravity != null then
-    g = parse_gravity(layout_gravity)
   
-    if g != null then
-        params.gravity = g
+  function parse_color(value)
+    if value is Number then
+      return this.normalizeColor(value)
     end
+    if value is String and value.startswith('#') then
+      return Color.parseColor(value)
+    end
+    return value
   end
-
-  layout_margin = node.get('layout_margin')
-  layout_margin_start = node.get('layout_marginStart')
-  layout_margin_end = node.get('layout_marginEnd')
-  layout_margin_bottom = node.get('layout_marginBottom')
-  layout_margin_top = node.get('layout_marginTop')
-  layout_margin_left = node.get('layout_marginLeft')
-  layout_margin_right = node.get('layout_marginRight')
-  has_margin = layout_margin != null or layout_margin_bottom != null or layout_margin_top != null or layout_margin_left != null or layout_margin_right != null
-  if has_margin then
-    left = parse_size(layout_margin_left or layout_margin or 0)
-    top = parse_size(layout_margin_top or layout_margin or 0)
-    right = parse_size(layout_margin_right or layout_margin or 0)
-    bottom = parse_size(layout_margin_bottom or layout_margin or 0)
-    params.setMargins(left, top, right, bottom)
+  
+  function split_flags(value)
+    parts = []
+    if not value is String then
+      return parts
+    end
+    return value.split('|')
   end
-  if layout_margin_start != null then
-    params.setMarginStart(parse_size(layout_margin_start))
-  end
-  if layout_margin_end != null then
-    params.setMarginEnd(parse_size(layout_margin_end))
-  end
-
-  if java.instanceof(params, RelativeLayoutParams) then
+  
+  function parse_flags(value, map)
+    if value is Number then
+      return value
+    end
+    parts = this.split_flags(value)
+    if parts.length == 0 then
+      return null
+    end
+    out = 0
     i = 0
-    keys = node.keys
-    while i < keys.length do
-      key = keys[i]
-      rule = RelativeLayoutRule.get(key)
-      if rule != null then
-        value = node.get(key)
-        if value == true then
-          params.addRule(rule)
-        else
-          target_id = idmap.get(value)
-          if target_id != null then
-            params.addRule(rule, target_id)
-          end
-        end
+    while i < parts.length do
+      key = parts[i]
+      flag = map.get(key)
+      if flag == null then
+        return null
       end
+      out = out | flag
       i = i + 1
     end
+    return out
   end
-
-  view.setLayoutParams(params)
-end
-
-
-function apply_image(view, src)
-  if type(src) == 'String' and src.startswith('?') then
-    res_id = get_identifier(src.sub(1))
-    if res_id != 0 then
-      view.setImageResource(res_id)
-    end
-  else
-    // Load image from saynaadir + file path
-    bitmap = BitmapFactory.decodeFile(java.saynaadir + "/" + src)
-    if (bitmap != null)
-      // Convert to drawable
-      drawable = BitmapDrawable(context.getResources(), bitmap)
-      view.setImageDrawable(drawable)
-    else
-      // Load image from file path
-      bitmap = BitmapFactory.decodeFile(src)
-      if (bitmap != null)
-        // Convert to drawable
-        drawable = BitmapDrawable(context.getResources(), bitmap)
-        view.setImageDrawable(drawable)
-      end
-    end
-  end
-
-  if type(src) == 'Number' then
-    view.setImageResource(src)
-  end
-
-end
-
-function apply_attrs(view, node, data)
-  orientation = node.get('orientation')
-  if orientation != null and java.instanceof(view, LinearLayout) then
-    if orientation == 'vertical' then
-      view.setOrientation(1)
-    end
-    if orientation == 'horizontal' then
-      view.setOrientation(0)
-    end
-  end
-
-  padding = node.get('padding')
-  padding_left = node.get('paddingLeft')
-  padding_top = node.get('paddingTop')
-  padding_right = node.get('paddingRight')
-  padding_bottom = node.get('paddingBottom')
-  padding_start = node.get('paddingStart')
-  padding_end = node.get('paddingEnd')
-
-  has_padding = padding != null or padding_left != null or padding_top != null or padding_right != null or padding_bottom != null
-  has_padding_relative = padding_start != null or padding_end != null
-
-  if has_padding then
-    left = parse_size(padding_left or padding or 0)
-    top = parse_size(padding_top or padding or 0)
-    right = parse_size(padding_right or padding or 0)
-    bottom = parse_size(padding_bottom or padding or 0)
-    view.setPadding(left, top, right, bottom)
-  end
-  if has_padding_relative then
-    left = parse_size(padding_start or padding or 0)
-    top = parse_size(padding_top or padding or 0)
-    right = parse_size(padding_end or padding or 0)
-    bottom = parse_size(padding_bottom or padding or 0)
-    view.setPaddingRelative(left, top, right, bottom)
-  end
-
-  text = node.get('text')
-  if text != null then
-    view.setText(text)
-  end
-
-  text_size = node.get('textSize')
-  if text_size != null then
-    size = parse_size(text_size)
-    view.setTextSize(TypedValue.COMPLEX_UNIT_PX, size)
-  end
-
-  text_style = node.get('textStyle')
-  if text_style != null then
-    set_text_style(view, text_style)
-  end
-
-  hint = node.get('hint')
-  if hint != null then
-    view.setHint(hint)
-  end
-
-  if node.get('singleLine') == true then
-    view.setSingleLine(true)
-  end
-
-  checked = node.get('checked')
-  if checked != null then
-    view.setChecked(checked == true)
-  end
-
-  background_color = node.get('backgroundColor')
-  if background_color != null then
-    view.setBackgroundColor(parse_color(background_color))
-  end
-
-  text_color = node.get('textColor')
-  if text_color != null then
-    view.setTextColor(parse_color(text_color))
-  end
-
-  text_appearance = node.get('textAppearance')
-  if text_appearance != null then
-    if type(text_appearance) == 'String' and text_appearance.startswith('?') then
-      res_id = get_identifier(text_appearance.sub(1))
-      if res_id != 0 then
-        view.setTextAppearance(context, res_id)
-      end
-    end
-  end
-
-  auto_link = node.get('autoLink')
-  if auto_link != null then
-    mask = parse_flags(auto_link, AutoLinkFlag)
-    if mask != null then
-      view.setAutoLinkMask(mask)
-    end
-  end
-
-  input_type = node.get('inputType')
-  if input_type != null then
-    mask = parse_flags(input_type, InputTypeFlag)
-    if mask != null then
-      view.setInputType(mask)
-    end
-  end
-
-  ime_options = node.get('imeOptions')
-  if ime_options != null then
-    mask = parse_flags(ime_options, ImeOptionFlag)
-    if mask != null then
-      view.setImeOptions(mask)
-    end
-  end
-
-  password = node.get('password')
-  if password == true then
-    view.setInputType(0x81)
-  end
-
-  background = node.get('background')
-  if background != null then
-    if type(background) == 'String' and background.startswith('#') then
-      view.setBackgroundColor(parse_color(background))
-    end
-    if type(background) == 'String' and background.startswith('?') then
-      res_id = get_identifier(background.sub(1))
-      if res_id != 0 then
-        view.setBackgroundResource(res_id)
-      end
-    end
-    if type(background) == 'Number' then
-      view.setBackgroundColor(background)
-    end
-    if type(background) == 'JavaObject' then
-      view.setBackground(background)
-    end
-  end
-
-  src = node.get('src')
   
-  if src != null and java.instanceof(view, ImageView) then
-    if type(src) == 'String' and src.startswith('?') then
-      res_id = get_identifier(src.sub(1))
+  function get_identifier(name)
+    return this.context.getResources().getIdentifier(name, null, null)
+  end
+  
+  function checkattr(name)
+    if name == null then
+      return null
+    end
+    // FIXME
+    result = pcall(function(k) return AndroidR.attr[k] end, name)
+    if result[0] then
+      return result[1]
+    end
+    return null
+  end
+  
+  function parse_gravity(value)
+      flags = value.split('|')
+      result = 0
+      for flag in flags do
+          flag = flag.strip()
+          if gravity.has(flag) then
+              result = result | gravity.get(flag)
+          end
+      end
+      return result
+  end
+  
+  function set_text_style(view, style)
+    if style == 'bold' then
+      view.setTypeface(Typeface.DEFAULT_BOLD)
+      return
+    end
+    if style == 'italic' then
+      view.setTypeface(Typeface.defaultFromStyle(Typeface.ITALIC))
+      return
+    end
+    if style == 'bold_italic' then
+      view.setTypeface(Typeface.defaultFromStyle(Typeface.BOLD_ITALIC))
+      return
+    end
+  end
+  
+  function checkint(value)
+    if not value is String then
+      return null
+    end
+    parts = value.split('|')
+    if parts == null or parts.length == 0 then
+      return null
+    end
+    out = 0
+    i = 0
+    while i < parts.length do
+      v = toint.get(parts[i])
+      if v == null then
+        return null
+      end
+      out = out | v
+      i = i + 1
+    end
+    return out
+  end
+  
+  function check_value(value)
+    if value is String then
+      if value == 'true' then
+        return true
+      end
+      if value == 'false' then
+        return false
+      end
+      direct = toint.get(value)
+      if direct != null then
+        return direct
+      end
+      flags = this.checkint(value)
+      if flags != null then
+        return flags
+      end
+      percent = this.check_percent(value)
+      if percent != null then
+        return percent
+      end
+    end
+    if value is Bool then
+      return value
+    end
+    num = pcall(function(v) return Number(v) end, value)
+    if num[0] then
+      return num[1]
+    end
+    return value
+  end
+  
+  function capitalize_first(key)
+    if key == null or key.length == 0 then
+      return key
+    end
+    return key.sub(0, 1).upper() + key.sub(1)
+  end
+  
+  function new_layout_params(parent, width, height)
+    classname = java.getClassName(parent) // e.g: android.widget.LinearLayout
+    paramsClass = java.bindClass(str(classname) + '$LayoutParams')
+  
+    if paramsClass != null then
+      return paramsClass(width, height)
+    end
+  
+    return ViewGroup.LayoutParams(width, height)
+  end
+  
+  function collect_children(node)
+    children = []
+    i = 1
+    while true do
+      child = node.get(i)
+      if child == null then
+        break
+      end
+      children.append(child)
+      i = i + 1
+    end
+    if children.length == 0 then
+      return null
+    end
+
+    return children
+  end
+  
+  function apply_layout(view, params, node)
+    layout_weight = node.get('layout_weight')
+    if layout_weight != null and java.instanceof(params, LinearLayoutParams) then
+      params.weight = this.check_value(layout_weight)
+    end
+  
+    layout_gravity = node.get('layout_gravity')
+  
+    if layout_gravity != null then
+      g = this.parse_gravity(layout_gravity)
+    
+      if g != null then
+          params.gravity = g
+      end
+    end
+  
+    layout_margin = node.get('layout_margin')
+    layout_margin_start = node.get('layout_marginStart')
+    layout_margin_end = node.get('layout_marginEnd')
+    layout_margin_bottom = node.get('layout_marginBottom')
+    layout_margin_top = node.get('layout_marginTop')
+    layout_margin_left = node.get('layout_marginLeft')
+    layout_margin_right = node.get('layout_marginRight')
+    has_margin = layout_margin != null or layout_margin_bottom != null or layout_margin_top != null or layout_margin_left != null or layout_margin_right != null
+    if has_margin then
+      left = this.parse_size(layout_margin_left or layout_margin or 0)
+      top = this.parse_size(layout_margin_top or layout_margin or 0)
+      right = this.parse_size(layout_margin_right or layout_margin or 0)
+      bottom = this.parse_size(layout_margin_bottom or layout_margin or 0)
+      params.setMargins(left, top, right, bottom)
+    end
+    if layout_margin_start != null then
+      params.setMarginStart(this.parse_size(layout_margin_start))
+    end
+    if layout_margin_end != null then
+      params.setMarginEnd(this.parse_size(layout_margin_end))
+    end
+  
+    if java.instanceof(params, RelativeLayoutParams) then
+      i = 0
+      keys = node.keys
+      while i < keys.length do
+        key = keys[i]
+        rule = RelativeLayoutRule.get(key)
+        if rule != null then
+          value = node.get(key)
+          if value == true then
+            params.addRule(rule)
+          else
+            target_id = this.idmap.get(value)
+            if target_id != null then
+              params.addRule(rule, target_id)
+            end
+          end
+        end
+        i = i + 1
+      end
+    end
+  
+    view.setLayoutParams(params)
+  end
+  
+  
+  function apply_image(view, src)
+    if src is String and src.startswith('?') then
+      res_id = this.get_identifier(src.sub(1))
       if res_id != 0 then
         view.setImageResource(res_id)
       end
     else
       // Load image from saynaadir + file path
-      bitmap = BitmapFactory.decodeFile(java.saynaadir + "/" + src)
+      bitmap = BitmapFactory.decodeFile(this.saynaadir + "/" + src)
       if (bitmap != null)
         // Convert to drawable
-        drawable = BitmapDrawable(context.getResources(), bitmap)
+        drawable = BitmapDrawable(this.context.getResources(), bitmap)
         view.setImageDrawable(drawable)
       else
         // Load image from file path
         bitmap = BitmapFactory.decodeFile(src)
         if (bitmap != null)
           // Convert to drawable
-          drawable = BitmapDrawable(context.getResources(), bitmap)
+          drawable = BitmapDrawable(this.context.getResources(), bitmap)
           view.setImageDrawable(drawable)
         end
       end
     end
-    if type(src) == 'Number' then
+  
+    if src is Number then
       view.setImageResource(src)
     end
+  
   end
-
-  scale_type = node.get('scaleType')
-  if scale_type != null and java.instanceof(view, ImageView) then
-    st = ScaleTypeMap.get(scale_type)
-    if st != null then
-      view.setScaleType(st)
-    end
-  end
-
-  visibility = node.get('visibility')
-  if visibility != null then
-    if visibility == 'visible' then view.setVisibility(0) end
-    if visibility == 'invisible' then view.setVisibility(4) end
-    if visibility == 'gone' then view.setVisibility(8) end
-  end
-
-  text_alignment = node.get('textAlignment')
-  if text_alignment != null then
-    if text_alignment == 'inherit' then view.setTextAlignment(0) end
-    if text_alignment == 'gravity' then view.setTextAlignment(1) end
-    if text_alignment == 'textStart' then view.setTextAlignment(2) end
-    if text_alignment == 'textEnd' then view.setTextAlignment(3) end
-    if text_alignment == 'textCenter' then view.setTextAlignment(4) end
-    if text_alignment == 'viewStart' then view.setTextAlignment(5) end
-    if text_alignment == 'viewEnd' then view.setTextAlignment(6) end
-  end
-
-  ellipsize = node.get('ellipsize')
-  if ellipsize != null then
-    view.setEllipsize(TruncateAt[ellipsize.upper()])
-  end
-
-  on_click = node.get('onClick')
-  if on_click != null then
-    view.setClickable(true)
-    if type(on_click) == "Closure" then
-      view.setOnClickListener(View.OnClickListener({
-        onClick: on_click
-      }))
-    else
-      view.setOnClickListener(on_click)
-    end
-  end
-
-  items = node.get('items')
-  if items != null then
-    //list = java.new('java.util.ArrayList', items)
-    adapter = ArrayAdapter(context, AndroidRLayout.simple_list_item_1, items)
-    view.setAdapter(adapter)
-  end
-
-  # debug("apply_attrs: view=${view}, node=${node}, data=${data}")
-  node_id = node.get('id')
-  if node_id != null and data != null and type(data) == 'Map' then
-    value = data.get(node_id)
-    if value != null then
-      if value is String then
-        if java.instanceof(view, TextView) then
-          view.setText(value)
-        elif java.instanceof(view, ImageView) then
-          apply_image(view, value)
-        end
-      elif value is Map then
-        debug("value is map and data is: $value")
-        apply_attrs(view, value, null)
-        apply_auto_attrs(view, value)
+  
+  function apply_attrs(view, node)
+    orientation = node.get('orientation')
+    if orientation != null and java.instanceof(view, LinearLayout) then
+      if orientation == 'vertical' then
+        view.setOrientation(1)
+      end
+      if orientation == 'horizontal' then
+        view.setOrientation(0)
       end
     end
-  end
-
-end
-
-function apply_auto_attrs(view, node)
-  keys = node.keys
-  if keys == null then
-    return
-  end
-  if (type(keys) == "JavaMethod") then
-    debug("${keys.getName()}")
-  end
-  i = 0
-  while i < keys.length do
-    key = keys[i]
-    if type(key) == 'String' then
-      if key != 'id' and key != 'style' and !key.startswith('layout_') and !key.startswith('padding') and key != 'orientation' and key != 'text' and key != 'textSize' and key != 'textStyle' and key != 'textColor' and key != 'textAppearance' and key != 'hint' and key != 'singleLine' and key != 'checked' and key != 'backgroundColor' and key != 'background' and key != 'src' and key != 'scaleType' and key != 'visibility' and key != 'textAlignment' and key != 'ellipsize' and key != 'autoLink' and key != 'inputType' and key != 'imeOptions' and key != 'password' and key != 'onClick' and key != 'items' then
-        value = node.get(key)
-        setter = 'set' + capitalize_first(key)
-        called = pcall(function(v, s, val)
-          return java.call(v, s, val)
-        end, view, setter, check_value(value))
-        if !called[0] then
-          assert(false, 'loadlayout: setter call failed: ' + setter + ' key=' + key)
-          return
+  
+    padding = node.get('padding')
+    padding_left = node.get('paddingLeft')
+    padding_top = node.get('paddingTop')
+    padding_right = node.get('paddingRight')
+    padding_bottom = node.get('paddingBottom')
+    padding_start = node.get('paddingStart')
+    padding_end = node.get('paddingEnd')
+  
+    has_padding = padding != null or padding_left != null or padding_top != null or padding_right != null or padding_bottom != null
+    has_padding_relative = padding_start != null or padding_end != null
+  
+    if has_padding then
+      left = this.parse_size(padding_left or padding or 0)
+      top = this.parse_size(padding_top or padding or 0)
+      right = this.parse_size(padding_right or padding or 0)
+      bottom = this.parse_size(padding_bottom or padding or 0)
+      view.setPadding(left, top, right, bottom)
+    end
+    if has_padding_relative then
+      left = this.parse_size(padding_start or padding or 0)
+      top = this.parse_size(padding_top or padding or 0)
+      right = this.parse_size(padding_end or padding or 0)
+      bottom = this.parse_size(padding_bottom or padding or 0)
+      view.setPaddingRelative(left, top, right, bottom)
+    end
+  
+    text = node.get('text')
+    if text != null then
+      view.setText(text)
+    end
+  
+    text_size = node.get('textSize')
+    if text_size != null then
+      size = this.parse_size(text_size)
+      view.setTextSize(TypedValue.COMPLEX_UNIT_PX, size)
+    end
+  
+    text_style = node.get('textStyle')
+    if text_style != null then
+      this.set_text_style(view, text_style)
+    end
+  
+    hint = node.get('hint')
+    if hint != null then
+      view.setHint(hint)
+    end
+  
+    if node.get('singleLine') == true then
+      view.setSingleLine(true)
+    end
+  
+    checked = node.get('checked')
+    if checked != null then
+      view.setChecked(checked == true)
+    end
+  
+    background_color = node.get('backgroundColor')
+    if background_color != null then
+      view.setBackgroundColor(this.parse_color(background_color))
+    end
+  
+    text_color = node.get('textColor')
+    if text_color != null then
+      view.setTextColor(this.parse_color(text_color))
+    end
+  
+    text_appearance = node.get('textAppearance')
+    if text_appearance != null then
+      if text_appearance is String and text_appearance.startswith('?') then
+        res_id = this.get_identifier(text_appearance.sub(1))
+        if res_id != 0 then
+          view.setTextAppearance(this.context, res_id)
         end
       end
     end
-    i = i + 1
-  end
-end
-
-function create_view(node, parent, data)
-  node_type = node.get('type')
-  child_start = null
-  if node_type == null then
-    node_type = node.get(0)
-    if node_type != null then
-      child_start = 1
-    else
-      node_type = node.get(1)
-      if node_type != null then
-        child_start = 2
+  
+    auto_link = node.get('autoLink')
+    if auto_link != null then
+      mask = this.parse_flags(auto_link, AutoLinkFlag)
+      if mask != null then
+        view.setAutoLinkMask(mask)
       end
     end
-  else
-    if node.get(0) != null then
-      child_start = 0
-    else
-      if node.get(1) != null then
-        child_start = 1
+  
+    input_type = node.get('inputType')
+    if input_type != null then
+      mask = this.parse_flags(input_type, InputTypeFlag)
+      if mask != null then
+        view.setInputType(mask)
       end
     end
-  end
-  if node_type == null then
-    assert(false, 'loadlayout: missing view type')
-  end
-  style_id = null
-  view = null
-  style_value = node.get('style')
-  if style_value != null and type(style_value) == 'String' then
-    if style_value.startswith('?') then
-      style_id = get_identifier(style_value.sub(1))
-    else
-      style_id = checkattr(style_value)
+  
+    ime_options = node.get('imeOptions')
+    if ime_options != null then
+      mask = this.parse_flags(ime_options, ImeOptionFlag)
+      if mask != null then
+        view.setImeOptions(mask)
+      end
     end
-  end
-  if style_id != null and style_id != 0 then
-    view = node_type(context, null, style_id)
-  else
-    view = node_type(context)
-  end
-  width = parse_size(node.get('layout_width') or -2)
-  height = parse_size(node.get('layout_height') or -2)
-  params = new_layout_params(parent, width, height)
-  apply_layout(view, params, node)
-  apply_attrs(view, node, data)
-  apply_auto_attrs(view, node)
+  
+    password = node.get('password')
+    if password == true then
+      view.setInputType(0x81)
+    end
+  
+    background = node.get('background')
+    if background != null then
+      if background is String and background.startswith('#') then
+        view.setBackgroundColor(this.parse_color(background))
+      end
+      if background is String and background.startswith('?') then
+        res_id = this.get_identifier(background.sub(1))
+        if res_id != 0 then
+          view.setBackgroundResource(res_id)
+        end
+      end
+      if background is Number then
+        view.setBackgroundColor(background)
+      end
+      if type(background) == 'JavaObject' then
+        view.setBackground(background)
+      end
+    end
+  
+    filter = node.get('colorFilter')
+    if filter != null then
+      view.setColorFilter(this.parse_color(filter))
+    end
+  
+    src = node.get('src')
+    if src != null and java.instanceof(view, ImageView) then
+      this.apply_image(view, src)
+    end
+  
+    scale_type = node.get('scaleType')
+    if scale_type != null and java.instanceof(view, ImageView) then
+      st = ScaleTypeMap.get(scale_type)
+      if st != null then
+        view.setScaleType(st)
+      end
+    end
+  
+    visibility = node.get('visibility')
+    if visibility != null then
+      if visibility == 'visible' then view.setVisibility(0) end
+      if visibility == 'invisible' then view.setVisibility(4) end
+      if visibility == 'gone' then view.setVisibility(8) end
+    end
+  
+    text_alignment = node.get('textAlignment')
+    if text_alignment != null then
+      if text_alignment == 'inherit' then view.setTextAlignment(0) end
+      if text_alignment == 'gravity' then view.setTextAlignment(1) end
+      if text_alignment == 'textStart' then view.setTextAlignment(2) end
+      if text_alignment == 'textEnd' then view.setTextAlignment(3) end
+      if text_alignment == 'textCenter' then view.setTextAlignment(4) end
+      if text_alignment == 'viewStart' then view.setTextAlignment(5) end
+      if text_alignment == 'viewEnd' then view.setTextAlignment(6) end
+    end
+  
+    ellipsize = node.get('ellipsize')
+    if ellipsize != null then
+      view.setEllipsize(TruncateAt.valueOf(ellipsize.upper()))
+    end
+  
+    on_click = node.get('onClick')
+    if on_click != null then
+      view.setClickable(true)
+      if on_click is Closure then
+        view.setOnClickListener(View.OnClickListener({
+          onClick: on_click
+        }))
+      else
+        view.setOnClickListener(on_click)
+      end
+    end
+  
+    items = node.get('items')
+    if items != null then
+      adapter = ArrayAdapter(this.context, AndroidRLayout.simple_list_item_1, items)
+      view.setAdapter(adapter)
+    end
+  
+    node_id = node.get('id')
 
-  node_id = node.get('id')
-  if node_id != null then
-    next_id = next_id + 1
-    view.setId(next_id)
-    ids.setattr(node_id, view)
-    idmap.setattr(node_id, next_id)
-    target_module.define(node_id, view)
   end
+  
+  function apply_auto_attrs(view, node)
+    keys = node.keys
+    if keys == null then
+      return
+    end
 
-  children = collect_children(node, child_start)
-  if children != null then
     i = 0
-    while i < children.length do
-      child = children[i]
-      child_view = create_view(child, view, data)
-      view.addView(child_view)
+    while i < keys.length do
+      key = keys[i]
+      if key is String then
+        if key != 'id' and key != 'style' and !key.startswith('layout_') and !key.startswith('padding') and key != 'orientation' and key != 'text' and key != 'textSize' and key != 'textStyle' and key != 'textColor' and key != 'textAppearance' and key != 'hint' and key != 'singleLine' and key != 'checked' and key != 'backgroundColor' and key != 'background' and key != 'src' and key != 'scaleType' and key != 'visibility' and key != 'textAlignment' and key != 'ellipsize' and key != 'autoLink' and key != 'inputType' and key != 'imeOptions' and key != 'password' and key != 'onClick' and key != 'items' then
+          value = node.get(key)
+          setter = 'set' + this.capitalize_first(key)
+          called = pcall(function(v, s, val)
+            return java.call(v, s, val)
+          end, view, setter, this.check_value(value))
+          if !called[0] then
+            assert(false, 'loadlayout: setter call failed: ' + setter + ' key=' + key)
+            return
+          end
+        end
+      end
       i = i + 1
     end
   end
+  
+  function createView(node, parent)
+    if not (node is Map) then
+      assert(false, 'loadlayout node: expected Map and got ' .. type(node) .. package.path)
+    end
 
-  return view
+    node_type = node.get(0)
+
+    if node_type == null then
+      assert(false, 'loadlayout: missing view type')
+    end
+    style_id = null
+    view = null
+    style_value = node.get('style')
+    if style_value != null and style_value is String then
+      if style_value.startswith('?') then
+        style_id = this.get_identifier(style_value.sub(1))
+      end
+    end
+    if style_id != null and style_id != 0 then
+      view = node_type(this.context, null, style_id)
+    else
+      view = node_type(this.context)
+    end
+    width = this.parse_size(node.get('layout_width') or -2)
+    height = this.parse_size(node.get('layout_height') or -2)
+    params = this.new_layout_params(parent, width, height)
+    this.apply_layout(view, params, node)
+    this.apply_attrs(view, node)
+    this.apply_auto_attrs(view, node)
+  
+    node_id = node.get('id')
+    if node_id != null then
+      this.next_id = this.next_id + 1
+      view.setId(this.next_id)
+      this.ids.setattr(node_id, view)
+      this.idmap.setattr(node_id, this.next_id)
+      if this.module is Module then
+        this.module.define(node_id, view)
+      end
+    end
+  
+    children = this.collect_children(node)
+    if children != null then
+      i = 0
+      while i < children.length do
+        child = children[i]
+        if not (child is Map) then
+          assert(false, 'loadlayout child: expected Map and got ' .. type(child))
+        end
+        child_view = this.createView(child, view)
+        view.addView(child_view)
+        i = i + 1
+      end
+    end
+  
+    return view
+  end
+  
+  
+  function bind_value(view, value)
+    if value is String then
+      if java.instanceof(view, ImageView) then
+        this.apply_image(view, value)
+      elif java.instanceof(view, TextView) then
+        view.setText(value)
+      end
+
+    elif value is Bool then
+      if java.instanceof(view, CompoundButton) then
+        view.setChecked(value)
+      end
+
+    elif value is Number then
+      if java.instanceof(view, ProgressBar) then
+        view.setProgress(value)
+      end
+
+    elif value is Map then
+      this.apply_attrs(view, value)
+      this.apply_auto_attrs(view, value)
+    end
+  end
+  
+  function bind(data)
+    if not (data is Map) then
+      return
+    end
+    
+    keys = data.keys
+    debug("debug mode in bind: $keys")
+
+    for key in keys do
+      view = this.ids.get(key)
+      debug("debug mode in bind: $key -> $view, and id: ${this.ids}")
+
+      if view != null then
+        this.bind_value(view, data.get(key))
+      end
+    end
+  end
 end
+
 
 function loadlayout(activity, node, data)
-  if (!java.instanceof(activity, Context)) then
-    activity = java.context
+  if not (node is Map) then
+    assert(false, 'loadlayout node: expected Map and got ' .. type(node))
   end
 
-  if data != null then
-    debug("data: ${str(data)}, type: ${type(node)}, node is: ${str(node)}")
-  else
-    debug("data: null, type: ${type(node)}, node is: ${str(node)}")
-  end
-
-  ids = {}
-  idmap = {}
-  next_id = 0x7f000000
-  target_module = activity.getModule()
-  assert(target_module is Module, 'loadlayout: target module isnt a module')
-  context = activity
-
-  dm = context.getResources().getDisplayMetrics()
-  wm = context.getSystemService(Context.WINDOW_SERVICE)
-  out = DisplayMetrics()
-  wm.getDefaultDisplay().getMetrics(out)
-  W = out.widthPixels
-  H = out.heightPixels
-  target_module.define('ids', ids)
-  target_module.define('idmap', idmap)
-  target_module.define('width', W)
-  target_module.define('height', H)
-  return create_view(node, null, data)
+  ll = LoadLayout(activity)
+  ll.setModule(activity.getModule())
+  view = ll.createView(node)
+  ll.bind(data)
+  return view
 end
-
-
+  
+  
+  

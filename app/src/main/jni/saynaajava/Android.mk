@@ -5,7 +5,8 @@ include $(LOCAL_PATH)/../Flags.mk
 
 LOCAL_C_INCLUDES += $(LOCAL_PATH)/include
 LOCAL_C_INCLUDES += $(LOCAL_PATH)/../saynaa/src
-LOCAL_C_INCLUDES += $(LOCAL_PATH)/../saynaa/src/cli
+LOCAL_C_INCLUDES += $(LOCAL_PATH)/../saynaa/src/saynaa
+LOCAL_C_INCLUDES += $(LOCAL_PATH)/../saynaa/src/buildin
 LOCAL_C_INCLUDES += $(LOCAL_PATH)/../saynaa/src/compiler
 LOCAL_C_INCLUDES += $(LOCAL_PATH)/../saynaa/src/runtime
 LOCAL_C_INCLUDES += $(LOCAL_PATH)/../saynaa/src/shared

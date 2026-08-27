@@ -5,9 +5,10 @@
 
 // This file contains all the public function implementations.
 
-#include "../cli/saynaa.h"
 #include "../runtime/saynaa_core.h"
+#include "../runtime/saynaa_import.h"
 #include "../runtime/saynaa_vm.h"
+#include "../saynaa/saynaa.h"
 #include "../shared/saynaa_bytecode.h"
 #include "../shared/saynaa_readline.h"
 #include "../shared/saynaa_value.h"
@@ -119,7 +120,7 @@ Configuration NewConfiguration() {
   config.stderr_write = stderrWrite;
   config.stdin_read = stdinRead;
 #ifndef NO_OPTIONAL
-  config.resolve_path_fn = pathResolveImport;
+  config.resolve_path_fn = resolvePath;
 
 #ifndef NO_DL
   config.load_dl_fn = osLoadDL;
@@ -419,6 +420,7 @@ Result RunString(VM* vm, const char* source) {
 
   // Create a temproary module for the source.
   Module* module = newModule(vm);
+  module->context = newContext(vm);
   vmPushTempRef(vm, &module->_super); // module.
   {
     module->path = newString(vm, "@(String)");
@@ -450,6 +452,7 @@ Result RunStringPcall(VM* vm, const char* source) {
 
   // Create a temporary module for the source.
   Module* module = newModule(vm);
+  module->context = newContext(vm);
   vmPushTempRef(vm, &module->_super); // module.
   {
     module->path = newString(vm, "@(String)");
@@ -539,6 +542,7 @@ Result RunFileWithModule(VM* vm, Module* module, const char* path) {
 
   if (is_null_module) {
     module = newModule(vm);
+    module->context = newContext(vm);
     vmPushTempRef(vm, &module->_super); // module.
   }
   {
@@ -549,66 +553,17 @@ Result RunFileWithModule(VM* vm, Module* module, const char* path) {
     module->path = script_path;
     vmPopTempRef(vm); // script_path.
 
-    const char* _path = module->path->data;
-    LoadScriptResult load_result = vm->config.load_script_fn(vm, _path);
-    char* source = load_result.content;
-    if (source == NULL) {
-      result = RESULT_COMPILE_ERROR;
-      if (vm->config.stderr_write != NULL) {
-        if (vm->config.use_ansi_escape) {
-          vm->config.stderr_write(vm,
-                                  "\x1b[31mError\x1b[0m loading script at \"");
-        } else {
-          vm->config.stderr_write(vm, "Error loading script at \"");
-        }
-        vm->config.stderr_write(vm, _path);
-        if (load_result.status != RESULT_SUCCESS) {
-          vm->config.stderr_write(vm, "\" (bytecode: ");
-          vm->config.stderr_write(vm, saynaa_status_message(load_result.status));
-          vm->config.stderr_write(vm, ")\n");
-        } else {
-          vm->config.stderr_write(vm, "\"\n");
-        }
-      }
-    } else {
-      if (load_result.is_bytecode) {
-        initializeModule(vm, module, true);
-        SaynaaBytecodeHeader header;
-        Result status = saynaa_bytecode_decode_header(
-            (const uint8_t*) source, SAYNAA_BYTECODE_HEADER_SIZE, &header);
-        if (status == RESULT_SUCCESS) {
-          const uint8_t* payload = (const uint8_t*) source + SAYNAA_BYTECODE_HEADER_SIZE;
-          status = saynaa_bytecode_deserialize_module(vm, module, payload,
-                                                      header.bytecode_size);
-        }
-
-        if (status != RESULT_SUCCESS) {
-          result = RESULT_COMPILE_ERROR;
-          if (!VM_HAS_ERROR(vm)) {
-            VM_SET_ERROR(vm, stringFormat(vm, "Bytecode deserialize failed: $",
-                                          saynaa_status_message(status), false));
-          }
-        } else {
-          result = RESULT_SUCCESS;
-        }
-      } else {
-        initializeModule(vm, module, true);
-        result = compile(vm, module, source, NULL);
-      }
-
-      Realloc(vm, source, 0);
+    if (!importScript(vm, module, script_path, false, true)) {
+      printf("compile error");
+      return RESULT_COMPILE_ERROR;
     }
 
-    if (result == RESULT_SUCCESS) {
-      vmRegisterModule(vm, module, module->path);
-    }
+    vmRegisterModule(vm, module, module->path);
   }
+
   if (is_null_module) {
     vmPopTempRef(vm); // module.
   }
-
-  if (result != RESULT_SUCCESS)
-    return result;
 
   // Module initialized needs to be set to true just before executing their
   // main function to avoid cyclic inclusion crash the VM.
@@ -633,6 +588,7 @@ Result CompileStringToBytecode(VM* vm, const char* source, SaynaaBytecode* out) 
   saynaa_bytecode_init(out);
 
   Module* module = newModule(vm);
+  module->context = newContext(vm);
   vmPushTempRef(vm, &module->_super); // module.
 
   module->path = newString(vm, "@(Bytecode)");
@@ -683,8 +639,8 @@ Closure* moduleGetMainFunction(VM* vm, Module* module) {
                                         (uint32_t) strlen(IMPLICIT_MAIN_NAME));
   if (main_index == -1)
     return NULL;
-  ASSERT_INDEX(main_index, (int) module->globals.count);
-  Var main_fn = module->globals.data[main_index];
+  ASSERT_INDEX(main_index, (int) module->context->globals.count);
+  Var main_fn = module->context->globals.data[main_index];
   ASSERT(IS_OBJ_TYPE(main_fn, OBJ_CLOSURE), OOPS);
   return (Closure*) AS_OBJ(main_fn);
 }

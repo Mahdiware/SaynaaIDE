@@ -81,12 +81,6 @@ public class JavaBridge {
     }
 
     int type = saynaa.getSlotType(slot);
-    int pinnedHandleId = 0;
-    if (type == Saynaa.SLOT_TYPE_MODULE || type == Saynaa.SLOT_TYPE_CLOSURE || type == Saynaa.SLOT_TYPE_OBJECT
-        || type == Saynaa.SLOT_TYPE_METHOD_BIND || type == Saynaa.SLOT_TYPE_FIBER
-        || type == Saynaa.SLOT_TYPE_CLASS || type == Saynaa.SLOT_TYPE_RANGE) {
-      pinnedHandleId = saynaa.captureSlotHandle(slot);
-    }
 
     switch (type) {
     case Saynaa.SLOT_TYPE_NULL:
@@ -102,51 +96,30 @@ public class JavaBridge {
       return saynaa.getSlotString(slot);
 
     case Saynaa.SLOT_TYPE_POINTER:
-    case Saynaa.SLOT_TYPE_INSTANCE:
       return saynaa.getSlotJavaObject(slot);
-
-    case Saynaa.SLOT_TYPE_LIST: {
-      int size = saynaa.getListSize(slot);
-      ArrayList<Object> out = new ArrayList<>(Math.max(size, 0));
-
-      for (int i = 0; i < size; i++) {
-        int valueSlot = scratchSlot;
-        // saynaa.reserveSlots(valueSlot + 1);
-
-        if (saynaa.listGetToSlot(slot, i, valueSlot)) {
-          // Offsets the child scratch space by 1 to protect valueSlot
-          out.add(slotToJavaInternal(saynaa, valueSlot, scratchSlot + 1, depth + 1));
-        } else {
-          out.add(null);
-        }
+    case Saynaa.SLOT_TYPE_INSTANCE: {
+      if (saynaa.isSlotJava(slot)) {
+        return saynaa.getSlotJavaObject(slot);
+      } else {
+        return new SaynaaInstance(saynaa, type, saynaa.captureSlotHandle(slot));
       }
-      return out;
+    }
+    case Saynaa.SLOT_TYPE_LIST: {
+      return new SaynaaList(saynaa, type, saynaa.captureSlotHandle(slot));
     }
 
     case Saynaa.SLOT_TYPE_MAP: {
-      int size = saynaa.getMapSize(slot);
-      HashMap<Object, Object> out = new HashMap<>(Math.max(size, 0));
-
-      for (int i = 0; i < size; i++) {
-        int keySlot = scratchSlot;
-        int valueSlot = scratchSlot + 1;
-        // saynaa.reserveSlots(valueSlot + 1);
-
-        if (saynaa.mapEntryToSlots(slot, i, keySlot, valueSlot)) {
-          // Offsets child scratch space by 2 to protect both key and value slots
-          Object key = slotToJavaInternal(saynaa, keySlot, scratchSlot + 2, depth + 1);
-          Object value = slotToJavaInternal(saynaa, valueSlot, scratchSlot + 2, depth + 1);
-          out.put(key, value);
-        }
-      }
-      return out;
+      return new SaynaaMap(saynaa, type, saynaa.captureSlotHandle(slot));
     }
 
+    case Saynaa.SLOT_TYPE_CLASS:
+      return new SaynaaClass(saynaa, type, saynaa.captureSlotHandle(slot));
+
     case Saynaa.SLOT_TYPE_MODULE:
-      return new SaynaaModule(saynaa, slot, pinnedHandleId);
+      return new SaynaaModule(saynaa, type, saynaa.captureSlotHandle(slot));
 
     default:
-      return new SaynaaObject(saynaa, slot, pinnedHandleId);
+      return new SaynaaObject(saynaa, type, saynaa.captureSlotHandle(slot));
     }
   }
 
@@ -580,64 +553,44 @@ public class JavaBridge {
     // HashMap<Object, Object> out = new HashMap<>(Math.max(size, 0));
     // convert into map
 
-    if (normalized instanceof Map) {
-      saynaa.newMap(slot);
-      Map<?, ?> map = (Map<?, ?>) normalized;
-      for (Map.Entry<?, ?> entry : map.entrySet()) {
-        int keySlot = saynaa.nextSlot();
-        int valueSlot = saynaa.nextSlot();
+    // if (normalized instanceof Map) {
+    //   saynaa.newMap(slot);
+    //   Map<?, ?> map = (Map<?, ?>) normalized;
+    //   for (Map.Entry<?, ?> entry : map.entrySet()) {
+    //     int keySlot = saynaa.nextSlot();
+    //     int valueSlot = saynaa.nextSlot();
 
-        if (!pushToSlot(saynaa, keySlot, entry.getKey())) {
-          saynaa.freeSlot(keySlot);
-          saynaa.freeSlot(valueSlot);
-          return false;
-        }
+    //     if (!pushToSlot(saynaa, keySlot, entry.getKey())) {
+    //       saynaa.freeSlot(keySlot);
+    //       saynaa.freeSlot(valueSlot);
+    //       return false;
+    //     }
 
-        if (!pushToSlot(saynaa, valueSlot, entry.getValue())) {
-          saynaa.freeSlot(keySlot);
-          saynaa.freeSlot(valueSlot);
-          return false;
-        }
+    //     if (!pushToSlot(saynaa, valueSlot, entry.getValue())) {
+    //       saynaa.freeSlot(keySlot);
+    //       saynaa.freeSlot(valueSlot);
+    //       return false;
+    //     }
 
-        if (!saynaa.mapSet(slot, keySlot, valueSlot)) {
-          saynaa.freeSlot(keySlot);
-          saynaa.freeSlot(valueSlot);
-          return false;
-        }
+    //     if (!saynaa.mapSet(slot, keySlot, valueSlot)) {
+    //       saynaa.freeSlot(keySlot);
+    //       saynaa.freeSlot(valueSlot);
+    //       return false;
+    //     }
 
-        saynaa.freeSlot(keySlot);
-        saynaa.freeSlot(valueSlot);
-      }
-      return true;
-    }
-
-    // ArrayList<Object>
-    if (normalized instanceof List) {
-      saynaa.newList(slot);
-      List<?> list = (List<?>) normalized;
-      for (Object item : list) {
-        int itemSlot = saynaa.nextSlot();
-        if (!pushToSlot(saynaa, itemSlot, item)) {
-          saynaa.freeSlot(itemSlot);
-          return false;
-        }
-        if (!saynaa.listInsert(slot, -1, itemSlot)) {
-          saynaa.freeSlot(itemSlot);
-          return false;
-        }
-      }
-      return true;
-    }
+    //     saynaa.freeSlot(keySlot);
+    //     saynaa.freeSlot(valueSlot);
+    //   }
+    //   return true;
+    // }
 
     // SaynaaModule
     if (normalized instanceof SaynaaModule) {
       SaynaaModule module = (SaynaaModule) normalized;
       if (module.getHandleId() > 0) {
         saynaa.setSlotPinnedHandle(slot, module.getHandleId());
-      } else {
-        saynaa.setSlotHandle(slot, module.getSlot());
+        return true;
       }
-      return true;
     }
 
     // SaynaaObject
@@ -645,10 +598,8 @@ public class JavaBridge {
       SaynaaObject object = (SaynaaObject) normalized;
       if (object.getHandleId() > 0) {
         saynaa.setSlotPinnedHandle(slot, object.getHandleId());
-      } else {
-        saynaa.setSlotHandle(slot, object.getSlot());
+        return true;
       }
-      return true;
     }
 
     return false;

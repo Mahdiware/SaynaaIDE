@@ -5,7 +5,7 @@
 
 #pragma once
 
-#include "../cli/saynaa.h"
+#include "../saynaa/saynaa.h"
 #include "saynaa_common.h"
 
 // Commonly used C standard headers across the sources. Don't include any

@@ -7,6 +7,11 @@
 
 #include <ctype.h>
 #include <string.h>
+#include <sys/stat.h>
+
+#ifdef _WIN32
+#include <windows.h>
+#endif
 
 #ifdef _WIN32
 #define SEPARATOR '\\'
@@ -14,6 +19,40 @@
 #else
 #define SEPARATOR '/'
 #define ALT_SEPARATOR '\\'
+#endif
+
+#if defined(_MSC_VER) || (defined(_WIN32) && defined(__TINYC__))
+#include <direct.h>
+#include <io.h>
+
+// access() function flag defines for windows.
+#define F_OK 0
+#define W_OK 2
+#define R_OK 4
+
+#define access _access
+#define getcwd _getcwd
+#define lstat stat
+#define stat _stat
+
+#else
+#include <unistd.h>
+#endif
+
+#ifdef _WIN32
+#ifndef S_ISDIR
+#define S_ISDIR(m) (((m) & _S_IFMT) == _S_IFDIR)
+#endif
+#ifndef S_ISREG
+#define S_ISREG(m) (((m) & _S_IFMT) == _S_IFREG)
+#endif
+#else
+#ifndef S_ISDIR
+#define S_ISDIR(m) (((m) & S_IFMT) == S_IFDIR)
+#endif
+#ifndef S_ISREG
+#define S_ISREG(m) (((m) & S_IFMT) == S_IFREG)
+#endif
 #endif
 
 static bool is_sep(char c) {
@@ -24,11 +63,33 @@ static bool is_sep(char c) {
 #endif
 }
 
-char saynaa_path_separator(void) {
+bool path_is_file(const char* path) {
+  struct stat st;
+
+  if (stat(path, &st) != 0)
+    return false;
+
+  return S_ISREG(st.st_mode);
+}
+
+bool path_is_dir(const char* path) {
+  struct stat st;
+
+  if (stat(path, &st) != 0)
+    return false;
+
+  return S_ISDIR(st.st_mode);
+}
+
+bool path_is_exists(const char* path) {
+  return access(path, F_OK) == 0;
+}
+
+char path_separator(void) {
   return SEPARATOR;
 }
 
-bool saynaa_path_is_absolute(const char* path) {
+bool path_is_absolute(const char* path) {
   if (!path || !*path)
     return false;
 #ifdef _WIN32
@@ -75,7 +136,7 @@ static void terminate(char* dest, size_t dest_sz, size_t pos) {
   }
 }
 
-size_t saynaa_path_normalize(const char* path, char* buffer, size_t buffer_size) {
+size_t path_normalize(const char* path, char* buffer, size_t buffer_size) {
   if (!path || !*path) {
     size_t new_len = append(buffer, buffer_size, 0, ".", 1);
     terminate(buffer, buffer_size, new_len);
@@ -85,7 +146,7 @@ size_t saynaa_path_normalize(const char* path, char* buffer, size_t buffer_size)
   size_t read_pos = 0;
   size_t write_pos = 0;
 
-  bool is_abs = saynaa_path_is_absolute(path);
+  bool is_abs = path_is_absolute(path);
   if (is_abs) {
 #ifdef _WIN32
     if (is_sep(path[0]) && is_sep(path[1])) {
@@ -248,7 +309,7 @@ size_t saynaa_path_normalize(const char* path, char* buffer, size_t buffer_size)
   return write_pos;
 }
 
-size_t saynaa_path_join(const char* path_a, const char* path_b, char* buffer, size_t buffer_size) {
+size_t path_join(const char* path_a, const char* path_b, char* buffer, size_t buffer_size) {
   if (buffer != path_a) {
     size_t len_a = strlen(path_a);
     if (len_a >= buffer_size)
@@ -284,18 +345,17 @@ size_t saynaa_path_join(const char* path_a, const char* path_b, char* buffer, si
     terminate(buffer, buffer_size, pos);
   }
 
-  return saynaa_path_normalize(buffer, buffer, buffer_size);
+  return path_normalize(buffer, buffer, buffer_size);
 }
 
-size_t saynaa_path_get_absolute(const char* base, const char* path,
-                                char* buffer, size_t buffer_size) {
-  if (saynaa_path_is_absolute(path)) {
-    return saynaa_path_normalize(path, buffer, buffer_size);
+size_t path_get_absolute(const char* base, const char* path, char* buffer, size_t buffer_size) {
+  if (path_is_absolute(path)) {
+    return path_normalize(path, buffer, buffer_size);
   }
-  return saynaa_path_join(base, path, buffer, buffer_size);
+  return path_join(base, path, buffer, buffer_size);
 }
 
-void saynaa_path_dirname(const char* path, size_t* length) {
+void path_dirname(const char* path, size_t* length) {
   if (!path) {
     *length = 0;
     return;
@@ -311,7 +371,7 @@ void saynaa_path_dirname(const char* path, size_t* length) {
     *length = 0;
 }
 
-void saynaa_path_basename(const char* path, const char** basename, size_t* length) {
+void path_basename(const char* path, const char** basename, size_t* length) {
   if (!path) {
     *basename = NULL;
     *length = 0;
@@ -336,10 +396,10 @@ void saynaa_path_basename(const char* path, const char** basename, size_t* lengt
   *length = end - start;
 }
 
-bool saynaa_path_extension(const char* path, const char** extension, size_t* length) {
+bool path_extension(const char* path, const char** extension, size_t* length) {
   const char* base;
   size_t base_len;
-  saynaa_path_basename(path, &base, &base_len);
+  path_basename(path, &base, &base_len);
 
   if (base_len == 0)
     return false;
@@ -360,8 +420,8 @@ bool saynaa_path_extension(const char* path, const char** extension, size_t* len
   return false;
 }
 
-size_t saynaa_path_get_relative(const char* base_directory, const char* path,
-                                char* buffer, size_t buffer_size) {
+size_t path_get_relative(const char* base_directory, const char* path,
+                         char* buffer, size_t buffer_size) {
   const char* b = base_directory;
   const char* p = path;
   const char* last_sep_b = b;

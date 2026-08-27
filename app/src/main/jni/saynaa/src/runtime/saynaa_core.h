@@ -160,6 +160,11 @@ void varsetSubscript(VM* vm, Var on, Var key, Var value);
 // Returns ture to continue loop, false to break.
 bool varIterate(VM* vm, Var seq, Var* iterator, Var* value);
 
+Var varSprintf(VM* vm, String* string, List* args);
+
+// Delete an attribute from an object. If [skipDelattr] is true, _delattr is skipped.
+void varDelAttrib(VM* vm, Var on, String* attrib, bool skipDelattr);
+
 #ifdef __cplusplus
 } // extern "C"
 #endif

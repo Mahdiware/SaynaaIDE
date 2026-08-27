@@ -30,6 +30,7 @@ public class JavaModule {
       saynaa.moduleSetGlobal(module, "getField", FieldHelper.class, "getFieldValue");
       saynaa.moduleSetGlobal(module, "setField", FieldHelper.class, "setFieldValue");
       saynaa.moduleSetGlobal(module, "tostring", this, "javaToString");
+      saynaa.moduleSetGlobal(module, "testing", this, "testing");
       saynaa.moduleSetGlobal(module, "call", MethodHelper.class, "call");
       saynaa.moduleSetGlobal(module, "instanceof", this, "instanceOf");
       saynaa.moduleSetGlobal(module, "length", this, "lengthOf");
@@ -41,6 +42,10 @@ public class JavaModule {
       return false;
     }
     return true;
+  }
+
+  public Object testing(Object object) {
+    return object;
   }
 
   public Object newJavaObject(Object classOrName, Object... args) {
