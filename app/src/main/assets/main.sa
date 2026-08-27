@@ -127,6 +127,7 @@ DemoLayout = {
     id: "DemoImage",
     src: "icon.png",
     layout_width: "48dp",
+    visibility: "visible",
     layout_height: "48dp",
     layout_gravity: "bottom|right",
     layout_margin: "16dp"
@@ -134,10 +135,11 @@ DemoLayout = {
 }
 
 dd = {text: '2) Ahmed', textColor: "#254898", onClick: function() toast("Ahmed clicked") end}
+bb = {icon: 'image2.png', visibility: "invisible"}
 
 AdapterData = [
   { text: '1) Mahdi', icon: 'image1.png' },
-  { text: dd, icon: 'image2.png' },
+  { text: dd, icon: bb },
   { text: '3) Ali', icon: 'image3.png' },
 
   { text: '4) Hassan', icon: 'image1.png' },
@@ -189,6 +191,7 @@ AdapterItem = {
     id: 'text',
     textSize: '16sp',
     textColor: '#111111',
+    visibility: 'visible',
     layout_width: 'wrap_content',
     layout_height: 'wrap_content'
   }

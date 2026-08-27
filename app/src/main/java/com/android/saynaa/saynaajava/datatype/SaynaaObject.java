@@ -18,19 +18,20 @@ public class SaynaaObject {
     return handleId;
   }
 
-  public Object getme(String attrName) {
-    return getme(attrName, true);
+  public String toString() {
+    Object result = saynaa.callGlobalFunction("str", this);
+    if(result instanceof String)
+      return (String)result;
+    
+    return String.valueOf(result);
   }
 
-  public void setTag(Object value) {
-    this.tag = value;
+  public Object getattr(String attrName) {
+    return getattr(attrName, true);
   }
 
-  public Object getTag() {
-    return this.tag;
-  }
 
-  public Object getme(String attrName, boolean skipGetter) {
+  public Object getattr(String attrName, boolean skipGetter) {
     return saynaa.objGetattr(handleId, attrName, skipGetter);
   }
 }

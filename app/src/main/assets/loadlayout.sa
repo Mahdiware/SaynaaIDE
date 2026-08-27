@@ -25,6 +25,7 @@ Context = java.bindClass('android.content.Context')
 DisplayMetrics = java.bindClass('android.util.DisplayMetrics')
 BitmapFactory = java.bindClass('android.graphics.BitmapFactory')
 BitmapDrawable = java.bindClass('android.graphics.drawable.BitmapDrawable')
+CompoundButton = java.bindClass('android.widget.CompoundButton')
 
 RelativeLayoutRule = {
   layout_above: 2,
@@ -259,6 +260,7 @@ class LoadLayout
     
     this.module = null
     this.next_id = 0x7f000000
+    this.default_nodes = {}
     this.ids = {}
     this.idmap = {}
   end
@@ -787,7 +789,10 @@ class LoadLayout
     visibility = node.get('visibility')
     if visibility != null then
       if visibility == 'visible' then view.setVisibility(0) end
-      if visibility == 'invisible' then view.setVisibility(4) end
+      if visibility == 'invisible' then
+        debug("called invisible node -> $node")
+        view.setVisibility(4)
+      end
       if visibility == 'gone' then view.setVisibility(8) end
     end
   
@@ -891,6 +896,9 @@ class LoadLayout
       view.setId(this.next_id)
       this.ids.setattr(node_id, view)
       this.idmap.setattr(node_id, this.next_id)
+      
+      this.default_nodes.setattr(node_id, node) // ADD THIS: Save the original layout blueprint
+      
       if this.module is Module then
         this.module.define(node_id, view)
       end
@@ -911,6 +919,32 @@ class LoadLayout
     end
   
     return view
+  end
+
+  function reset_views_to_defaults(key, view)
+    default_node = this.default_nodes.get(key)
+    debug("default_node for key $key is: $default_node")
+
+    if java.instanceof(view, View) then
+      // 1. Hard reset the most common properties you change dynamically
+      view.setVisibility(0) // Default to visible
+      
+      if java.instanceof(view, TextView) then 
+        view.setText("") 
+      end
+      if java.instanceof(view, ImageView) then 
+        view.setImageDrawable(null) 
+      end
+      if java.instanceof(view, CompoundButton) then 
+        view.setChecked(false) 
+      end
+      
+      // 2. Re-apply the original static layout attributes
+      if default_node != null then
+        this.apply_attrs(view, default_node)
+        this.apply_auto_attrs(view, default_node)
+      end
+    end
   end
   
   
@@ -933,6 +967,7 @@ class LoadLayout
       end
 
     elif value is Map then
+      debug("value is map $value")
       this.apply_attrs(view, value)
       this.apply_auto_attrs(view, value)
     end
@@ -944,13 +979,17 @@ class LoadLayout
     end
     
     keys = data.keys
-    debug("debug mode in bind: $keys")
+    debug("debug mode in bind: $data")
 
     for key in keys do
       view = this.ids.get(key)
+      // ADD THIS: Wipe old data and reset to original layout state first!
+      this.reset_views_to_defaults(key, view)
       debug("debug mode in bind: $key -> $view, and id: ${this.ids}")
 
-      if view != null then
+      if java.instanceof(view, View) then
+        debug("debug mode in bind: $data")
+        debug("visibility is: ${view.getVisibility()}")
         this.bind_value(view, data.get(key))
       end
     end

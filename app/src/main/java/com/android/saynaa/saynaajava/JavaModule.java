@@ -126,6 +126,8 @@ public class JavaModule {
     if (obj instanceof Class) {
       return ((Class<?>) obj).getName();
     }
+    if (obj == null)
+      return "Null";
     return obj.getClass().getName();
   }
 

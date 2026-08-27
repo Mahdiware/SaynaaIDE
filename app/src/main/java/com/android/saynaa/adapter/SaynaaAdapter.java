@@ -14,6 +14,7 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.animation.Animation;
+import android.widget.AbsListView;
 import android.widget.BaseAdapter;
 import android.widget.Filter;
 import android.widget.Filterable;
@@ -238,17 +239,14 @@ public class SaynaaAdapter extends BaseAdapter implements Filterable {
     SaynaaInstance holder;
 
     Object row = mData.get(position);
-    SaynaaMap rowMap = row instanceof SaynaaMap ? (SaynaaMap) row : null;
 
     if (convertView == null) {
       try {
         holder = LoadLayout.newInstance(mContext);
-        view = (View) holder.call("createView", mItems);
-
+        view = (View) holder.call("createView", mItems, AbsListView.class);
         view.setTag(holder);
       } catch (RuntimeException e) {
         Log.e("SaynaaAdapter", "Failed to compile row layout inside getView()", e);
-        e.printStackTrace();
         return new View(mContext);
       }
     } else {
@@ -256,18 +254,16 @@ public class SaynaaAdapter extends BaseAdapter implements Filterable {
       holder = (SaynaaInstance) view.getTag();
     }
 
-    holder.call("bind", rowMap);
+    // ALWAYS bind, even when updating, to prevent stale data on recycled views
+    holder.call("bind", row);
 
-    if (mUpdating) {
-      return view;
-    }
-
-    if (mAnimationFactory != null && view != null) { // Fixed: check 'view', not 'convertView'
-      Animation animation = mAnimationCache.get(view);
+    // Key animation by position rather than the recycled view instance
+    if (mAnimationFactory != null) {
+      Animation animation = mAnimationCache.get(position);
       if (animation == null) {
         animation = mAnimationFactory.createAnimation();
         if (animation != null) {
-          mAnimationCache.put(view, animation);
+          //gmAnimationCache.put(position, animation);
         }
       }
       if (animation != null) {
