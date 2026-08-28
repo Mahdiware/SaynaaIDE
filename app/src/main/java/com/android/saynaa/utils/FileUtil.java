@@ -244,6 +244,17 @@ public class FileUtil {
       }
     }
   }
+
+  public static void copy(InputStream input, OutputStream output) throws IOException {
+    byte[] buffer = new byte[8192];
+    int n;
+
+    while ((n = input.read(buffer)) != -1) {
+      output.write(buffer, 0, n);
+    }
+
+    output.flush();
+  }
   
   public static void copyFile(String sourcePath, String destPath) {
     if (!isExistFile(sourcePath)) return;
@@ -256,12 +267,7 @@ public class FileUtil {
       fis = new FileInputStream(sourcePath);
       fos = new FileOutputStream(destPath, false);
       
-      byte[] buff = new byte[1024];
-      int length = 0;
-      
-      while ((length = fis.read(buff)) > 0) {
-        fos.write(buff, 0, length);
-      }
+      copy(fis, fos);
     } catch (IOException e) {
       e.printStackTrace();
     } finally {
