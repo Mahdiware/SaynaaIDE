@@ -13,7 +13,7 @@ JNIEXPORT void JNICALL Java_com_android_saynaa_saynaajava_Saynaa_execute(JNIEnv*
 JNIEXPORT jobject JNICALL Java_com_android_saynaa_saynaajava_Saynaa_invokeCallbackMethodWithResultNative(
     JNIEnv* env, jobject thiz, jint callbackId, jstring methodName, jobjectArray args);
 JNIEXPORT jobject JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1getGlobal(
-    JNIEnv* env, jobject thiz, jstring name);
+    JNIEnv* env, jobject thiz, jint handleId, jstring name);
 JNIEXPORT jboolean JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1setGlobal(
     JNIEnv* env, jobject thiz, jstring name, jobject value);
 JNIEXPORT jboolean JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1setGlobalFromSlot(
@@ -54,7 +54,5 @@ JNIEXPORT jboolean JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1lis
     JNIEnv* env, jobject thiz, jint listSlot, jint index, jint valueSlot);
 JNIEXPORT jint JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1getMapSize(
     JNIEnv* env, jobject thiz, jint mapSlot);
-JNIEXPORT jboolean JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1mapEntryToSlots(
-    JNIEnv* env, jobject thiz, jint mapSlot, jint entryIndex, jint keySlot, jint valueSlot);
 JNIEXPORT void JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1close(JNIEnv* env, jobject thiz);
 JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void* reserved);

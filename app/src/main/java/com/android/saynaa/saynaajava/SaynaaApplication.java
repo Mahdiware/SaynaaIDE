@@ -236,12 +236,6 @@ public class SaynaaApplication extends Application implements SaynaaContext {
   }
 
   @Override
-  public Object doFile(String path, Object[] arg) {
-    // TODO: Implement this method
-    return null;
-  }
-
-  @Override
   public void sendMsg(String msg) {
     // TODO: Implement this method
     Toast.makeText(this, msg, Toast.LENGTH_SHORT).show();

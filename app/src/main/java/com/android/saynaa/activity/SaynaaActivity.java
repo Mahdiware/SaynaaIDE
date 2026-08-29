@@ -15,6 +15,7 @@ import android.os.Message;
 import android.os.StrictMode;
 import android.util.DisplayMetrics;
 import android.util.Log;
+import android.util.TypedValue;
 import android.view.ContextMenu;
 import android.view.KeyEvent;
 import android.view.Menu;
@@ -31,13 +32,13 @@ import android.widget.TextView;
 import android.widget.Toast;
 import com.android.saynaa.saynaajava.*;
 import com.android.saynaa.saynaajava.JavaModule;
+import com.android.saynaa.saynaajava.datatype.*;
 import com.android.saynaa.saynaajava.reflection.ReflectionFinder;
 import com.android.saynaa.utils.FileUtil;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.util.ArrayList;
 import java.util.HashMap;
-import android.util.TypedValue;
 import java.util.Map;
 
 /**
@@ -49,7 +50,6 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
   public static final String DATA = "data";
   public static final String NAME = "name";
   private static final String TAG = "SaynaaActivity";
-  private static final String LOADLAYOUT_NAME = "loadlayout";
 
   // Compatibility-style properties (mirroring SaynaaActivity naming where possible)
   private static final ArrayList<String> prjCache = new ArrayList<>();
@@ -68,7 +68,6 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
 
   private int activityFlags = 0;
   protected boolean isCreate = false;
-  protected boolean isSetViewed = false;
   protected boolean DebugMode = false;
 
   private ArrayList<SaynaaGcable> gclist = new ArrayList<SaynaaGcable>();
@@ -121,7 +120,10 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
       }
       saynaaDir = f.getParent();
 
-      initSaynaa();
+      saynaa = SaynaaFactory.newState(this);
+      new JavaModule(saynaa).create();
+      saynaa.setGlobal("activity", this);
+
       dexLoader = new SaynaaDexLoader(this);
       dexLoader.loadLibs();
       ReflectionFinder.setExtraClassLoaders(dexLoader.getClassLoaders());
@@ -131,14 +133,16 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
         int initResult = saynaa.runFile(initFile.getAbsolutePath());
         if (initResult != 0) {
           sendMsg("Startup failed @ " + initFile.getAbsolutePath() + "\n");
-          //setContentView(layout);
+          Log.e(TAG, "Failed to run init.sa @ " + initFile.getAbsolutePath() + ", result: " + initResult);
+          // setContentView(layout);
           return;
         }
       }
       int result = saynaa.runFile(saynaaPath);
       if (result != 0) {
+        Log.e(TAG, "Failed to run main.sa @ " + saynaaPath + ", result: " + result);
         sendMsg("Startup failed @ " + saynaaPath + "\n");
-        //setContentView(layout);
+        // setContentView(layout);
         return;
       }
 
@@ -166,26 +170,9 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
     } catch (Throwable t) {
       Log.e(TAG, "onCreate failed", t);
       sendMsg("onCreate error: " + t.toString());
-      //setContentView(layout);
+      // setContentView(layout);
     }
-    // runTest();
   }
-
-  // public void runTest() {
-  //   try {
-  //     SaynaaModule module2 = saynaa.newModule("hellomodule");
-
-  //     File testFile = new File(saynaaDir == null ? localDir : saynaaDir, "test.sa");
-  //     int result = saynaa.runFile(module2, testFile.getAbsolutePath());
-  //     // print result
-  //     if (result != 0) {
-  //       sendMsg("Failed to run test.sa @ " + testFile.getAbsolutePath() + "\n");
-  //     }
-  //   } catch (Exception e) {
-  //     Log.e(TAG, "runTest failed", e);
-  //     showScriptError("runTest error", e.getMessage());
-  //   }
-  // }
 
   @Override
   public void onReceive(Context context, Intent intent) {
@@ -194,14 +181,14 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
 
   @Override
   protected void onStart() {
-    super.onStart();
     runFunc("onStart");
+    super.onStart();
   }
 
   @Override
   protected void onResume() {
-    super.onResume();
     runFunc("onResume");
+    super.onResume();
   }
 
   @Override
@@ -282,31 +269,13 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
     return SaynaaApplication.getInstance().setSharedData(key, value);
   }
 
-  public Object getModule() {
+  public SaynaaModule getModule() {
     try {
-      return saynaa.getModule();
+      return saynaa.mainModule;
     } catch (Exception e) {
       e.printStackTrace();
       sendError("getModule", e);
       return null;
-    }
-  }
-
-  private void initSaynaa() {
-    saynaa = getOrCreateState();
-    new JavaModule(saynaa).create();
-
-    ArrayList<Object> javaList = new ArrayList<>();
-    javaList.add("alpha");
-    javaList.add(123);
-    HashMap<String, Object> javaMap = new HashMap<>();
-    javaMap.put("flag", true);
-    javaMap.put("count", 7);
-    try {
-      saynaa.setGlobal("activity", this);
-      saynaa.chdir(saynaaDir == null ? localDir : saynaaDir);
-    } catch (Exception e) {
-      sendMsg("initSaynaa error: " + e.getMessage());
     }
   }
 
@@ -325,7 +294,6 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
   }
 
   public SaynaaDexClassLoader loadDex(String path) throws SaynaaException {
-    saynaa = getOrCreateState();
     if (dexLoader == null) {
       dexLoader = new SaynaaDexLoader(this);
     }
@@ -461,33 +429,22 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
     return super.onContextItemSelected(item);
   }
 
-  public void setContentView(HashMap<Object, Object> layout) {
-    Object result = runFunc(LOADLAYOUT_NAME, this, layout);
-    if (result instanceof View) {
-      setContentView((View)result);
-    }
-  }
-
   @Override
   public void setContentView(int layoutResID) {
-    isSetViewed = true;
     super.setContentView(layoutResID);
   }
 
   @Override
   public void setContentView(View view) {
-    isSetViewed = true;
     super.setContentView(view);
   }
 
   @Override
   public void setContentView(View view, ViewGroup.LayoutParams params) {
-    isSetViewed = true;
     super.setContentView(view, params);
   }
 
   public void setFragment(android.app.Fragment fragment) {
-    isSetViewed = true;
     getFragmentManager().beginTransaction().replace(android.R.id.content, fragment).commit();
   }
 
@@ -540,7 +497,7 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
     if (key == null || key.trim().isEmpty())
       return;
     try {
-      getOrCreateState().setGlobal(key, value);
+      saynaa.setGlobal(key, value);
     } catch (Exception e) {
       sendMsg("set error: " + e.getMessage());
     }
@@ -550,7 +507,7 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
     if (key == null || key.trim().isEmpty())
       return null;
     try {
-      return getOrCreateState().getGlobal(key);
+      return saynaa.getGlobal(key);
     } catch (Exception e) {
       sendMsg("get error: " + e.getMessage());
       return null;
@@ -632,41 +589,12 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
     return dir.getAbsolutePath();
   }
 
-  public Object doFile(String filePath, Object[] args) {
-    try {
-      getOrCreateState();
-
-      if (filePath.charAt(0) != '/') {
-        filePath = getSaynaaDir() + "/" + filePath;
-      }
-
-      File f = new File(filePath);
-      if (!f.exists()) {
-        throw new FileNotFoundException(filePath);
-      }
-
-      int result = saynaa.runFile(filePath);
-      if (result != 0) {
-        sendMsg("doFile failed @ " + filePath + "\n");
-      }
-
-      return null;
-    } catch (Exception e) {
-      sendError("doFile error", e);
-      return null;
-    } catch (Throwable t) {
-      sendMsg("doFile error " + t.toString());
-      return null;
-    }
-  }
-
   public Object runFunc(String funcName, Object... args) {
     if (funcName == null || funcName.trim().isEmpty()) {
       return null;
     }
 
     try {
-      saynaa = getOrCreateState();
       int id = saynaa.getGlobalFunctionId(funcName);
 
       if (id != -1) {
@@ -680,7 +608,7 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
     }
     return null;
   }
-  
+
   public void setDebugMode(boolean mode) {
     DebugMode = mode;
   }
@@ -695,14 +623,12 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
       error += "\n";
     }
 
-    // Set the layout if the view has NOT been set yet
-    // OR DebugMode is enabled.
-    if (!isSetViewed || DebugMode) {
+    if (DebugMode) {
       setContentView(layout);
       sendMsg(error);
     }
   }
-  
+
   public void addActivityFlag(int flag) {
     activityFlags |= flag;
   }
@@ -813,7 +739,7 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
   public Menu getOptionsMenu() {
     return optionsMenu;
   }
-  
+
   private int getThemeColor(int attr) {
     TypedValue value = new TypedValue();
     getTheme().resolveAttribute(attr, value, true);
@@ -857,13 +783,6 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
 
   @Override
   public Saynaa getSaynaa() {
-    return getOrCreateState();
-  }
-
-  private Saynaa getOrCreateState() {
-    if (saynaa == null || saynaa.isClosed()) {
-      saynaa = SaynaaFactory.newState(this);
-    }
     return saynaa;
   }
 

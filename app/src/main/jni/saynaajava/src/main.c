@@ -483,6 +483,7 @@ void java_ref_destructor(void* ptr) {
 JavaRef* make_java_ref(JNIEnv* env, JavaVM* jvm, jobject obj) {
   if (obj == NULL)
     return NULL;
+
   JavaRef* ref = (JavaRef*) malloc(sizeof(JavaRef));
   if (ref == NULL)
     return NULL;

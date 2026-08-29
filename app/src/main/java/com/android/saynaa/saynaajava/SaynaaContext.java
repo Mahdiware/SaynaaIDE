@@ -26,8 +26,6 @@ public interface SaynaaContext {
 
   public Saynaa getSaynaa();
 
-  public Object doFile(String path, Object... arg);
-
   public void sendMsg(String msg);
 
   public void sendError(String title, Exception msg);

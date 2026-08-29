@@ -1,1 +1,2 @@
 print("Hello, World!")
+debug("Hello, World! ${_module}")

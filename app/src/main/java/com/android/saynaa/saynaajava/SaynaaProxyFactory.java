@@ -2,10 +2,10 @@ package com.android.saynaa.saynaajava;
 
 import android.util.Log;
 import android.view.View;
+import com.android.saynaa.saynaajava.reflection.ReflectionFinder;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
-import com.android.saynaa.saynaajava.reflection.ReflectionFinder;
 
 public final class SaynaaProxyFactory {
   private static final String TAG = "SaynaaProxyFactory";

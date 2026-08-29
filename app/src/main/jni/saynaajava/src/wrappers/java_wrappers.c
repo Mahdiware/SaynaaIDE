@@ -152,6 +152,7 @@ void java_class_getter(VM* vm) {
               SetRuntimeError(vm, "Failed to wrap nested Java class reference.");
               return;
             }
+
             create_java_instance(vm, &bridge->clsJavaClass, ref, 0);
             return;
           }

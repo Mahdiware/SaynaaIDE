@@ -37,7 +37,6 @@ typedef struct BridgeState {
   Handle* clsJavaClass;
   Handle* clsJavaObject;
   Handle* clsJavaMethod;
-  Handle* mainModule;
 
   jmethodID mFindClass;
   jmethodID mCreateJavaObject;

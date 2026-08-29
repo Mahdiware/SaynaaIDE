@@ -550,49 +550,6 @@ public class JavaBridge {
       return true;
     }
 
-    // HashMap<Object, Object> out = new HashMap<>(Math.max(size, 0));
-    // convert into map
-
-    // if (normalized instanceof Map) {
-    //   saynaa.newMap(slot);
-    //   Map<?, ?> map = (Map<?, ?>) normalized;
-    //   for (Map.Entry<?, ?> entry : map.entrySet()) {
-    //     int keySlot = saynaa.nextSlot();
-    //     int valueSlot = saynaa.nextSlot();
-
-    //     if (!pushToSlot(saynaa, keySlot, entry.getKey())) {
-    //       saynaa.freeSlot(keySlot);
-    //       saynaa.freeSlot(valueSlot);
-    //       return false;
-    //     }
-
-    //     if (!pushToSlot(saynaa, valueSlot, entry.getValue())) {
-    //       saynaa.freeSlot(keySlot);
-    //       saynaa.freeSlot(valueSlot);
-    //       return false;
-    //     }
-
-    //     if (!saynaa.mapSet(slot, keySlot, valueSlot)) {
-    //       saynaa.freeSlot(keySlot);
-    //       saynaa.freeSlot(valueSlot);
-    //       return false;
-    //     }
-
-    //     saynaa.freeSlot(keySlot);
-    //     saynaa.freeSlot(valueSlot);
-    //   }
-    //   return true;
-    // }
-
-    // SaynaaModule
-    if (normalized instanceof SaynaaModule) {
-      SaynaaModule module = (SaynaaModule) normalized;
-      if (module.getHandleId() > 0) {
-        saynaa.setSlotPinnedHandle(slot, module.getHandleId());
-        return true;
-      }
-    }
-
     // SaynaaObject
     if (normalized instanceof SaynaaObject) {
       SaynaaObject object = (SaynaaObject) normalized;

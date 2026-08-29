@@ -22,22 +22,22 @@ public class JavaModule {
   public boolean create() {
     try {
       SaynaaModule module = saynaa.newModule(module_name);
-      saynaa.moduleSetGlobal(module, "context", saynaa.getContext());
-      saynaa.moduleSetGlobal(module, "saynaadir", saynaa.getSaynaaDir());
-      saynaa.moduleSetGlobal(module, "application", saynaa.getContext().getApplicationContext());
-      saynaa.moduleSetGlobal(module, "bindClass", ReflectionFinder.class, "findClass");
-      saynaa.moduleSetGlobal(module, "new", this, "newJavaObject");
-      saynaa.moduleSetGlobal(module, "getField", FieldHelper.class, "getFieldValue");
-      saynaa.moduleSetGlobal(module, "setField", FieldHelper.class, "setFieldValue");
-      saynaa.moduleSetGlobal(module, "tostring", this, "javaToString");
-      saynaa.moduleSetGlobal(module, "testing", this, "testing");
-      saynaa.moduleSetGlobal(module, "call", MethodHelper.class, "call");
-      saynaa.moduleSetGlobal(module, "instanceof", this, "instanceOf");
-      saynaa.moduleSetGlobal(module, "length", this, "lengthOf");
-      saynaa.moduleSetGlobal(module, "getClassName", this, "getClassName");
-      saynaa.moduleSetGlobal(module, "getPackageName", this, "getPackageName");
-      saynaa.moduleSetGlobal(module, "getSimpleClassName", this, "getSimpleClassName");
-      saynaa.registerModule(module);
+      module.setGlobal("context", saynaa.getContext());
+      module.setGlobal("saynaadir", saynaa.getSaynaaDir());
+      module.setGlobal("application", saynaa.getContext().getApplicationContext());
+      module.setGlobal("bindClass", ReflectionFinder.class, "findClass");
+      module.setGlobal("new", this, "newJavaObject");
+      module.setGlobal("getField", FieldHelper.class, "getFieldValue");
+      module.setGlobal("setField", FieldHelper.class, "setFieldValue");
+      module.setGlobal("tostring", this, "javaToString");
+      module.setGlobal("testing", this, "testing");
+      module.setGlobal("call", MethodHelper.class, "call");
+      module.setGlobal("instanceof", this, "instanceOf");
+      module.setGlobal("length", this, "lengthOf");
+      module.setGlobal("getClassName", this, "getClassName");
+      module.setGlobal("getPackageName", this, "getPackageName");
+      module.setGlobal("getSimpleClassName", this, "getSimpleClassName");
+      module.register();
     } catch (Exception e) {
       return false;
     }

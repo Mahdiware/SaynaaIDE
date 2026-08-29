@@ -9,7 +9,6 @@ import com.android.saynaa.saynaajava.PCallResult;
 import com.android.saynaa.saynaajava.datatype.*;
 
 public class Saynaa {
-
   public static final int SLOT_TYPE_OBJECT = 0;
   public static final int SLOT_TYPE_NULL = 1;
   public static final int SLOT_TYPE_BOOL = 2;
@@ -27,6 +26,7 @@ public class Saynaa {
   public static final int SLOT_TYPE_CONTEXT = 14;
   public static final int SLOT_TYPE_INSTANCE = 15;
   public Context context;
+  public SaynaaModule mainModule;
 
   static {
     System.loadLibrary("saynaajava");
@@ -35,6 +35,7 @@ public class Saynaa {
   public Saynaa(Context context) {
     this.context = context;
     this.vm = saynaa_open();
+    this.mainModule = newModule("main");
   }
 
   public synchronized String getSaynaaDir() {
@@ -45,16 +46,8 @@ public class Saynaa {
     return this.context;
   }
 
-  public synchronized int runFile(String fileName) {
-    return saynaa_doFile(fileName);
-  }
-
-  public synchronized int runString(String code) {
-    return saynaa_doString(code);
-  }
-
-  public synchronized int runStringPcall(String code) {
-    return saynaa_doStringPcall(code);
+  public synchronized SaynaaModule getMainModule() {
+    return this.mainModule;
   }
 
   public synchronized void invokeCallbackMethod(int callbackId, String methodName, Object[] args) {
@@ -70,24 +63,29 @@ public class Saynaa {
     return invokeCallbackWithResultFromSlots(callbackId, methodName, argStart, argCount);
   }
 
-  public synchronized PCallResult pcall(String functionName, Object... args) {
-    return saynaa_pcall(functionName, args);
+  public synchronized Object getGlobal(String name) {
+    return getGlobal(mainModule.getHandleId(), name);
   }
 
-  public synchronized Object getGlobal(String name) {
-    return saynaa_getGlobal(name);
+  public synchronized Object getGlobal(int handleId, String name) {
+    return saynaa_getGlobal(handleId, name);
   }
 
   public synchronized int getGlobalFunctionId(String name) {
-    return saynaa_getGlobalFunctionId(name);
+    return getGlobalFunctionId(mainModule.getHandleId(), name);
   }
 
-  public synchronized int getGlobalId(String name) {
-    return saynaa_getGlobalId(name);
+  public synchronized int getGlobalFunctionId(int handleId, String name) {
+    return saynaa_getGlobalFunctionId(handleId, name);
   }
+
+  public synchronized int getGlobalId(int handleId, String name) {
+    return saynaa_getGlobalId(handleId, name);
+  }
+  
 
   public synchronized boolean callFunctionById(int functionId, int argStart, int argCount, int retSlot) {
-    return saynaa_callFunctionById(functionId, argStart, argCount, retSlot);
+    return saynaa_callFunctionById(mainModule.getHandleId(), functionId, argStart, argCount, retSlot);
   }
 
   public synchronized Object callGlobalFunction(String name, Object... args) {
@@ -132,10 +130,6 @@ public class Saynaa {
 
   public synchronized int getSlotCount() {
     return saynaa_getSlotCount();
-  }
-
-  public synchronized boolean setGlobal(String name, Object value) {
-    return saynaa_setGlobal(name, value);
   }
 
   public synchronized void reserveSlots(int count) {
@@ -219,19 +213,36 @@ public class Saynaa {
   }
 
   public synchronized SaynaaModule newModule(String name) {
-    return new SaynaaModule(this, SLOT_TYPE_MODULE, saynaa_newModule(name));
+    int handleId = saynaa_newModule(name);
+    if (handleId < 0) {
+      Log.e("Saynaa", "Failed to create new module: " + name);
+      return null;
+    }
+    return new SaynaaModule(this, SLOT_TYPE_MODULE, handleId);
   }
 
-  public synchronized boolean moduleSetGlobal(SaynaaModule module, String name, Object value) {
-    return saynaa_moduleSetGlobal(module.getHandleId(), name, value);
+  public synchronized boolean moduleSetGlobal(int handleId, String name, Object value) {
+    return saynaa_moduleSetGlobal(handleId, name, value);
   }
 
-  public synchronized boolean moduleSetGlobal(SaynaaModule module, String name, Object clazz, String methodName) {
-    return saynaa_moduleSetGlobal(module.getHandleId(), name, new JavaMethodBinding(clazz, methodName));
+  public synchronized boolean moduleSetGlobal(int handleId, String name, Object clazz, String methodName) {
+    return saynaa_moduleSetGlobal(handleId, name, new JavaMethodBinding(clazz, methodName));
   }
 
-  public synchronized boolean registerModule(SaynaaModule module) {
-    return saynaa_registerModule(module.getHandleId());
+  public synchronized boolean registerModule(int handleId) {
+    return saynaa_registerModule(handleId);
+  }
+
+  public synchronized boolean setGlobal(String name, Object value) {
+    return this.mainModule.setGlobal(name, value);
+  }
+
+  public synchronized boolean setGlobal(String name, Object clazz, String methodName) {
+    return this.mainModule.setGlobal(name, clazz, methodName);
+  }
+
+  public synchronized int runFile(String path) {
+    return saynaa_runFile(this.mainModule.getHandleId(), path);
   }
 
   public synchronized int runFile(SaynaaModule module, String path) {
@@ -300,24 +311,9 @@ public class Saynaa {
     return saynaa_getMapSize(handleId);
   }
 
-  public synchronized boolean mapEntryToSlots(int handleId, int entryIndex, int keySlot, int valueSlot) {
-    return saynaa_mapEntryToSlots(handleId, entryIndex, keySlot, valueSlot);
-  }
 
   public synchronized boolean mapGetToSlots(int handleId, int keySlot, int valueSlot) {
     return saynaa_mapGetToSlots(handleId, keySlot, valueSlot);
-  }
-
-  public synchronized int doFile(String fileName) {
-    return runFile(fileName);
-  }
-
-  public synchronized int doString(String code) {
-    return runString(code);
-  }
-
-  public synchronized Object getModule() {
-    return saynaa_getModule();
   }
 
   public synchronized void close() {
@@ -350,19 +346,12 @@ public class Saynaa {
     return this.vm;
   }
 
-  private synchronized native int saynaa_doStringPcall(String code);
   private synchronized native long saynaa_open();
-  private synchronized native Object saynaa_getModule();
-  private synchronized native PCallResult saynaa_pcall(String functionName, Object[] args);
-  private synchronized native int saynaa_doFile(String fileName);
-  private synchronized native int saynaa_doString(String code);
-  private synchronized native Object saynaa_getGlobal(String name);
-  private synchronized native int saynaa_getGlobalFunctionId(String name);
-  private synchronized native int saynaa_getGlobalId(String name);
+  private synchronized native int saynaa_getGlobalFunctionId(int handleId, String name);
+  private synchronized native Object saynaa_getGlobal(int handleId, String name);
+  private synchronized native int saynaa_getGlobalId(int handleId, String name);
   private synchronized native boolean saynaa_callFunctionById(
-      int functionId, int argStart, int argCount, int retSlot);
-  private synchronized native boolean saynaa_setGlobal(String name, Object value);
-  private synchronized native boolean saynaa_setGlobalFromSlot(String name, int slot);
+      int handleId, int functionId, int argStart, int argCount, int retSlot);
   private synchronized native void saynaa_reserveSlots(int count);
   private synchronized native int saynaa_nextSlot();
   private synchronized native void saynaa_freeSlot(int slot, int count);
@@ -404,12 +393,8 @@ public class Saynaa {
   private synchronized native int saynaa_getListSize(int handleId);
   private synchronized native boolean saynaa_listGetToSlot(int handleId, int index, int valueSlot);
   private synchronized native int saynaa_getMapSize(int mapSlot);
-  private synchronized native boolean saynaa_mapEntryToSlots(
-      int handleId, int entryIndex, int keySlot, int valueSlot);
   private synchronized native boolean saynaa_mapGetToSlots(int handleId, int keySlot, int valueSlot);
   private synchronized native void saynaa_close();
-  @SuppressWarnings("unused") private String source;
-  @SuppressWarnings("unused") private String scriptPath;
   private long vm;
   private synchronized native void invokeCallbackMethodNative(int callbackId, String methodName, Object[] args);
   private synchronized native Object invokeCallbackMethodWithResultNative(
