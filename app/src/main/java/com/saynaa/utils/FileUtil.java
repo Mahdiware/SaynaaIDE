@@ -49,29 +49,10 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
 public class FileUtil {
-  public static void saveDebug(Context context, String content) {
-    try {
-      File outDir = context.getFilesDir();
-      if (outDir == null)
-        return;
-
-      if (!outDir.exists() && !outDir.mkdirs())
-        return;
-
-      File outFile = new File(outDir, "debug.txt");
-      try (FileOutputStream output = new FileOutputStream(outFile, true)) {
-        output.write((content + "\n").getBytes());
-        output.flush();
-      }
-    } catch (IOException e) {
-      e.printStackTrace();
-    }
-  }
-
   /**
    * Install the bundled Saynaa code into internal storage.
    */
-  public static void installSaynaaCode(Context context) {
+  public static void installSaynaaCode(Context context, File localDir) {
     try {
       PackageInfo info = context.getPackageManager().getPackageInfo(context.getPackageName(), 0);
       long updateTime = info.lastUpdateTime;
@@ -82,7 +63,7 @@ public class FileUtil {
         return;
       }
 
-      File files = context.getFilesDir();
+      File files = localDir;
       deleteFile(files);
 
       if (!files.exists()) {

@@ -45,7 +45,7 @@ public class Saynaa {
     this.context = context;
     this.vm = saynaa_open();
     this.mainModule = newModule("main");
-    this.saynaadir = context.getApplicationContext().getFilesDir().getAbsolutePath();
+    this.saynaadir = context.getApplicationContext().getDir("saynaa", Context.MODE_PRIVATE).getAbsolutePath();
   }
 
   // future will use these: when added multiple modules per VM

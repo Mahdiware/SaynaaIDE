@@ -18,12 +18,12 @@ public class SaynaaDexLoader {
   private final HashMap<String, String> libCache = new HashMap<>();
 
   private final Context context;
-  private final String saynaaDir;
+  private final File saynaaDir;
   private final String odexDir;
 
   public SaynaaDexLoader(Context context) {
     this.context = context;
-    this.saynaaDir = context.getApplicationContext().getFilesDir().getAbsolutePath();
+    this.saynaaDir = SaynaaApplication.getInstance().getLocalDir();
     this.odexDir = SaynaaApplication.getInstance().getOdexDir();
   }
 

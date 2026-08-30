@@ -53,7 +53,7 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
 
   protected String saynaaDir;
   protected String saynaaPath;
-  protected String localDir;
+  protected File localDir;
 
   protected Handler handler;
   protected TextView status;
@@ -94,9 +94,9 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
 
     initUiShell();
 
-    localDir = getFilesDir().getAbsolutePath();
+    localDir = getDir("saynaa", Context.MODE_PRIVATE);
 
-    FileUtil.installSaynaaCode(this);
+    FileUtil.installSaynaaCode(this, localDir);
 
     try {
       saynaaPath = getSaynaaPath();
@@ -431,11 +431,11 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
 
     Uri uri = intent.getData();
     if (uri == null)
-      return new File(getFilesDir(), "main.sa").getAbsolutePath();
+      return new File(localDir, "main.sa").getAbsolutePath();
 
     String path = uri.getPath();
     if (path == null || path.isEmpty())
-      return new File(getFilesDir(), "main.sa").getAbsolutePath();
+      return new File(localDir, "main.sa").getAbsolutePath();
 
     File sf = new File(saynaaDir, path);
 

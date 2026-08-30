@@ -24,10 +24,13 @@ public class SaynaaApplication extends Application implements SaynaaContext {
   protected String localDir;
   protected String odexDir;
   protected String libDir;
-  protected String saynaaMdDir;
 
   public static SaynaaApplication getInstance() {
     return mApp;
+  }
+  
+  public String getLocalDir() {
+    return localDir;
   }
 
   public String getLibDir() {
@@ -46,10 +49,9 @@ public class SaynaaApplication extends Application implements SaynaaContext {
     crashHandler.init(this);
     mSharedPreferences = getSharedPreferences(this);
 
-    localDir = getFilesDir().getAbsolutePath();
     odexDir = getDir("odex", Context.MODE_PRIVATE).getAbsolutePath();
     libDir = getDir("lib", Context.MODE_PRIVATE).getAbsolutePath();
-    saynaaMdDir = getDir("saynaa", Context.MODE_PRIVATE).getAbsolutePath();
+    localDir = getDir("saynaa", Context.MODE_PRIVATE).getAbsolutePath();
   }
 
   private static SharedPreferences getSharedPreferences(Context context) {

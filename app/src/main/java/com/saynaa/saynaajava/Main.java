@@ -11,7 +11,7 @@ import java.io.File;
 public class Main {
   public static void run(Context context) {
     FileUtil.installSaynaaCode(context);
-    String localDir = context.getFilesDir().getAbsolutePath();
+    String localDir = context.getDir("saynaa", Context.MODE_PRIVATE).getAbsolutePath();
     String saynaaPath = new File(localDir, "main.sa").getAbsolutePath();
 
     if (new File(saynaaPath).exists() == false) {
