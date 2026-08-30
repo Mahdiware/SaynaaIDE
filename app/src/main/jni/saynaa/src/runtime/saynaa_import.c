@@ -38,26 +38,128 @@ static inline size_t pathAbs(const char* path, char* buff, size_t buffsz) {
   return path_get_absolute(cwd, path, buff, buffsz);
 }
 
-static char* checkFileExists(VM* vm, char* path) {
-  size_t path_size = 0;
-  size_t raw_size = strlen(path);
+static char *checkFileExists(VM *vm, const char *path) {
+  if (path == NULL || *path == '\0')
+    return NULL;
 
   if (path_is_file(path)) {
-    char* ret = Realloc(vm, NULL, raw_size + 1);
-    memcpy(ret, path, raw_size + 1);
+    size_t len = strlen(path);
+    char *ret = Realloc(vm, NULL, len + 1);
+
+    if (ret != NULL)
+      memcpy(ret, path, len + 1);
+
     return ret;
   }
 
-  for (size_t i = 0; i < sizeof(import_pattern) / sizeof(import_pattern[0]); i++) {
-    char tmp_path[MAX_PATH_LEN];
-    snprintf(tmp_path, sizeof(tmp_path), "%s%s%s", import_pattern[i].prefix,
-             path, import_pattern[i].infix);
-    if (path_is_file(tmp_path)) {
-      char* ret = Realloc(vm, NULL, strlen(tmp_path) + 1);
-      memcpy(ret, tmp_path, strlen(tmp_path) + 1);
+  const char *import_suffixes[] = {
+    SAYNAA_FILE_EXT,
+    SAYNAA_BYTECODE_EXT,
+#ifdef _WIN32
+    "\\_init" SAYNAA_FILE_EXT,
+    "\\_init" SAYNAA_BYTECODE_EXT,
+#else
+    "/_init" SAYNAA_FILE_EXT,
+    "/_init" SAYNAA_BYTECODE_EXT,
+#endif
+  };
+
+  // Check Saynaa files
+  for (size_t i = 0;
+       i < sizeof(import_suffixes) / sizeof(import_suffixes[0]);
+       i++) {
+    char tmp[MAX_PATH_LEN];
+
+    int n = snprintf(
+      tmp,
+      sizeof(tmp),
+      "%s%s",
+      path,
+      import_suffixes[i]
+    );
+
+    if (n < 0 || (size_t)n >= sizeof(tmp))
+      continue;
+
+    if (path_is_file(tmp)) {
+      char *ret = Realloc(vm, NULL, (size_t)n + 1);
+
+      if (ret != NULL)
+        memcpy(ret, tmp, (size_t)n + 1);
+
       return ret;
     }
   }
+
+#ifndef NO_DL
+
+  // Check native library
+#if defined(_WIN32)
+  const char *ext = ".dll";
+#elif defined(__APPLE__)
+  const char *ext = ".dylib";
+#elif defined(__linux__)
+  const char *ext = ".so";
+#else
+  const char *ext = NULL;
+#endif
+
+  if (ext != NULL) {
+    char tmp[MAX_PATH_LEN];
+
+    // name.so / name.dylib / name.dll
+    int n = snprintf(
+      tmp,
+      sizeof(tmp),
+      "%s%s",
+      path,
+      ext
+    );
+
+    if (n >= 0 &&
+        (size_t)n < sizeof(tmp) &&
+        path_is_file(tmp)) {
+      char *ret = Realloc(vm, NULL, (size_t)n + 1);
+
+      if (ret != NULL)
+        memcpy(ret, tmp, (size_t)n + 1);
+
+      return ret;
+    }
+
+#if defined(__linux__) || defined(__APPLE__)
+
+    // libname.so / libname.dylib
+    const char *slash = strrchr(path, '/');
+    const char *name = slash ? slash + 1 : path;
+    size_t dir_len = slash ? (size_t)(slash - path) + 1 : 0;
+
+    n = snprintf(
+      tmp,
+      sizeof(tmp),
+      "%.*slib%s%s",
+      (int)dir_len,
+      path,
+      name,
+      ext
+    );
+
+    if (n >= 0 &&
+        (size_t)n < sizeof(tmp) &&
+        path_is_file(tmp)) {
+      char *ret = Realloc(vm, NULL, (size_t)n + 1);
+
+      if (ret != NULL)
+        memcpy(ret, tmp, (size_t)n + 1);
+
+      return ret;
+    }
+
+#endif
+  }
+
+#endif
+
   return NULL;
 }
 

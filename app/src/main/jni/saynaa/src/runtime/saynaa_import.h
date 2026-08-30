@@ -9,36 +9,6 @@
 #include "../shared/saynaa_internal.h"
 #include "../shared/saynaa_value.h"
 
-typedef struct {
-  const char* prefix;
-  const char* infix;
-} ImportPattern;
-
-static const ImportPattern import_pattern[] = {
-    {"", SAYNAA_FILE_EXT},
-    {"", SAYNAA_BYTECODE_EXT},
-#ifdef _WIN32
-    {"", "\\_init" SAYNAA_FILE_EXT},
-    {"", "\\_init" SAYNAA_BYTECODE_EXT},
-#else
-    {"", "/_init" SAYNAA_FILE_EXT},
-    {"", "/_init" SAYNAA_BYTECODE_EXT},
-#endif
-#ifndef NO_DL
-#if defined(_WIN32)
-    {"lib", ".dll"},
-    {"", ".dll"},
-#elif defined(__APPLE__)
-    {"lib", ".dylib"},
-    {"", ".dylib"},
-#elif defined(__linux__)
-    {"lib", ".so"},
-    {"", ".so"},
-#endif
-
-#endif
-};
-
 char* resolvePath(VM* vm, const char* from, const char* path);
 bool importScript(VM* vm, Module* module, String* path_resolved, bool is_runtime, bool is_main);
 
