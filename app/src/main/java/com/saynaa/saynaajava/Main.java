@@ -13,7 +13,7 @@ public class Main {
     String localDir = context.getDir("saynaa", Context.MODE_PRIVATE).getAbsolutePath();
     String saynaaPath = new File(localDir, "main.sa").getAbsolutePath();
     
-    FileUtil.installSaynaaCode(this, localDir);
+    FileUtil.installSaynaaCode(context, localDir);
 
     if (new File(saynaaPath).exists() == false) {
       Log.e("Saynaa", "Saynaa file not found: " + saynaaPath);
