@@ -15,7 +15,7 @@ saynaa_function(_debug, "debug(msg:Var) -> Null", "Print the string representati
   __android_log_print(ANDROID_LOG_INFO, "saynaadebug", "%s", s == NULL ? "" : s);
 }
 
-JNIEXPORT jlong JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1open(JNIEnv* env, jobject thiz) {
+JNIEXPORT jlong JNICALL Java_com_saynaa_saynaajava_Saynaa_saynaa_1open(JNIEnv* env, jobject thiz) {
   JavaVM* jvm = NULL;
   if ((*env)->GetJavaVM(env, &jvm) != JNI_OK) {
     return 0;
@@ -46,7 +46,7 @@ JNIEXPORT jlong JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1open(J
     return 0;
   }
 
-  jclass localBridgeClass = (*env)->FindClass(env, "com/android/saynaa/saynaajava/JavaBridge");
+  jclass localBridgeClass = (*env)->FindClass(env, "com/saynaa/saynaajava/JavaBridge");
   if (localBridgeClass == NULL) {
     (*env)->DeleteGlobalRef(env, bridge->saynaaObject);
     free(bridge);
@@ -72,17 +72,18 @@ JNIEXPORT jlong JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1open(J
   bridge->mResolveCallbackInterface = (*env)->GetStaticMethodID(env, bridge->javaBridgeClass,
       "resolveCallbackInterface", "(Ljava/lang/Object;Ljava/lang/String;II)Ljava/lang/String;");
   bridge->mCreateProxy = (*env)->GetStaticMethodID(env, bridge->javaBridgeClass,
-      "createProxy", "(Lcom/android/saynaa/saynaajava/Saynaa;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Ljava/lang/Object;");
+      "createProxy", "(Lcom/saynaa/saynaajava/Saynaa;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Ljava/lang/Object;");
   bridge->mCreateNativeCallbackProxy = (*env)->GetStaticMethodID(env, bridge->javaBridgeClass,
-      "createNativeCallbackProxy", "(Lcom/android/saynaa/saynaajava/Saynaa;Ljava/lang/String;Ljava/lang/String;I)Ljava/lang/Object;");
+      "createNativeCallbackProxy",
+      "(Lcom/saynaa/saynaajava/Saynaa;Ljava/lang/String;Ljava/lang/String;I)Ljava/lang/Object;");
   bridge->mGetDefaultInterfaceMethodName = (*env)->GetStaticMethodID(env, bridge->javaBridgeClass,
       "getDefaultInterfaceMethodName", "(Ljava/lang/String;)Ljava/lang/String;");
   bridge->mPushToSlot = (*env)->GetStaticMethodID(env, bridge->javaBridgeClass, "pushToSlot",
-      "(Lcom/android/saynaa/saynaajava/Saynaa;ILjava/lang/Object;)Z");
+      "(Lcom/saynaa/saynaajava/Saynaa;ILjava/lang/Object;)Z");
   bridge->mSlotToJava = (*env)->GetStaticMethodID(env, bridge->javaBridgeClass, "slotToJava",
-      "(Lcom/android/saynaa/saynaajava/Saynaa;I)Ljava/lang/Object;");
+      "(Lcom/saynaa/saynaajava/Saynaa;I)Ljava/lang/Object;");
   bridge->mArgsArrayFromSlots = (*env)->GetStaticMethodID(env, bridge->javaBridgeClass,
-      "argsFromSlots", "(Lcom/android/saynaa/saynaajava/Saynaa;II)[Ljava/lang/Object;");
+      "argsFromSlots", "(Lcom/saynaa/saynaajava/Saynaa;II)[Ljava/lang/Object;");
 
   jclass saynaaClass = (*env)->GetObjectClass(env, thiz);
   bridge->mOnNativeError = (*env)->GetMethodID(env, saynaaClass, "onNativeError", "(Ljava/lang/String;)V");
@@ -114,8 +115,7 @@ JNIEXPORT jlong JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1open(J
   return (jlong) vm;
 }
 
-JNIEXPORT jint JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1chdir(
-    JNIEnv* env, jobject thiz, jstring path) {
+JNIEXPORT jint JNICALL Java_com_saynaa_saynaajava_Saynaa_saynaa_1chdir(JNIEnv* env, jobject thiz, jstring path) {
   VM* vm = vm_from_saynaa(env, thiz);
   if (vm == NULL)
     return -1;
@@ -132,7 +132,7 @@ JNIEXPORT jint JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1chdir(
 }
 
 // saynaa_getSlotCount
-JNIEXPORT jint JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1getSlotCount(JNIEnv* env, jobject thiz) {
+JNIEXPORT jint JNICALL Java_com_saynaa_saynaajava_Saynaa_saynaa_1getSlotCount(JNIEnv* env, jobject thiz) {
   VM* vm = vm_from_saynaa(env, thiz);
   if (vm == NULL)
     return 0;
@@ -140,7 +140,7 @@ JNIEXPORT jint JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1getSlot
   return (jint) (vm->fiber->sp - vm->fiber->ret);
 }
 
-JNIEXPORT jobject JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1getGlobal(
+JNIEXPORT jobject JNICALL Java_com_saynaa_saynaajava_Saynaa_saynaa_1getGlobal(
     JNIEnv* env, jobject thiz, jint handleId, jstring name) {
   VM* vm = vm_from_saynaa(env, thiz);
   if (vm == NULL || name == NULL)
@@ -181,7 +181,7 @@ JNIEXPORT jobject JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1getG
   return resultValue;
 }
 
-JNIEXPORT jint JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1getGlobalId(
+JNIEXPORT jint JNICALL Java_com_saynaa_saynaajava_Saynaa_saynaa_1getGlobalId(
     JNIEnv* env, jobject thiz, jint handleId, jstring name) {
   VM* vm = vm_from_saynaa(env, thiz);
   if (vm == NULL || name == NULL)
@@ -209,7 +209,7 @@ JNIEXPORT jint JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1getGlob
   return (jint) idx;
 }
 
-JNIEXPORT jint JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1getGlobalFunctionId(
+JNIEXPORT jint JNICALL Java_com_saynaa_saynaajava_Saynaa_saynaa_1getGlobalFunctionId(
     JNIEnv* env, jobject thiz, jint handleId, jstring name) {
   VM* vm = vm_from_saynaa(env, thiz);
   if (vm == NULL || name == NULL)
@@ -227,9 +227,9 @@ JNIEXPORT jint JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1getGlob
   }
 
   /*
-    08-29 10:56:45.653 45529 45529 F DEBUG   : Cmdline: com.android.saynaa
-    08-29 10:56:45.653 45529 45529 F DEBUG   : pid: 45529, tid: 45529, name: .android.saynaa  >>> com.android.saynaa <<<
-    08-29 10:56:45.653 45529 45529 F DEBUG   :       #00 pc 000000000005d7f9 /data/app/~~urhwRxRqISZ--iCP1OBjTQ==/com.android.saynaa-D81I3IhmIM-iInTzsFK_DQ==/lib/x86_64/libsaynaajava.so (Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1getGlobalFunctionId+265) (BuildId: 90ffa0777f7b8447a2385d289b021e5ec98541bd)
+    08-29 10:56:45.653 45529 45529 F DEBUG   : Cmdline: com.saynaa
+    08-29 10:56:45.653 45529 45529 F DEBUG   : pid: 45529, tid: 45529, name: .android.saynaa  >>> com.saynaa <<<
+    08-29 10:56:45.653 45529 45529 F DEBUG   :       #00 pc 000000000005d7f9 /data/app/~~urhwRxRqISZ--iCP1OBjTQ==/com.saynaa-D81I3IhmIM-iInTzsFK_DQ==/lib/x86_64/libsaynaajava.so (Java_com_saynaa_saynaajava_Saynaa_saynaa_1getGlobalFunctionId+265) (BuildId: 90ffa0777f7b8447a2385d289b021e5ec98541bd)
     08-29 10:56:45.654 45529 45529 F DEBUG   :       #47 pc 00000000000e1e11 /system/lib64/libandroid_runtime.so (android::AndroidRuntime::start(char const*, android::Vector<android::String8> const&, bool)+897) (BuildId: e21d037b5951e3febdd9cd88307c86ae)
   */
 
@@ -275,7 +275,7 @@ JNIEXPORT jint JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1getGlob
   return (jint) idx;
 }
 
-JNIEXPORT jboolean JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1callFunctionById(JNIEnv* env,
+JNIEXPORT jboolean JNICALL Java_com_saynaa_saynaajava_Saynaa_saynaa_1callFunctionById(JNIEnv* env,
     jobject thiz, jint handleId, jint functionId, jint argStart, jint argCount, jint retSlot) {
   VM* vm = vm_from_saynaa(env, thiz);
   if (vm == NULL || functionId < 0)
@@ -316,7 +316,7 @@ JNIEXPORT jboolean JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1cal
   return ok;
 }
 
-JNIEXPORT jboolean JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1newInstance(
+JNIEXPORT jboolean JNICALL Java_com_saynaa_saynaajava_Saynaa_saynaa_1newInstance(
     JNIEnv* env, jobject thiz, jint pinnedHandleId, jint argStart, jint argCount, jint retSlot) {
   VM* vm = vm_from_saynaa(env, thiz);
   if (vm == NULL)
@@ -359,7 +359,7 @@ JNIEXPORT jboolean JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1new
 }
 
 // CallMethod
-JNIEXPORT jboolean JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1callMethod(JNIEnv* env,
+JNIEXPORT jboolean JNICALL Java_com_saynaa_saynaajava_Saynaa_saynaa_1callMethod(JNIEnv* env,
     jobject thiz, jint handleId, jstring methodName, jint argStart, jint argCount, jint retSlot) {
   VM* vm = vm_from_saynaa(env, thiz);
   if (vm == NULL)
@@ -408,7 +408,7 @@ JNIEXPORT jboolean JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1cal
   (*env)->ReleaseStringUTFChars(env, methodName, methodNameChars);
   return ok;
 }
-JNIEXPORT jobject JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1objGetattr(
+JNIEXPORT jobject JNICALL Java_com_saynaa_saynaajava_Saynaa_saynaa_1objGetattr(
     JNIEnv* env, jobject thiz, jint handleId, jstring name, jboolean skipGetter) {
   VM* vm = vm_from_saynaa(env, thiz);
   LOGD("saynaa_objGetattr called with handleId=%d, name=%s, skipGetter=%d", handleId,
@@ -448,7 +448,7 @@ JNIEXPORT jobject JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1objG
   return resultValue;
 }
 
-JNIEXPORT void JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1reserveSlots(
+JNIEXPORT void JNICALL Java_com_saynaa_saynaajava_Saynaa_saynaa_1reserveSlots(
     JNIEnv* env, jobject thiz, jint count) {
   VM* vm = vm_from_saynaa(env, thiz);
   if (vm == NULL)
@@ -458,7 +458,7 @@ JNIEXPORT void JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1reserve
   reserveSlots(vm, count);
 }
 
-JNIEXPORT void JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1setSlotNull(
+JNIEXPORT void JNICALL Java_com_saynaa_saynaajava_Saynaa_saynaa_1setSlotNull(
     JNIEnv* env, jobject thiz, jint slot) {
   VM* vm = vm_from_saynaa(env, thiz);
   if (vm == NULL)
@@ -467,7 +467,7 @@ JNIEXPORT void JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1setSlot
   setSlotNull(vm, slot);
 }
 
-JNIEXPORT void JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1setSlotBool(
+JNIEXPORT void JNICALL Java_com_saynaa_saynaajava_Saynaa_saynaa_1setSlotBool(
     JNIEnv* env, jobject thiz, jint slot, jboolean value) {
   VM* vm = vm_from_saynaa(env, thiz);
   if (vm == NULL)
@@ -476,7 +476,7 @@ JNIEXPORT void JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1setSlot
   setSlotBool(vm, slot, value == JNI_TRUE);
 }
 
-JNIEXPORT void JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1setSlotNumber(
+JNIEXPORT void JNICALL Java_com_saynaa_saynaajava_Saynaa_saynaa_1setSlotNumber(
     JNIEnv* env, jobject thiz, jint slot, jdouble value) {
   VM* vm = vm_from_saynaa(env, thiz);
   if (vm == NULL)
@@ -485,7 +485,7 @@ JNIEXPORT void JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1setSlot
   setSlotNumber(vm, slot, (double) value);
 }
 
-JNIEXPORT void JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1setSlotString(
+JNIEXPORT void JNICALL Java_com_saynaa_saynaajava_Saynaa_saynaa_1setSlotString(
     JNIEnv* env, jobject thiz, jint slot, jstring value) {
   VM* vm = vm_from_saynaa(env, thiz);
   if (vm == NULL)
@@ -502,7 +502,7 @@ JNIEXPORT void JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1setSlot
   (*env)->ReleaseStringUTFChars(env, value, text);
 }
 
-JNIEXPORT void JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1setSlotHandle(
+JNIEXPORT void JNICALL Java_com_saynaa_saynaajava_Saynaa_saynaa_1setSlotHandle(
     JNIEnv* env, jobject thiz, jint slot, jint handleId) {
   VM* vm = vm_from_saynaa(env, thiz);
   if (vm == NULL)
@@ -515,7 +515,7 @@ JNIEXPORT void JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1setSlot
   setSlotHandle(vm, slot, handle);
 }
 
-JNIEXPORT jint JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1captureSlotHandle(
+JNIEXPORT jint JNICALL Java_com_saynaa_saynaajava_Saynaa_saynaa_1captureSlotHandle(
     JNIEnv* env, jobject thiz, jint slot) {
   VM* vm = vm_from_saynaa(env, thiz);
   if (vm == NULL || slot < 0)
@@ -534,7 +534,7 @@ JNIEXPORT jint JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1capture
   return (jint) handleId;
 }
 
-JNIEXPORT void JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1setSlotPinnedHandle(
+JNIEXPORT void JNICALL Java_com_saynaa_saynaajava_Saynaa_saynaa_1setSlotPinnedHandle(
     JNIEnv* env, jobject thiz, jint slot, jint pinnedHandleId) {
   VM* vm = vm_from_saynaa(env, thiz);
   if (vm == NULL || pinnedHandleId <= 0)
@@ -548,7 +548,7 @@ JNIEXPORT void JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1setSlot
   setSlotHandle(vm, slot, handle);
 }
 
-JNIEXPORT jint JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1newList(JNIEnv* env, jobject thiz) {
+JNIEXPORT jint JNICALL Java_com_saynaa_saynaajava_Saynaa_saynaa_1newList(JNIEnv* env, jobject thiz) {
   VM* vm = vm_from_saynaa(env, thiz);
   if (vm == NULL)
     return -1;
@@ -558,7 +558,7 @@ JNIEXPORT jint JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1newList
   return (jint) register_pinned_handle(vm, handle);
 }
 
-JNIEXPORT jint JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1nextSlot(JNIEnv* env, jobject thiz) {
+JNIEXPORT jint JNICALL Java_com_saynaa_saynaajava_Saynaa_saynaa_1nextSlot(JNIEnv* env, jobject thiz) {
   VM* vm = vm_from_saynaa(env, thiz);
   if (vm == NULL)
     return -1;
@@ -568,8 +568,7 @@ JNIEXPORT jint JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1nextSlo
   return slot;
 }
 
-JNIEXPORT jint JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1allocSlot(
-    JNIEnv* env, jobject thiz, jint count) {
+JNIEXPORT jint JNICALL Java_com_saynaa_saynaajava_Saynaa_saynaa_1allocSlot(JNIEnv* env, jobject thiz, jint count) {
   VM* vm = vm_from_saynaa(env, thiz);
   if (vm == NULL)
     return -1;
@@ -581,7 +580,7 @@ JNIEXPORT jint JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1allocSl
   return slot;
 }
 
-JNIEXPORT void JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1freeSlot(
+JNIEXPORT void JNICALL Java_com_saynaa_saynaajava_Saynaa_saynaa_1freeSlot(
     JNIEnv* env, jobject thiz, jint slot, jint count) {
   VM* vm = vm_from_saynaa(env, thiz);
   if (vm == NULL)
@@ -590,7 +589,7 @@ JNIEXPORT void JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1freeSlo
   freeSlot(vm, slot, count);
 }
 
-JNIEXPORT jint JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1newMap(JNIEnv* env, jobject thiz) {
+JNIEXPORT jint JNICALL Java_com_saynaa_saynaajava_Saynaa_saynaa_1newMap(JNIEnv* env, jobject thiz) {
   VM* vm = vm_from_saynaa(env, thiz);
   if (vm == NULL)
     return -1;
@@ -601,7 +600,7 @@ JNIEXPORT jint JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1newMap(
   return (jint) register_pinned_handle(vm, handle);
 }
 
-JNIEXPORT jint JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1newModule(
+JNIEXPORT jint JNICALL Java_com_saynaa_saynaajava_Saynaa_saynaa_1newModule(
     JNIEnv* env, jobject thiz, jstring name) {
   VM* vm = vm_from_saynaa(env, thiz);
   BridgeState* bridge = bridge_from_vm(vm);
@@ -624,7 +623,7 @@ JNIEXPORT jint JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1newModu
   return result;
 }
 
-JNIEXPORT jboolean JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1registerModule(
+JNIEXPORT jboolean JNICALL Java_com_saynaa_saynaajava_Saynaa_saynaa_1registerModule(
     JNIEnv* env, jobject thiz, jint pinnedHandleId) {
   VM* vm = vm_from_saynaa(env, thiz);
   if (vm == NULL)
@@ -638,7 +637,7 @@ JNIEXPORT jboolean JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1reg
   return JNI_TRUE;
 }
 
-JNIEXPORT jboolean JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1moduleSetGlobal(
+JNIEXPORT jboolean JNICALL Java_com_saynaa_saynaajava_Saynaa_saynaa_1moduleSetGlobal(
     JNIEnv* env, jobject thiz, jint pinnedHandleId, jstring name, jobject value) {
   VM* vm = vm_from_saynaa(env, thiz);
   if (vm == NULL || name == NULL)
@@ -677,7 +676,7 @@ JNIEXPORT jboolean JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1mod
 }
 
 // saynaa_addSearchPath
-JNIEXPORT jboolean JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1addSearchPath(
+JNIEXPORT jboolean JNICALL Java_com_saynaa_saynaajava_Saynaa_saynaa_1addSearchPath(
     JNIEnv* env, jobject thiz, jstring path) {
   VM* vm = vm_from_saynaa(env, thiz);
   if (vm == NULL || path == NULL)
@@ -693,7 +692,7 @@ JNIEXPORT jboolean JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1add
   return JNI_TRUE;
 }
 
-JNIEXPORT jint JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1runFile(
+JNIEXPORT jint JNICALL Java_com_saynaa_saynaajava_Saynaa_saynaa_1runFile(
     JNIEnv* env, jobject thiz, jint handleId, jstring path) {
   VM* vm = vm_from_saynaa(env, thiz);
   if (vm == NULL || path == NULL)
@@ -716,7 +715,7 @@ JNIEXPORT jint JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1runFile
   return result;
 }
 
-JNIEXPORT jboolean JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1listInsert(
+JNIEXPORT jboolean JNICALL Java_com_saynaa_saynaajava_Saynaa_saynaa_1listInsert(
     JNIEnv* env, jobject thiz, jint handleId, jint index, jint valueSlot) {
   VM* vm = vm_from_saynaa(env, thiz);
   if (vm == NULL)
@@ -734,7 +733,7 @@ JNIEXPORT jboolean JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1lis
   return result;
 }
 
-JNIEXPORT jboolean JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1listReplace(
+JNIEXPORT jboolean JNICALL Java_com_saynaa_saynaajava_Saynaa_saynaa_1listReplace(
     JNIEnv* env, jobject thiz, jint handleId, jint index, jint valueSlot) {
   VM* vm = vm_from_saynaa(env, thiz);
   if (vm == NULL)
@@ -768,7 +767,7 @@ JNIEXPORT jboolean JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1lis
   return JNI_TRUE;
 }
 
-JNIEXPORT jboolean JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1mapSet(
+JNIEXPORT jboolean JNICALL Java_com_saynaa_saynaajava_Saynaa_saynaa_1mapSet(
     JNIEnv* env, jobject thiz, jint handleId, jint keySlot, jint valueSlot) {
   VM* vm = vm_from_saynaa(env, thiz);
   if (vm == NULL) {
@@ -796,7 +795,7 @@ JNIEXPORT jboolean JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1map
   return MapSet(vm, mapSlot, keySlot, valueSlot) ? JNI_TRUE : JNI_FALSE;
 }
 
-JNIEXPORT jboolean JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1bindJavaClass(
+JNIEXPORT jboolean JNICALL Java_com_saynaa_saynaajava_Saynaa_saynaa_1bindJavaClass(
     JNIEnv* env, jobject thiz, jint slot, jobject value) {
   VM* vm = vm_from_saynaa(env, thiz);
   if (vm == NULL)
@@ -826,7 +825,7 @@ JNIEXPORT jboolean JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1bin
   return JNI_TRUE;
 }
 
-JNIEXPORT jboolean JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1bindJavaObject(
+JNIEXPORT jboolean JNICALL Java_com_saynaa_saynaajava_Saynaa_saynaa_1bindJavaObject(
     JNIEnv* env, jobject thiz, jint slot, jobject value) {
   VM* vm = vm_from_saynaa(env, thiz);
   if (vm == NULL)
@@ -842,24 +841,22 @@ JNIEXPORT jboolean JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1bin
   if (bridge == NULL || bridge->jvm == NULL || bridge->clsJavaObject == NULL)
     return JNI_FALSE;
 
-  find_pinned_handle(vm, 1);
   LOGD("testing the where bug come from");
   JavaRef* ref = make_java_ref(env, bridge->jvm, value);
-  find_pinned_handle(vm, 1);
+
   if (ref == NULL)
     return JNI_FALSE;
 
   LOGD("saynaa_bindJavaObject: created JavaRef %p for Java class %p", (void*) ref, (void*) value);
 
   if (!create_java_instance(vm, &bridge->clsJavaObject, ref, slot)) {
-    java_ref_destructor(ref);
     return JNI_FALSE;
   }
 
   return JNI_TRUE;
 }
 
-JNIEXPORT jboolean JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1bindJavaMethod(
+JNIEXPORT jboolean JNICALL Java_com_saynaa_saynaajava_Saynaa_saynaa_1bindJavaMethod(
     JNIEnv* env, jobject thiz, jint slot, jobject target, jstring methodName, jboolean isStatic) {
   VM* vm = vm_from_saynaa(env, thiz);
   if (vm == NULL)
@@ -902,7 +899,7 @@ JNIEXPORT jboolean JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1bin
   return JNI_TRUE;
 }
 
-JNIEXPORT jint JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1getSlotType(
+JNIEXPORT jint JNICALL Java_com_saynaa_saynaajava_Saynaa_saynaa_1getSlotType(
     JNIEnv* env, jobject thiz, jint slot) {
   VM* vm = vm_from_saynaa(env, thiz);
   if (vm == NULL || slot < 0)
@@ -911,7 +908,7 @@ JNIEXPORT jint JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1getSlot
   return (jint) GetSlotType(vm, slot);
 }
 
-JNIEXPORT jboolean JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1getSlotBool(
+JNIEXPORT jboolean JNICALL Java_com_saynaa_saynaajava_Saynaa_saynaa_1getSlotBool(
     JNIEnv* env, jobject thiz, jint slot) {
   VM* vm = vm_from_saynaa(env, thiz);
   if (vm == NULL)
@@ -920,7 +917,7 @@ JNIEXPORT jboolean JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1get
   return GetSlotBool(vm, slot) ? JNI_TRUE : JNI_FALSE;
 }
 
-JNIEXPORT jdouble JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1getSlotNumber(
+JNIEXPORT jdouble JNICALL Java_com_saynaa_saynaajava_Saynaa_saynaa_1getSlotNumber(
     JNIEnv* env, jobject thiz, jint slot) {
   VM* vm = vm_from_saynaa(env, thiz);
   if (vm == NULL)
@@ -929,7 +926,7 @@ JNIEXPORT jdouble JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1getS
   return (jdouble) GetSlotNumber(vm, slot);
 }
 
-JNIEXPORT jstring JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1getSlotString(
+JNIEXPORT jstring JNICALL Java_com_saynaa_saynaajava_Saynaa_saynaa_1getSlotString(
     JNIEnv* env, jobject thiz, jint slot) {
   VM* vm = vm_from_saynaa(env, thiz);
   if (vm == NULL)
@@ -941,7 +938,7 @@ JNIEXPORT jstring JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1getS
   return (*env)->NewStringUTF(env, text);
 }
 
-JNIEXPORT jboolean JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1isSlotJava(
+JNIEXPORT jboolean JNICALL Java_com_saynaa_saynaajava_Saynaa_saynaa_1isSlotJava(
     JNIEnv* env, jobject thiz, jint slot) {
   VM* vm = vm_from_saynaa(env, thiz);
   if (vm == NULL)
@@ -965,7 +962,7 @@ JNIEXPORT jboolean JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1isS
   return JNI_FALSE;
 }
 
-JNIEXPORT jobject JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1getSlotJavaObject(
+JNIEXPORT jobject JNICALL Java_com_saynaa_saynaajava_Saynaa_saynaa_1getSlotJavaObject(
     JNIEnv* env, jobject thiz, jint slot) {
   VM* vm = vm_from_saynaa(env, thiz);
   if (vm == NULL)
@@ -999,7 +996,7 @@ JNIEXPORT jobject JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1getS
   return NULL;
 }
 
-JNIEXPORT jint JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1getListSize(
+JNIEXPORT jint JNICALL Java_com_saynaa_saynaajava_Saynaa_saynaa_1getListSize(
     JNIEnv* env, jobject thiz, jint handleId) {
   VM* vm = vm_from_saynaa(env, thiz);
   if (vm == NULL)
@@ -1015,7 +1012,7 @@ JNIEXPORT jint JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1getList
   return (jint) list->elements.count;
 }
 
-JNIEXPORT jboolean JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1listGetToSlot(
+JNIEXPORT jboolean JNICALL Java_com_saynaa_saynaajava_Saynaa_saynaa_1listGetToSlot(
     JNIEnv* env, jobject thiz, jint handleId, jint index, jint valueSlot) {
   VM* vm = vm_from_saynaa(env, thiz);
   if (vm == NULL || index < 0)
@@ -1041,7 +1038,7 @@ JNIEXPORT jboolean JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1lis
   return JNI_TRUE;
 }
 
-JNIEXPORT jint JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1getMapSize(
+JNIEXPORT jint JNICALL Java_com_saynaa_saynaajava_Saynaa_saynaa_1getMapSize(
     JNIEnv* env, jobject thiz, jint handleId) {
   VM* vm = vm_from_saynaa(env, thiz);
   if (vm == NULL)
@@ -1056,7 +1053,7 @@ JNIEXPORT jint JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1getMapS
   return (jint) map->count;
 }
 
-JNIEXPORT jboolean JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1mapGetToSlots(
+JNIEXPORT jboolean JNICALL Java_com_saynaa_saynaajava_Saynaa_saynaa_1mapGetToSlots(
     JNIEnv* env, jobject thiz, jint handleId, jint keySlot, jint valueSlot) {
   VM* vm = vm_from_saynaa(env, thiz);
   if (vm == NULL)
@@ -1083,7 +1080,7 @@ JNIEXPORT jboolean JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1map
   return JNI_TRUE;
 }
 
-JNIEXPORT void JNICALL Java_com_android_saynaa_saynaajava_Saynaa_invokeCallbackMethodNative(
+JNIEXPORT void JNICALL Java_com_saynaa_saynaajava_Saynaa_invokeCallbackMethodNative(
     JNIEnv* env, jobject thiz, jint callbackId, jstring methodName, jobjectArray args) {
   VM* vm = vm_from_saynaa(env, thiz);
   if (vm == NULL || callbackId <= 0)
@@ -1122,7 +1119,7 @@ JNIEXPORT void JNICALL Java_com_android_saynaa_saynaajava_Saynaa_invokeCallbackM
   }
 }
 
-JNIEXPORT jobject JNICALL Java_com_android_saynaa_saynaajava_Saynaa_invokeCallbackMethodWithResultNative(
+JNIEXPORT jobject JNICALL Java_com_saynaa_saynaajava_Saynaa_invokeCallbackMethodWithResultNative(
     JNIEnv* env, jobject thiz, jint callbackId, jstring methodName, jobjectArray args) {
   VM* vm = vm_from_saynaa(env, thiz);
   if (vm == NULL || callbackId <= 0)
@@ -1163,7 +1160,7 @@ JNIEXPORT jobject JNICALL Java_com_android_saynaa_saynaajava_Saynaa_invokeCallba
   return result;
 }
 
-JNIEXPORT jobject JNICALL Java_com_android_saynaa_saynaajava_Saynaa_invokeCallbackWithResultFromSlots(
+JNIEXPORT jobject JNICALL Java_com_saynaa_saynaajava_Saynaa_invokeCallbackWithResultFromSlots(
     JNIEnv* env, jobject thiz, jint callbackId, jstring methodName, jint argStart, jint argCount) {
   VM* vm = vm_from_saynaa(env, thiz);
   if (vm == NULL || callbackId <= 0)
@@ -1208,7 +1205,7 @@ JNIEXPORT jobject JNICALL Java_com_android_saynaa_saynaajava_Saynaa_invokeCallba
   return result;
 }
 
-JNIEXPORT void JNICALL Java_com_android_saynaa_saynaajava_Saynaa_saynaa_1close(JNIEnv* env, jobject thiz) {
+JNIEXPORT void JNICALL Java_com_saynaa_saynaajava_Saynaa_saynaa_1close(JNIEnv* env, jobject thiz) {
   VM* vm = vm_from_saynaa(env, thiz);
   if (vm == NULL)
     return;

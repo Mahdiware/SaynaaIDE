@@ -1,9 +1,11 @@
 import java
 import os
 import package
-package.path.append(java.saynaadir)
-from loadlayout import loadlayout, LoadLayout
 
+from loadlayout import LoadLayout, loadlayout
+
+saynaadir = java.saynaadir
+package.path.append("$saynaadir")
 
 # Classpath prefixes for fallback resolution
 classpath = ["java.lang."]
@@ -12,6 +14,7 @@ function bindClass(name)
     return java.bindClass(name)
 end
 
+activity.setDebugMode(true)
 
 package.searchers.append(function (name)
    # Support wildcard import: "java.util.*"
@@ -24,6 +27,19 @@ package.searchers.append(function (name)
           end
           return true  # mark as handled
       end
+   end
+   
+   // handle com.saynaa.R$style
+   if name.find('$') != -1 then
+     out = name.split('$')
+     
+     if out.length == 2 then
+       result = pcall(bindClass, name)
+       if result[0] then
+         define(out[1], result[1])
+         return true
+       end
+     end
    end
 
    # Try direct class bind: "java.lang.String"
@@ -47,8 +63,5 @@ _module._missing = function(name)
 end
 
 function loadDex(path)
-    if activity == null then
-        assert(false, 'loadDex: activity is null')
-    end
-    return activity.loadDex(path)
+    return java.loadDex(path)
 end

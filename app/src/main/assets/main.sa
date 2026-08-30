@@ -3,8 +3,8 @@ import "android.view.*"
 import "android.text.*"
 import "android.os.*"
 import "android.graphics.*"
-import "com.android.saynaa.*"
-import "com.android.saynaa.adapter.*"
+import "com.saynaa.*"
+import "com.saynaa.adapter.*"
 import "android.content.*"
 import "android.net.*"
 import "android.provider.Settings"
@@ -23,13 +23,6 @@ end
 function toast(msg)
 	Toast.makeText(activity, msg, Toast.LENGTH_SHORT).show()
 end
-
-a = {a: 1, b: 2, c: 3, 0: 243, 2: 400}
-
-LList = java.testing(a)
-data = a
-//data = data.get("value")
-//data = data.call("test", 2, 3)
 
 # if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R and !Environment.isExternalStorageManager())
 #   intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION)
@@ -90,7 +83,7 @@ DemoLayout = {
     {
       TextView,
       id: 'Title',
-      text: "Welcome to Saynaa!\nresult: $data",
+      text: "Welcome to Saynaa!",
       textSize: '32sp',
       textStyle: 'bold',
       textColor: '#111111',
@@ -199,12 +192,6 @@ AdapterItem = {
 
 assert(activity != null, 'activity is null')
 
-function runfunc_test(arg1, arg2, arg3, arg4)
-	return arg1 + arg2 + arg3 + arg4
-end
-
-assert(activity.runFunc("runfunc_test", 1, 2, 3, 40) == 46, "activity.runFunc return mismatch")
-
 # FIXME: the nested class don't work now
 # R = java.bindClass('android.R')
 # list_item_1 = R.layout.simple_list_item_1
@@ -220,6 +207,7 @@ function onCreate(arg1)
   
   assert(root != null, 'loadlayout returned null')
   activity.setContentView(root)
+
   adapter = SaynaaAdapter(activity, AdapterItem, AdapterData)
   DemoList.setAdapter(adapter)
 

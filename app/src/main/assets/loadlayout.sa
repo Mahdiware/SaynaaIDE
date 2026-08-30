@@ -256,7 +256,7 @@ class LoadLayout
     this.WIDTH = out.widthPixels
     this.HEIGHT = out.heightPixels
     
-    this.saynaadir = this.context.getSaynaaDir()
+    this.saynaadir = java.saynaadir
     
     this.module = null
     this.next_id = 0x7f000000
@@ -1003,7 +1003,7 @@ function loadlayout(activity, node, data)
   end
 
   ll = LoadLayout(activity)
-  ll.setModule(activity.getModule())
+  ll.setModule(java.mainModule)
   view = ll.createView(node)
   ll.bind(data)
   return view

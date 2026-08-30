@@ -474,6 +474,7 @@ void java_ref_destructor(void* ptr) {
 
   JNIEnv* env = env_from_jvm(ref->jvm);
   if (env != NULL && ref->global != NULL) {
+    LOGD("Deleting global reference for JavaRef %p", (void*) ref->global);
     (*env)->DeleteGlobalRef(env, ref->global);
   }
 

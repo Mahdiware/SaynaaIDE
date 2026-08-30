@@ -1,6 +1,6 @@
+#include "saynaa_exports.h"
 #include "saynaa_internal.h"
 #include "saynaa_jni.h"
-#include "saynaa_exports.h"
 
 static jclass g_PCallResult = NULL;
 static jmethodID g_PCallResult_ctor = NULL;
@@ -21,7 +21,7 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void* reserved) {
     return JNI_ERR;
   }
 
-  jclass localCls = (*env)->FindClass(env, "com/android/saynaa/saynaajava/PCallResult");
+  jclass localCls = (*env)->FindClass(env, "com/saynaa/saynaajava/PCallResult");
   if (localCls == NULL)
     return JNI_ERR;
 
@@ -31,11 +31,7 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void* reserved) {
   if (g_PCallResult == NULL)
     return JNI_ERR;
 
-    g_PCallResult_ctor = (*env)->GetMethodID(
-      env,
-      g_PCallResult,
-      "<init>",
-      "(ZLjava/lang/String;Ljava/lang/Object;)V");
+  g_PCallResult_ctor = (*env)->GetMethodID(env, g_PCallResult, "<init>", "(ZLjava/lang/String;Ljava/lang/Object;)V");
 
   if (g_PCallResult_ctor == NULL)
     return JNI_ERR;

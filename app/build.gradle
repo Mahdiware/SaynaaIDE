@@ -1,12 +1,12 @@
 apply plugin: 'com.android.application'
 
 android {
-    namespace 'com.android.saynaa'  // ✅ Required for AGP 8+
+    namespace 'com.saynaa'  // ✅ Required for AGP 8+
 
     compileSdkVersion 34
     
     defaultConfig {
-        applicationId "com.android.saynaa"
+        applicationId "com.saynaa"
         minSdkVersion 21
         targetSdkVersion 34
         versionCode 201

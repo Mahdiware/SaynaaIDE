@@ -88,6 +88,8 @@ typedef struct Class Class;
 
 typedef struct Configuration Configuration;
 
+typedef struct LoadScriptResult LoadScriptResult;
+
 // C function pointer which is callable by native module
 // functions.
 typedef void (*nativeFn)(VM* vm);
@@ -163,6 +165,11 @@ typedef void (*DeleteInstanceFn)(VM* vm, void*);
 // when the handle is released. This function is invoked at the GC execution.
 typedef void (*Destructor)(void*);
 
+// Load and return the script. Called by the compiler to fetch initial source
+// code and source for import statements. The content buffer is allocated with
+// Realloc() and the VM claims ownership of the buffer.
+typedef LoadScriptResult (*LoadScriptFn)(VM* vm, const char* path);
+
 /*****************************************************************************/
 /* SAYNAA TYPES                                                          */
 /*****************************************************************************/
@@ -237,16 +244,11 @@ typedef enum Result {
   RESULT_BYTECODE_IO_ERROR,
 } Result;
 
-typedef struct {
+typedef struct LoadScriptResult {
   char* content;    // script source or bytecode buffer
   bool is_bytecode; // 1 = bytecode, 0 = source
   Result status;    // execution / load status
 } LoadScriptResult;
-
-// Load and return the script. Called by the compiler to fetch initial source
-// code and source for import statements. The content buffer is allocated with
-// Realloc() and the VM claims ownership of the buffer.
-typedef LoadScriptResult (*LoadScriptFn)(VM* vm, const char* path);
 
 typedef struct Argument {
   // argument count: is number of value inside argv

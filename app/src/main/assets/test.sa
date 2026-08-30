@@ -1,2 +1,584 @@
-print("Hello, World!")
-debug("Hello, World! ${_module}")
+import "android.widget.*"
+import "android.view.*"
+import "android.graphics.*"
+import "android.graphics.drawable.*"
+import "android.os.Build"
+import 'com.saynaa.R$style'
+import "android.graphics.drawable.GradientDrawable"
+
+function toast(msg)
+  Toast.makeText(activity, msg, Toast.LENGTH_SHORT).show()
+end
+
+// ================================
+// COLORS
+// ================================
+
+WINDOW_BG      = 0xFF15171B
+TITLE_BG       = 0xFF1E2126
+ITEM_BG        = 0xFF24272D
+ITEM_PRESSED   = 0xFF2C3037
+
+TEXT           = 0xFFF2F3F5
+TEXT_SECONDARY = 0xFF8D949E
+
+ACCENT         = 0xFF5B8CFF
+ACCENT_DARK    = 0xFF4779E8
+
+GRIP           = 0xFFBDBDBD
+GREEN          = 0xFF55D98A
+
+function strokeBg(color, stroke, strokeColor, radius)
+  bg = GradientDrawable()
+  bg.setColor(color)
+  bg.setCornerRadius(radius)
+  bg.setStroke(stroke, strokeColor)
+  return bg
+end
+
+// ================================
+// LAYOUT
+// ================================
+
+layout = {
+  FrameLayout,
+  id: "root",
+  layout_width: "match_parent",
+  layout_height: "match_parent",
+  background: strokeBg(WINDOW_BG, 0, WINDOW_BG, 8),
+
+
+  // ==================================
+  // EXPANDED MENU
+  // ==================================
+  {
+    LinearLayout,
+    id: "panel",
+    orientation: "vertical",
+    layout_width: "match_parent",
+    layout_height: "match_parent",
+    padding: "4dp",
+
+
+    // ==========================
+    // TITLE BAR
+    // ==========================
+    {
+      LinearLayout,
+      id: "header",
+      orientation: "horizontal",
+      gravity: "center_vertical",
+      background: TITLE_BG,
+      layout_width: "match_parent",
+      layout_height: "48dp",
+
+      // collapse
+      {
+        ImageView,
+        id: "collapse",
+        src: "ic_arrow_down.png",
+        colorFilter: 0xFFFFFFFF,
+        gravity: "center",
+        layout_width: "42dp",
+        layout_height: "42dp",
+      },
+
+
+      // Title
+      {
+        LinearLayout,
+        orientation: "vertical",
+        gravity: "center_vertical",
+        layout_width: "0dp",
+        layout_weight: 1,
+        layout_height: "match_parent",
+        paddingLeft: "5dp",
+        {
+          TextView,
+          id: "title",
+          text: "Mod Menu",
+          textSize: "16sp",
+          textColor: TEXT,
+          layout_width: "match_parent",
+          layout_height: "wrap_content",
+        },
+        {
+          TextView,
+          text: "SaynaaIDE",
+          textSize: "9sp",
+          textColor: TEXT_SECONDARY,
+          layout_width: "match_parent",
+          layout_height: "wrap_content",
+        },
+      },
+
+
+      // Close
+      {
+        ImageView,
+        id: "close",
+        src: "ic_close.png",
+        colorFilter: 0xFFFFFFFF,
+        gravity: "center",
+        layout_width: "32dp",
+        layout_height: "32dp",
+        paddingRight: "5dp",
+      },
+    },
+    {
+      ScrollView,
+      layout_width: "match_parent",
+      layout_height: "match_parent",
+      
+      {
+        LinearLayout,
+        id: "Features",
+        orientation: "vertical",
+        layout_width: "match_parent",
+        layout_height: "match_parent",
+  
+        // ==========================
+        // FEATURES TITLE
+        // ==========================
+        {
+          TextView,
+          text: "FEATURES",
+          textSize: "10sp",
+          textColor: TEXT_SECONDARY,
+          gravity: "center_vertical",
+          layout_width: "match_parent",
+          layout_height: "38dp",
+        },
+    
+    
+        // ==========================
+        // FEATURE 1
+        // ==========================
+        {
+          LinearLayout,
+          orientation: "horizontal",
+          gravity: "center_vertical",
+          background: ITEM_BG,
+          layout_width: "match_parent",
+          layout_height: "58dp",
+          paddingLeft: "12dp",
+          paddingRight: "8dp",
+    
+    
+          {
+            LinearLayout,
+            orientation: "vertical",
+            gravity: "center_vertical",
+            layout_width: "0dp",
+            layout_weight: 1,
+            layout_height: "match_parent",
+            {
+              TextView,
+              text: "Feature 1",
+              textSize: "14sp",
+              textColor: TEXT,
+              layout_width: "match_parent",
+              layout_height: "wrap_content",
+            },
+            {
+              TextView,
+              text: "Enable first feature",
+              textSize: "9sp",
+              textColor: TEXT_SECONDARY,
+              layout_width: "match_parent",
+              layout_height: "wrap_content",
+            },
+          },
+    
+    
+          {
+            Switch,
+            id: "feature1",
+            layout_width: "50dp",
+            layout_height: "wrap_content",
+          },
+        },
+    
+    
+        // SPACE
+        {
+          Space,
+          layout_width: "match_parent",
+          layout_height: "5dp",
+        },
+    
+    
+        // ==========================
+        // FEATURE 2
+        // ==========================
+        {
+          LinearLayout,
+          orientation: "horizontal",
+          gravity: "center_vertical",
+          background: ITEM_BG,
+          layout_width: "match_parent",
+          layout_height: "58dp",
+          paddingLeft: "12dp",
+          paddingRight: "8dp",
+    
+    
+          {
+            LinearLayout,
+            orientation: "vertical",
+            gravity: "center_vertical",
+            layout_width: "0dp",
+            layout_weight: 1,
+            layout_height: "match_parent",
+            {
+              TextView,
+              text: "Feature 2",
+              textSize: "14sp",
+              textColor: TEXT,
+              layout_width: "match_parent",
+              layout_height: "wrap_content",
+            },
+            {
+              TextView,
+              text: "Enable second feature",
+              textSize: "9sp",
+              textColor: TEXT_SECONDARY,
+              layout_width: "match_parent",
+              layout_height: "wrap_content",
+            },
+          },
+    
+    
+          {
+            Switch,
+            id: "feature2",
+            layout_width: "50dp",
+            layout_height: "wrap_content",
+          },
+        },
+    
+    
+        // ==========================
+        // OPTIONS
+        // ==========================
+        {
+          TextView,
+          text: "OPTIONS",
+          textSize: "10sp",
+          textColor: TEXT_SECONDARY,
+          gravity: "center_vertical",
+          layout_width: "match_parent",
+          layout_height: "38dp",
+        },
+    
+    
+        {
+          Button,
+          id: "action",
+          text: "Execute",
+          textSize: "13sp",
+          textColor: TEXT,
+          background: ACCENT,
+          layout_width: "match_parent",
+          layout_height: "44dp",
+        },
+    
+    
+        // ==========================
+        // STATUS
+        // ==========================
+        {
+          LinearLayout,
+          orientation: "horizontal",
+          gravity: "center_vertical",
+          layout_width: "match_parent",
+          layout_height: "40dp",
+    
+    
+          {
+            TextView,
+            text: "●",
+            textSize: "10sp",
+            textColor: GREEN,
+            gravity: "center",
+            layout_width: "25dp",
+            layout_height: "match_parent",
+          },
+    
+    
+          {
+            TextView,
+            id: "status",
+            text: "Ready",
+            textSize: "10sp",
+            textColor: TEXT_SECONDARY,
+            gravity: "center_vertical",
+            layout_width: "0dp",
+            layout_weight: 1,
+            layout_height: "match_parent",
+          },
+        },
+      },
+    }
+  },
+
+
+  // ================================
+  // RESIZE GRIP
+  // ================================
+  {
+    ImageView,
+    id: "resize",
+    src: "ic_resize.png",
+    colorFilter: GRIP,
+    layout_gravity: "bottom|right",
+    layout_width: "24dp",
+    layout_height: "24dp",
+    scaleType: "center",
+  }
+}
+
+
+ll = LoadLayout(activity)
+ll.setModule(_module)
+
+view = ll.createView(layout, View)
+
+
+
+// ================================
+// WINDOW MANAGER
+// ================================
+
+manager = activity.getWindowManager()
+
+params = WindowManager.LayoutParams(
+  500,
+  600,
+  0,
+  0,
+  WindowManager.LayoutParams.TYPE_APPLICATION,
+  WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE |
+  WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+  PixelFormat.TRANSLUCENT
+)
+
+
+params.gravity = Gravity.LEFT | Gravity.TOP
+
+params.x = 100
+params.y = 200
+
+
+manager.addView(view, params)
+
+
+
+// ================================
+// STATE
+// ================================
+
+menuVisible = true
+
+normalWidth = 500
+normalHeight = 600
+
+collapsedHeight = 100
+
+
+// ================================
+// collapse
+// ================================
+
+collapse.setOnClickListener({
+  onClick: function(v)
+    if not menuVisible then
+      resize.setVisibility(View.VISIBLE)
+      Features.setVisibility(View.VISIBLE)
+
+      params.height = normalHeight
+    else
+      normalHeight = params.height
+      resize.setVisibility(View.GONE)
+      Features.setVisibility(View.GONE)
+
+      params.height = collapsedHeight
+    end
+
+    manager.updateViewLayout(view, params)
+
+    icon = menuVisible ? "ic_arrow_right.png" : "ic_arrow_down.png"
+    collapse.setImageBitmap(BitmapFactory.decodeFile(saynaadir .. "/$icon"))
+
+    menuVisible = not menuVisible
+  end
+})
+
+
+
+// ================================
+// DRAG HEADER
+// ================================
+
+downX = 0
+downY = 0
+
+startX = 0
+startY = 0
+
+
+header.setOnTouchListener(View.OnTouchListener({
+  onTouch: function(v, event)
+    actionValue = event.getAction()
+
+    if actionValue == MotionEvent.ACTION_DOWN then
+
+      downX = event.getRawX()
+      downY = event.getRawY()
+
+      startX = params.x
+      startY = params.y
+
+      return true
+    elif actionValue == MotionEvent.ACTION_MOVE then
+
+      dx = event.getRawX() - downX
+      dy = event.getRawY() - downY
+
+      params.x = startX + dx
+      params.y = startY + dy
+
+      manager.updateViewLayout(view, params)
+
+      return true
+    elif actionValue == MotionEvent.ACTION_UP then
+
+      return true
+    end
+
+    return true
+  end
+}))
+
+
+
+// ================================
+// RESIZE
+// ================================
+
+resizeDownX = 0
+resizeDownY = 0
+
+resizeStartWidth = 0
+resizeStartHeight = 0
+
+
+resize.setOnTouchListener(View.OnTouchListener({
+  onTouch: function(v, event)
+    actionValue = event.getAction()
+
+    if actionValue == MotionEvent.ACTION_DOWN then
+
+      resizeDownX = event.getRawX()
+      resizeDownY = event.getRawY()
+
+      resizeStartWidth = params.width
+      resizeStartHeight = params.height
+
+      return true
+    elif actionValue == MotionEvent.ACTION_MOVE then
+
+      dx = event.getRawX() - resizeDownX
+      dy = event.getRawY() - resizeDownY
+
+      newWidth = resizeStartWidth + dx
+      newHeight = resizeStartHeight + dy
+
+      if newWidth < 320 then
+        newWidth = 320
+      end
+
+      if newHeight < 400 then
+        newHeight = 400
+      end
+
+      if newWidth > 900 then
+        newWidth = 900
+      end
+
+      if newHeight > 1200 then
+        newHeight = 1200
+      end
+
+      params.width = newWidth
+      params.height = newHeight
+
+      manager.updateViewLayout(view, params)
+
+      return true
+    elif actionValue == MotionEvent.ACTION_UP then
+
+      return true
+    end
+
+    return true
+  end
+}))
+
+
+
+// ================================
+// FEATURE 1
+// ================================
+
+feature1.setOnCheckedChangeListener({
+  onCheckedChanged: function(button, checked)
+    if checked then
+      status.setText("Feature 1 enabled")
+    else
+      status.setText("Ready")
+    end
+  end
+})
+
+
+
+// ================================
+// FEATURE 2
+// ================================
+
+feature2.setOnCheckedChangeListener({
+  onCheckedChanged: function(button, checked)
+    if checked then
+      status.setText("Feature 2 enabled")
+    else
+      status.setText("Ready")
+    end
+  end
+})
+
+
+
+// ================================
+// ACTION
+// ================================
+
+action.setOnClickListener({
+  onClick: function(v)
+    status.setText("Action executed")
+    toast("Action executed")
+  end
+})
+
+
+
+// ================================
+// CLOSE
+// ================================
+
+close.setOnClickListener({
+  onClick: function(v)
+    if view.getWindowToken() != null then
+      manager.removeView(view)
+    end
+  end
+})
