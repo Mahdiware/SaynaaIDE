@@ -19,12 +19,12 @@ public class SaynaaDexLoader {
 
   private final Context context;
   private final File saynaaDir;
-  private final String odexDir;
+  private final File odexDir;
 
   public SaynaaDexLoader(Context context) {
     this.context = context;
-    this.saynaaDir = SaynaaApplication.getInstance().getLocalDir();
-    this.odexDir = SaynaaApplication.getInstance().getOdexDir();
+    this.saynaaDir = context.getDir("saynaa", Context.MODE_PRIVATE);
+    this.odexDir = context.getDir("odex", Context.MODE_PRIVATE);
   }
 
   public ArrayList<ClassLoader> getClassLoaders() {
@@ -41,7 +41,7 @@ public class SaynaaDexLoader {
       if (dex == null) {
         PackageManager manager = context.getApplicationContext().getPackageManager();
         ApplicationInfo info = manager.getPackageInfo(pkg, 0).applicationInfo;
-        dex = new SaynaaDexClassLoader(info.publicSourceDir, SaynaaApplication.getInstance().getOdexDir(),
+        dex = new SaynaaDexClassLoader(info.publicSourceDir, odexDir.getAbsolutePath(),
             info.nativeLibraryDir, context.getApplicationContext().getClassLoader());
         dexCache.put(pkg, dex);
       }
@@ -125,7 +125,7 @@ public class SaynaaDexLoader {
 
       if (dex == null) {
         dex = new SaynaaDexClassLoader(internalDex.getAbsolutePath(), null,
-            SaynaaApplication.getInstance().getApplicationInfo().nativeLibraryDir,
+            context.getApplicationInfo().nativeLibraryDir,
             context.getApplicationContext().getClassLoader());
 
         dexCache.put(name, dex);

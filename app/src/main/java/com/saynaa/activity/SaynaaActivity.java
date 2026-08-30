@@ -51,7 +51,7 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
   public static final String NAME = "name";
   private static final String TAG = "SaynaaActivity";
 
-  protected String saynaaDir;
+  protected File saynaaDir;
   protected String saynaaPath;
   protected File localDir;
 
@@ -103,10 +103,10 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
       if (saynaaPath == null) {
         saynaaPath = new File(localDir, "main.sa").getAbsolutePath();
       }
-      saynaaDir = new File(saynaaPath).getParent();
+      saynaaDir = new File(saynaaPath).getParentFile();
 
       saynaa = new Saynaa(this);
-      saynaa.setSaynaaDir(saynaaDir);
+      saynaa.setSaynaaDir(saynaaDir.getAbsolutePath());
       new JavaModule(saynaa).create();
       saynaa.setGlobal("activity", this);
 
@@ -444,7 +444,7 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
     }
 
     File f = new File(path);
-    saynaaDir = f.getParent();
+    saynaaDir = f.getParentFile();
 
     return path;
   }
@@ -562,7 +562,7 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
       intent.putExtra(NAME, path);
 
       if (path.charAt(0) != '/') {
-        path = saynaaDir + "/" + path;
+        path = saynaaDir.getAbsolutePath() + "/" + path;
       }
 
       File f = new File(path);
@@ -617,7 +617,7 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
       intent.putExtra(NAME, path);
 
       if (path.charAt(0) != '/') {
-        path = saynaaDir + "/" + path;
+        path = saynaaDir.getAbsolutePath() + "/" + path;
       }
 
       File f = new File(path);

@@ -10,9 +10,10 @@ import java.io.File;
 
 public class Main {
   public static void run(Context context) {
-    FileUtil.installSaynaaCode(context);
     String localDir = context.getDir("saynaa", Context.MODE_PRIVATE).getAbsolutePath();
     String saynaaPath = new File(localDir, "main.sa").getAbsolutePath();
+    
+    FileUtil.installSaynaaCode(this, localDir);
 
     if (new File(saynaaPath).exists() == false) {
       Log.e("Saynaa", "Saynaa file not found: " + saynaaPath);
