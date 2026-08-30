@@ -10,7 +10,7 @@ import java.io.File;
 
 public class Main {
   public static void run(Context context) {
-    String localDir = context.getDir("saynaa", Context.MODE_PRIVATE).getAbsolutePath();
+    File localDir = context.getDir("saynaa", Context.MODE_PRIVATE);
     String saynaaPath = new File(localDir, "main.sa").getAbsolutePath();
     
     FileUtil.installSaynaaCode(context, localDir);
