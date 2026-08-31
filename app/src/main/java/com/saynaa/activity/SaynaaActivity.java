@@ -110,7 +110,7 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
       new JavaModule(saynaa).create();
       saynaa.setGlobal("activity", this);
 
-      dexLoader = new SaynaaDexLoader(this, new File(saynaaDir));
+      dexLoader = new SaynaaDexLoader(this, saynaaDir);
       dexLoader.loadLibs();
       ReflectionFinder.setExtraClassLoaders(dexLoader.getClassLoaders());
       File initFile = new File(saynaaDir == null ? localDir : saynaaDir, "init.sa");
