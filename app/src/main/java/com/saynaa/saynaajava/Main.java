@@ -12,7 +12,7 @@ public class Main {
   public static void run(Context context) {
     File localDir = context.getDir("saynaa", Context.MODE_PRIVATE);
     String saynaaPath = new File(localDir, "main.sa").getAbsolutePath();
-    
+
     FileUtil.installSaynaaCode(context, localDir);
 
     if (new File(saynaaPath).exists() == false) {
@@ -22,16 +22,17 @@ public class Main {
 
     try {
       Saynaa saynaa = new Saynaa(context);
-      new JavaModule(saynaa).create();
+      saynaa.setSaynaaDir(localDir);
       saynaa.setGlobal("activity", context);
+      saynaa.setGlobal("context", context);
 
-      SaynaaDexLoader dexLoader = new SaynaaDexLoader(context, localDir);
+      new JavaModule(saynaa).create();
+
+      SaynaaDexLoader dexLoader = saynaa.getDexLoader();
       dexLoader.loadLibs();
       ReflectionFinder.setExtraClassLoaders(dexLoader.getClassLoaders());
 
-      Log.d("Saynaa", "Saynaa initialized successfully. Running Saynaa file: " + saynaaPath);
       File initFile = new File(localDir, "init.sa");
-      Log.d("Saynaa", "Checking for init.sa file at: " + initFile.getAbsolutePath());
       if (initFile.exists()) {
         int initResult = saynaa.runFile(initFile.getAbsolutePath());
         if (initResult != 0) {

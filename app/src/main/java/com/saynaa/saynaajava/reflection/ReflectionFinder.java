@@ -378,6 +378,12 @@ public class ReflectionFinder {
     }
   }
 
+  public static synchronized void setExtraClassLoaders(ClassLoader loader) {
+    if (loader != null) {
+      extraClassLoaders.add(loader);
+    }
+  }
+
   public static synchronized void removeExtraClassLoader(ClassLoader loader) {
     extraClassLoaders.remove(loader);
   }

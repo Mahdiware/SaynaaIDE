@@ -18,29 +18,12 @@ import java.util.Set;
 
 public class SaynaaApplication extends Application implements SaynaaContext {
   private static SaynaaApplication mApp;
-  static private HashMap<String, Object> data = new HashMap<String, Object>();
   private SharedPreferences mSharedPreferences;
-
-  protected String localDir;
-  protected String odexDir;
-  protected String libDir;
 
   public static SaynaaApplication getInstance() {
     return mApp;
   }
   
-  public String getLocalDir() {
-    return localDir;
-  }
-
-  public String getLibDir() {
-    return libDir;
-  }
-
-  public String getOdexDir() {
-    return odexDir;
-  }
-
   @Override
   public void onCreate() {
     super.onCreate();
@@ -48,19 +31,10 @@ public class SaynaaApplication extends Application implements SaynaaContext {
     CrashHandler crashHandler = CrashHandler.getInstance();
     crashHandler.init(this);
     mSharedPreferences = getSharedPreferences(this);
-
-    odexDir = getDir("odex", Context.MODE_PRIVATE).getAbsolutePath();
-    libDir = getDir("lib", Context.MODE_PRIVATE).getAbsolutePath();
-    localDir = getDir("saynaa", Context.MODE_PRIVATE).getAbsolutePath();
   }
 
   private static SharedPreferences getSharedPreferences(Context context) {
     return PreferenceManager.getDefaultSharedPreferences(context);
-  }
-
-  @Override
-  public void call(String name, Object[] args) {
-    // TODO: Implement this method
   }
 
   @Override
@@ -106,14 +80,7 @@ public class SaynaaApplication extends Application implements SaynaaContext {
   }
 
   @Override
-  public Saynaa getSaynaa() {
-    return null;
-  }
-
-  @Override
   public void sendMsg(String msg) {
-    // TODO: Implement this method
-    Toast.makeText(this, msg, Toast.LENGTH_SHORT).show();
   }
 
   @Override

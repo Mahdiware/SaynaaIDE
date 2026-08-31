@@ -56,7 +56,7 @@ public class FileUtil {
     try {
       PackageInfo info = context.getPackageManager().getPackageInfo(context.getPackageName(), 0);
       long updateTime = info.lastUpdateTime;
-      SharedPreferences prefs = context.getSharedPreferences("assets", Context.MODE_PRIVATE);
+      SharedPreferences prefs = context.getSharedPreferences("saynaa_assets", Context.MODE_PRIVATE);
       long savedTime = prefs.getLong("lastUpdateTime", -1);
 
       if (savedTime == updateTime) {
@@ -72,7 +72,7 @@ public class FileUtil {
 
       copyAssetFolder(context, "", files);
 
-      prefs.edit().putLong("lastUpdateTime", updateTime).apply();
+      prefs.edit().putLong("last_update_time", updateTime).apply();
     } catch (Exception e) {
       e.printStackTrace();
     }

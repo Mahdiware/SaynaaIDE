@@ -52,10 +52,7 @@ public class FloatingEditText extends FrameLayout {
 
   private int horizontalPadding = 14;
 
-  // ==================================================
   // Constructors
-  // ==================================================
-
   public FloatingEditText(Context context) {
     this(context, null);
   }
@@ -74,10 +71,7 @@ public class FloatingEditText extends FrameLayout {
     init(context);
   }
 
-  // ==================================================
   // Theme colors
-  // ==================================================
-
   private void initThemeColors() {
     backgroundColor = Color.TRANSPARENT;
     /* getThemeColor(
@@ -138,10 +132,7 @@ public class FloatingEditText extends FrameLayout {
     return Color.TRANSPARENT;
   }
 
-  // ==================================================
   // Initialize
-  // ==================================================
-
   private void init(Context context) {
     // ----------------------------------------------
     // Field container
@@ -245,7 +236,8 @@ public class FloatingEditText extends FrameLayout {
 
     errorText.setVisibility(GONE);
 
-    LayoutParams errorParams = new LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+    LayoutParams errorParams = new LayoutParams(
+        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
 
     addView(errorText, errorParams);
 
@@ -289,10 +281,7 @@ public class FloatingEditText extends FrameLayout {
     updateState(false);
   }
 
-  // ==================================================
   // State
-  // ==================================================
-
   private void updateState(boolean animate) {
     boolean floating = editText.hasFocus() || editText.length() > 0;
 
@@ -343,10 +332,7 @@ public class FloatingEditText extends FrameLayout {
     label.setTextColor(labelColor);
   }
 
-  // ==================================================
   // Floating label animation
-  // ==================================================
-
   private void animateLabel(float target, boolean animate) {
     if (labelAnimator != null) {
       labelAnimator.cancel();
@@ -409,10 +395,7 @@ public class FloatingEditText extends FrameLayout {
     fieldContainer.invalidate();
   }
 
-  // ==================================================
   // Hint
-  // ==================================================
-
   public void setHint(String text) {
     if (text == null) {
       text = "";
@@ -437,10 +420,7 @@ public class FloatingEditText extends FrameLayout {
     return hint;
   }
 
-  // ==================================================
   // Text
-  // ==================================================
-
   public void setText(String text) {
     if (text == null) {
       text = "";
@@ -461,10 +441,7 @@ public class FloatingEditText extends FrameLayout {
     return editText;
   }
 
-  // ==================================================
   // Error
-  // ==================================================
-
   public void setError(String message) {
     if (message == null || message.length() == 0) {
       clearError();
@@ -558,10 +535,7 @@ public class FloatingEditText extends FrameLayout {
     updateColors();
   }
 
-  // ==================================================
   // Colors
-  // ==================================================
-
   public void setFocusColor(int color) {
     focusColor = color;
 
@@ -588,20 +562,14 @@ public class FloatingEditText extends FrameLayout {
     updateColors();
   }
 
-  // ==================================================
   // Radius
-  // ==================================================
-
   public void setCornerRadius(float radius) {
     cornerRadius = radius;
 
     fieldContainer.invalidate();
   }
 
-  // ==================================================
   // Enabled
-  // ==================================================
-
   @Override
   public void setEnabled(boolean enabled) {
     super.setEnabled(enabled);
@@ -624,10 +592,7 @@ public class FloatingEditText extends FrameLayout {
     return enabled;
   }
 
-  // ==================================================
   // Input
-  // ==================================================
-
   public void setInputType(int type) {
     editText.setInputType(type);
   }
@@ -644,10 +609,7 @@ public class FloatingEditText extends FrameLayout {
     editText.setTextSize(TypedValue.COMPLEX_UNIT_SP, size);
   }
 
-  // ==================================================
   // Measurement
-  // ==================================================
-
   @Override
   protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
     int width = MeasureSpec.getSize(widthMeasureSpec);
@@ -678,10 +640,7 @@ public class FloatingEditText extends FrameLayout {
     setMeasuredDimension(width, desiredHeight);
   }
 
-  // ==================================================
   // Layout
-  // ==================================================
-
   @Override
   protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
     fieldContainer.layout(0, 0, getMeasuredWidth(), dp(fieldHeight + 8));
@@ -693,18 +652,12 @@ public class FloatingEditText extends FrameLayout {
     }
   }
 
-  // ==================================================
   // dp
-  // ==================================================
-
   private int dp(float value) {
     return (int) (value * getResources().getDisplayMetrics().density + 0.5f);
   }
 
-  // ==================================================
   // Custom outline field
-  // ==================================================
-
   private class OutlineField extends FrameLayout {
     private Paint borderPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
 
@@ -851,10 +804,7 @@ public class FloatingEditText extends FrameLayout {
     }
   }
 
-  // ==================================================
   // Error icon
-  // ==================================================
-
   private static class ErrorIconDrawable extends Drawable {
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
 

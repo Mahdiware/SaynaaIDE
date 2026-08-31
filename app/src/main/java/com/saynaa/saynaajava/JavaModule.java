@@ -1,16 +1,16 @@
 package com.saynaa.saynaajava;
 
+import android.content.Context;
 import android.util.Log;
 import com.saynaa.saynaajava.datatype.*;
 import com.saynaa.saynaajava.reflection.*;
+import java.io.File;
 import java.lang.reflect.Array;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
-import java.io.File;
 import java.util.Map;
 import java.util.function.Function;
-import android.content.Context;
 
 public class JavaModule {
   protected final Saynaa saynaa;
@@ -25,7 +25,7 @@ public class JavaModule {
     try {
       SaynaaModule module = saynaa.newModule(module_name);
       module.setGlobal("context", saynaa.getContext());
-      module.setGlobal("saynaadir", saynaa.getSaynaaDir());
+      module.setGlobal("saynaadir", saynaa.getSaynaaDir().getAbsolutePath());
       module.setGlobal("mainModule", saynaa.getMainModule());
       module.setGlobal("application", saynaa.getContext().getApplicationContext());
       module.setGlobal("bindClass", ReflectionFinder.class, "findClass");
@@ -52,14 +52,8 @@ public class JavaModule {
     return object;
   }
 
-  private SaynaaDexLoader dexLoader = null;
-  public SaynaaDexClassLoader loadDex(String path) throws SaynaaException {
-    if (dexLoader == null) {
-      dexLoader = new SaynaaDexLoader(saynaa.getContext(), new File(saynaa.getSaynaaDir()));
-    }
-    SaynaaDexClassLoader loader = dexLoader.loadDex(path);
-    ReflectionFinder.setExtraClassLoaders(dexLoader.getClassLoaders());
-    return loader;
+  public void loadDex(String path) throws SaynaaException {
+    ReflectionFinder.setExtraClassLoaders(saynaa.getDexLoader().loadDex(path));
   }
 
   public Object newJavaObject(Object classOrName, Object... args) {

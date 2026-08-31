@@ -7,6 +7,7 @@ import com.saynaa.activity.SaynaaActivity;
 import com.saynaa.saynaajava.JavaMethodBinding;
 import com.saynaa.saynaajava.PCallResult;
 import com.saynaa.saynaajava.datatype.*;
+import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -28,9 +29,10 @@ public class Saynaa {
   public static final int SLOT_TYPE_CONTEXT = 14;
   public static final int SLOT_TYPE_INSTANCE = 15;
 
-  private String saynaadir;
+  private File saynaadir;
   private Context context;
   private SaynaaModule mainModule;
+  private SaynaaDexLoader dexLoader;
 
   /**
    * Array with all mainModule's instances.
@@ -45,7 +47,8 @@ public class Saynaa {
     this.context = context;
     this.vm = saynaa_open();
     this.mainModule = newModule("main");
-    this.saynaadir = context.getApplicationContext().getDir("saynaa", Context.MODE_PRIVATE).getAbsolutePath();
+    this.saynaadir = context.getApplicationContext().getDir("saynaa", Context.MODE_PRIVATE);
+    this.dexLoader = new SaynaaDexLoader(context, saynaadir);
   }
 
   // future will use these: when added multiple modules per VM
@@ -72,12 +75,16 @@ public class Saynaa {
     return mainModules.size() - 1;
   }
 
-  public synchronized void setSaynaaDir(String dir) {
+  public synchronized void setSaynaaDir(File dir) {
     this.saynaadir = dir;
   }
 
-  public synchronized String getSaynaaDir() {
+  public synchronized File getSaynaaDir() {
     return this.saynaadir;
+  }
+
+  public synchronized SaynaaDexLoader getDexLoader() {
+    return this.dexLoader;
   }
 
   public synchronized Context getContext() {

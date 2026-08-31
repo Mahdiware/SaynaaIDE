@@ -4,11 +4,7 @@ import android.content.*;
 import java.util.*;
 
 public interface SaynaaContext {
-  public void call(String func, Object... args);
-
   public Context getContext();
-
-  public Saynaa getSaynaa();
 
   public void sendMsg(String msg);
 

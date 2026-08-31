@@ -193,9 +193,10 @@ AdapterItem = {
 assert(activity != null, 'activity is null')
 
 # FIXME: the nested class don't work now
-# R = java.bindClass('android.R')
-# list_item_1 = R.layout.simple_list_item_1
-# toast("id is: ${ list_item_1 }")
+R = java.bindClass('android.R')
+list_item_1 = R.layout.simple_list_item_1
+assert(list_item_1 != null, 'R.layout.simple_list_item_1 is null')
+assert(list_item_1 is Number, 'R.layout.simple_list_item_1 type is not Number')
 
 debug("This is a debug message from Saynaa script.")
 
@@ -203,10 +204,10 @@ result = loadfile("loadtest.sa")
 debug("loadtest: ${result}")
 
 function onCreate(arg1)
-  root = loadlayout(activity, DemoLayout)
+  //root = loadlayout(activity, DemoLayout)
   
-  assert(root != null, 'loadlayout returned null')
-  activity.setContentView(root)
+  //assert(root != null, 'loadlayout returned null')
+  activity.setContentView(DemoLayout)
 
   adapter = SaynaaAdapter(activity, AdapterItem, AdapterData)
   DemoList.setAdapter(adapter)

@@ -82,14 +82,106 @@ void java_class_getter(VM* vm) {
   }
 
   BridgeState* bridge = bridge_from_vm(vm);
-  if (bridge != NULL && bridge->javaBridgeClass != NULL && bridge->mGetFieldValue != NULL) {
+  if (bridge == NULL || bridge->javaBridgeClass == NULL) {
+    SetRuntimeError(vm, "Java bridge is not initialized.");
+    return;
+  }
+
+  // Try nested class first:
+  if (name != NULL && name[0] != '\0' && bridge->mFindClass != NULL) {
     jobject classObj = (*env)->NewLocalRef(env, thiz->reference->global);
+
+    jstring ownerNameObj = get_java_object_name(env, vm, bridge, classObj,
+        "JavaClass._getter getName() failed", "JavaClass._getter failed to resolve class name.");
+
+    if (classObj != NULL)
+      (*env)->DeleteLocalRef(env, classObj);
+
+    if (ownerNameObj != NULL) {
+      const char* ownerName = (*env)->GetStringUTFChars(env, ownerNameObj, NULL);
+
+      if (ownerName != NULL) {
+        size_t ownerLen = strlen(ownerName);
+        size_t childLen = strlen(name);
+
+        char* nestedName = (char*) malloc(ownerLen + 1 + childLen + 1);
+
+        if (nestedName != NULL) {
+          memcpy(nestedName, ownerName, ownerLen);
+          nestedName[ownerLen] = '$';
+          memcpy(nestedName + ownerLen + 1, name, childLen);
+          nestedName[ownerLen + 1 + childLen] = '\0';
+
+          jstring jNested = (*env)->NewStringUTF(env, nestedName);
+
+          jobject nestedClass = NULL;
+
+          if (jNested != NULL) {
+            nestedClass = (*env)->CallStaticObjectMethod(
+                env, bridge->javaBridgeClass, bridge->mFindClass, jNested);
+
+            (*env)->DeleteLocalRef(env, jNested);
+          }
+
+          free(nestedName);
+
+          if ((*env)->ExceptionCheck(env)) {
+            (*env)->ReleaseStringUTFChars(env, ownerNameObj, ownerName);
+            (*env)->DeleteLocalRef(env, ownerNameObj);
+
+            throw_if_exception(vm, env, "JavaClass._getter nested class lookup failed");
+            return;
+          }
+
+          if (nestedClass != NULL) {
+            JavaRef* ref = make_java_ref(env, bridge->jvm, nestedClass);
+
+            (*env)->DeleteLocalRef(env, nestedClass);
+            (*env)->ReleaseStringUTFChars(env, ownerNameObj, ownerName);
+            (*env)->DeleteLocalRef(env, ownerNameObj);
+
+            if (ref == NULL) {
+              SetRuntimeError(vm, "Failed to wrap nested Java class reference.");
+              return;
+            }
+
+            create_java_instance(vm, &bridge->clsJavaClass, ref, 0);
+            return;
+          }
+
+          /*
+           * mFindClass returned NULL.
+           * That is normal: this name may be a field.
+           */
+        } else {
+          (*env)->ReleaseStringUTFChars(env, ownerNameObj, ownerName);
+          (*env)->DeleteLocalRef(env, ownerNameObj);
+          SetRuntimeError(vm, "Out of memory.");
+          return;
+        }
+
+        (*env)->ReleaseStringUTFChars(env, ownerNameObj, ownerName);
+      }
+
+      (*env)->DeleteLocalRef(env, ownerNameObj);
+    }
+  }
+
+  /*
+   * Try static field:
+   *
+   * android.R$layout.simple_list_item_1 -> int
+   */
+  if (bridge->mGetFieldValue != NULL) {
+    jobject classObj = (*env)->NewLocalRef(env, thiz->reference->global);
+
     jstring jField = (*env)->NewStringUTF(env, name == NULL ? "" : name);
 
     jobject fieldValue = (*env)->CallStaticObjectMethod(
         env, bridge->javaBridgeClass, bridge->mGetFieldValue, classObj, jField);
 
     (*env)->DeleteLocalRef(env, jField);
+
     if (classObj != NULL)
       (*env)->DeleteLocalRef(env, classObj);
 
@@ -100,74 +192,14 @@ void java_class_getter(VM* vm) {
 
     if (fieldValue != NULL) {
       object_to_slot(env, vm, bridge, 0, fieldValue, "Failed to wrap Java result object.");
+
       (*env)->DeleteLocalRef(env, fieldValue);
       return;
     }
   }
 
-  // Try resolving nested class references like View.OnClickListener -> android.view.View$OnClickListener
-  if (name != NULL && name[0] != '\0' && is_uppercase_ascii(name[0]) && bridge != NULL
-      && bridge->javaBridgeClass != NULL && bridge->mFindClass != NULL) {
-    jobject classObj = (*env)->NewLocalRef(env, thiz->reference->global);
-    jstring ownerNameObj = get_java_object_name(env, vm, bridge, classObj,
-        "JavaClass._getter getName() failed", "JavaClass._getter failed to resolve class name.");
-    if (classObj != NULL)
-      (*env)->DeleteLocalRef(env, classObj);
-
-    if (ownerNameObj != NULL) {
-      const char* ownerName = (*env)->GetStringUTFChars(env, ownerNameObj, NULL);
-      if (ownerName != NULL && name != NULL && name[0] != '\0') {
-        size_t ownerLen = strlen(ownerName);
-        size_t childLen = strlen(name);
-        char* nestedName = (char*) malloc(ownerLen + 1 + childLen + 1);
-        if (nestedName != NULL) {
-          memcpy(nestedName, ownerName, ownerLen);
-          nestedName[ownerLen] = '$';
-          memcpy(nestedName + ownerLen + 1, name, childLen);
-          nestedName[ownerLen + 1 + childLen] = '\0';
-
-          jstring jNested = (*env)->NewStringUTF(env, nestedName);
-          jobject nestedClass = NULL;
-          if (jNested != NULL) {
-            nestedClass = (*env)->CallStaticObjectMethod(
-                env, bridge->javaBridgeClass, bridge->mFindClass, jNested);
-            (*env)->DeleteLocalRef(env, jNested);
-          }
-
-          if ((*env)->ExceptionCheck(env)) {
-            free(nestedName);
-            (*env)->ReleaseStringUTFChars(env, ownerNameObj, ownerName);
-            (*env)->DeleteLocalRef(env, ownerNameObj);
-            throw_if_exception(vm, env, "JavaClass._getter nested class lookup failed");
-            return;
-          }
-
-          if (nestedClass != NULL) {
-            JavaRef* ref = make_java_ref(env, bridge->jvm, nestedClass);
-            (*env)->DeleteLocalRef(env, nestedClass);
-            free(nestedName);
-            (*env)->ReleaseStringUTFChars(env, ownerNameObj, ownerName);
-            (*env)->DeleteLocalRef(env, ownerNameObj);
-            if (ref == NULL) {
-              SetRuntimeError(vm, "Failed to wrap nested Java class reference.");
-              return;
-            }
-
-            create_java_instance(vm, &bridge->clsJavaClass, ref, 0);
-            return;
-          }
-
-          free(nestedName);
-        }
-      }
-
-      if (ownerName != NULL)
-        (*env)->ReleaseStringUTFChars(env, ownerNameObj, ownerName);
-      (*env)->DeleteLocalRef(env, ownerNameObj);
-    }
-  }
-
   JavaRef* target = clone_java_ref(env, thiz->reference);
+
   if (target == NULL) {
     SetRuntimeError(vm, "Failed to clone Java class reference.");
     return;
@@ -454,6 +486,8 @@ void java_object_getter(VM* vm) {
     SetRuntimeError(vm, "Failed to clone Java object reference.");
     return;
   }
+
+  LOGD("Creating JavaMethod instance for field '%s' of JavaObject %p", name, (void*) thiz->reference->global);
 
   create_java_method_instance(vm, target, name, false, 0);
 }

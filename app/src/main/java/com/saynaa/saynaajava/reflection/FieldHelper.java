@@ -60,8 +60,14 @@ public class FieldHelper {
     }
 
     Field field = ReflectionFinder.findFieldQuietly(cls, fieldName);
-    if (field == null)
+    if (field == null) {
+      Log.d(TAG, "Field not found: " + fieldName + " in class: " + cls.getName());
       return null;
+    }
+
+    Log.d(TAG, "Getting field value: " + fieldName + " from class: " + cls.getName()
+                   + ", isStaticAccess: " + isStaticAccess);
+    Log.d(TAG, "Field details: " + field.toString() + ", type: " + field.getType().getName());
 
     try {
       return ReflectionNormalizer.normalizeReturn(field.get(isStaticAccess ? null : objOrClass));

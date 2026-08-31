@@ -516,24 +516,18 @@ bool ensure_wrapper_classes(VM* vm);
 
 bool create_java_instance(VM* vm, Handle** clsHandlePtr, JavaRef* ref, int outSlot) {
   if (clsHandlePtr == NULL) {
-    if (ref != NULL)
-      java_ref_destructor(ref);
     SetRuntimeError(vm, "Internal error: class handle pointer is null.");
     return false;
   }
 
   if (*clsHandlePtr == NULL) {
     if (!ensure_wrapper_classes(vm)) {
-      if (ref != NULL)
-        java_ref_destructor(ref);
       return false;
     }
   }
 
   if (*clsHandlePtr == NULL || ref == NULL) {
     SetRuntimeError(vm, "Internal error: Java class handle or ref is null.");
-    if (ref != NULL)
-      java_ref_destructor(ref);
     return false;
   }
 
@@ -549,7 +543,6 @@ bool create_java_instance(VM* vm, Handle** clsHandlePtr, JavaRef* ref, int outSl
   bool state = true;
 
   if (!NewInstance(vm, slot1, outSlot, 1, slot2)) {
-    java_ref_destructor(ref);
     state = false;
     goto L_return;
   }
@@ -568,15 +561,11 @@ bool create_java_method_instance(VM* vm, JavaRef* target, const char* method_nam
   BridgeState* bridge = bridge_from_vm(vm);
   if (bridge != NULL && bridge->clsJavaMethod == NULL) {
     if (!ensure_wrapper_classes(vm)) {
-      if (target != NULL)
-        java_ref_destructor(target);
       return false;
     }
   }
   if (bridge == NULL || bridge->clsJavaMethod == NULL || target == NULL || method_name == NULL) {
     SetRuntimeError(vm, "Internal error creating JavaMethod instance.");
-    if (target != NULL)
-      java_ref_destructor(target);
     return false;
   }
 
@@ -600,7 +589,6 @@ bool create_java_method_instance(VM* vm, JavaRef* target, const char* method_nam
   bool state = true;
 
   if (!NewInstance(vm, slot1, outSlot, 3, slot2)) {
-    java_ref_destructor(target);
     state = false;
     goto L_return;
   }

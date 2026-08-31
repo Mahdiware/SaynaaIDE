@@ -12,10 +12,7 @@ public final class ViewUtils {
     // Utility class
   }
 
-  // ============================================================
   // DP <-> PX
-  // ============================================================
-
   public static int dpToPx(Context context, float dp) {
     return Math.round(dp * context.getResources().getDisplayMetrics().density);
   }
@@ -32,10 +29,7 @@ public final class ViewUtils {
     return px / context.getResources().getDisplayMetrics().density;
   }
 
-  // ============================================================
   // SP <-> PX
-  // ============================================================
-
   public static int spToPx(Context context, float sp) {
     return Math.round(sp * context.getResources().getDisplayMetrics().scaledDensity);
   }
@@ -52,10 +46,7 @@ public final class ViewUtils {
     return px / context.getResources().getDisplayMetrics().scaledDensity;
   }
 
-  // ============================================================
   // SIZE
-  // ============================================================
-
   public static int getWidth(View view) {
     return view.getWidth();
   }
@@ -72,10 +63,7 @@ public final class ViewUtils {
     return pxToDp(view.getContext(), view.getHeight());
   }
 
-  // ============================================================
   // MEASURED SIZE
-  // ============================================================
-
   public static int getMeasuredWidth(View view) {
     return view.getMeasuredWidth();
   }
@@ -92,10 +80,7 @@ public final class ViewUtils {
     return pxToDp(view.getContext(), view.getMeasuredHeight());
   }
 
-  // ============================================================
   // MEASURE
-  // ============================================================
-
   public static void measure(View view) {
     view.measure(View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
         View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
@@ -111,10 +96,7 @@ public final class ViewUtils {
         View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
   }
 
-  // ============================================================
   // POST LAYOUT
-  // ============================================================
-
   public static void afterLayout(View view, Runnable action) {
     view.post(action);
   }
@@ -123,10 +105,7 @@ public final class ViewUtils {
     return view.isLaidOut();
   }
 
-  // ============================================================
   // POSITION
-  // ============================================================
-
   public static float getX(View view) {
     return view.getX();
   }
@@ -151,10 +130,7 @@ public final class ViewUtils {
     return view.getBottom();
   }
 
-  // ============================================================
   // SCREEN POSITION
-  // ============================================================
-
   public static int getScreenX(View view) {
     int[] location = new int[2];
     view.getLocationOnScreen(location);
@@ -183,10 +159,7 @@ public final class ViewUtils {
     return location[1];
   }
 
-  // ============================================================
   // BOUNDS
-  // ============================================================
-
   public static Rect getGlobalBounds(View view) {
     Rect rect = new Rect();
     view.getGlobalVisibleRect(rect);
@@ -198,10 +171,7 @@ public final class ViewUtils {
     return new Rect(0, 0, view.getWidth(), view.getHeight());
   }
 
-  // ============================================================
   // PADDING
-  // ============================================================
-
   public static int getPaddingLeft(View view) {
     return view.getPaddingLeft();
   }
@@ -229,10 +199,7 @@ public final class ViewUtils {
         dpToPx(context, bottom));
   }
 
-  // ============================================================
   // MARGINS
-  // ============================================================
-
   private static ViewGroup.MarginLayoutParams getMarginParams(View view) {
     ViewGroup.LayoutParams params = view.getLayoutParams();
 
@@ -267,10 +234,7 @@ public final class ViewUtils {
     return params != null ? params.bottomMargin : 0;
   }
 
-  // ============================================================
   // TOTAL SIZE INCLUDING MARGINS
-  // ============================================================
-
   public static int getTotalWidth(View view) {
     return view.getWidth() + getMarginLeft(view) + getMarginRight(view);
   }
@@ -287,10 +251,7 @@ public final class ViewUtils {
     return pxToDp(view.getContext(), getTotalHeight(view));
   }
 
-  // ============================================================
   // VISIBILITY
-  // ============================================================
-
   public static void visible(View view) {
     view.setVisibility(View.VISIBLE);
   }
@@ -315,10 +276,7 @@ public final class ViewUtils {
     return view.getVisibility() == View.GONE;
   }
 
-  // ============================================================
   // ENABLED
-  // ============================================================
-
   public static void enable(View view) {
     view.setEnabled(true);
   }
@@ -331,10 +289,7 @@ public final class ViewUtils {
     return view.isEnabled();
   }
 
-  // ============================================================
   // ALPHA
-  // ============================================================
-
   public static void setAlpha(View view, float alpha) {
     view.setAlpha(alpha);
   }
@@ -343,10 +298,7 @@ public final class ViewUtils {
     return view.getAlpha();
   }
 
-  // ============================================================
   // SCALE
-  // ============================================================
-
   public static void setScale(View view, float scale) {
     view.setScaleX(scale);
     view.setScaleY(scale);
@@ -360,10 +312,7 @@ public final class ViewUtils {
     view.setScaleY(scale);
   }
 
-  // ============================================================
   // ROTATION
-  // ============================================================
-
   public static void setRotation(View view, float rotation) {
     view.setRotation(rotation);
   }
@@ -372,18 +321,12 @@ public final class ViewUtils {
     return view.getRotation();
   }
 
-  // ============================================================
   // CLICK
-  // ============================================================
-
   public static void click(View view) {
     view.performClick();
   }
 
-  // ============================================================
   // REQUEST
-  // ============================================================
-
   public static void requestLayout(View view) {
     view.requestLayout();
   }
@@ -392,10 +335,7 @@ public final class ViewUtils {
     view.invalidate();
   }
 
-  // ============================================================
   // UI THREAD
-  // ============================================================
-
   private static final Handler MAIN_HANDLER = new Handler(Looper.getMainLooper());
 
   public static void runOnUiThread(Runnable action) {
@@ -419,10 +359,7 @@ public final class ViewUtils {
     view.removeCallbacks(action);
   }
 
-  // ============================================================
   // SCREEN DIMENSIONS
-  // ============================================================
-
   public static int getScreenWidthPx(Context context) {
     return context.getResources().getDisplayMetrics().widthPixels;
   }
@@ -439,10 +376,7 @@ public final class ViewUtils {
     return pxToDp(context, getScreenHeightPx(context));
   }
 
-  // ============================================================
   // DENSITY
-  // ============================================================
-
   public static float getDensity(Context context) {
     return context.getResources().getDisplayMetrics().density;
   }

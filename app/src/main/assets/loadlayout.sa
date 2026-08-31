@@ -1004,9 +1004,7 @@ function loadlayout(activity, node, data)
 
   ll = LoadLayout(activity)
   ll.setModule(java.mainModule)
-  view = ll.createView(node)
-  ll.bind(data)
-  return view
+  return ll.createView(node)
 end
   
   

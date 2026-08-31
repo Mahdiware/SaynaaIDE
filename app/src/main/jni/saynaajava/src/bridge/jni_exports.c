@@ -850,6 +850,7 @@ JNIEXPORT jboolean JNICALL Java_com_saynaa_saynaajava_Saynaa_saynaa_1bindJavaObj
   LOGD("saynaa_bindJavaObject: created JavaRef %p for Java class %p", (void*) ref, (void*) value);
 
   if (!create_java_instance(vm, &bridge->clsJavaObject, ref, slot)) {
+    java_ref_destructor(ref);
     return JNI_FALSE;
   }
 

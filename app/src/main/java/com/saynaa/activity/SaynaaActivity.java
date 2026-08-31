@@ -59,32 +59,17 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
   protected TextView status;
   protected LinearLayout layout;
 
-
   private int activityFlags = 0;
-  protected boolean isCreate = false;
-  protected boolean DebugMode = false;
+  protected boolean DebugMode = true;
 
   private ArrayList<SaynaaGcable> gclist = new ArrayList<SaynaaGcable>();
 
   private SaynaaBroadcastReceiver mReceiver;
 
-  protected StringBuilder toastbuilder = new StringBuilder();
-  protected Toast toast;
-  protected long lastShow;
-
-  protected Menu optionsMenu;
-
   // Saynaa runtime
   protected Saynaa saynaa;
-
-  private SaynaaDexLoader dexLoader;
-
-  // Optional compatibility placeholders
-  protected Object mOnKeyDown;
-  protected Object mOnKeyUp;
-  protected Object mOnKeyLongPress;
-  protected Object mOnTouchEvent;
-  protected Object mOnKeyShortcut;
+  protected SaynaaClass SaynaaLoadLayout;
+  protected SaynaaInstance SaynaaInstance;
 
   @Override
   protected void onCreate(Bundle savedInstanceState) {
@@ -106,11 +91,11 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
       saynaaDir = new File(saynaaPath).getParentFile();
 
       saynaa = new Saynaa(this);
-      saynaa.setSaynaaDir(saynaaDir.getAbsolutePath());
+      saynaa.setSaynaaDir(saynaaDir);
       new JavaModule(saynaa).create();
       saynaa.setGlobal("activity", this);
 
-      dexLoader = new SaynaaDexLoader(this, saynaaDir);
+      SaynaaDexLoader dexLoader = saynaa.getDexLoader();
       dexLoader.loadLibs();
       ReflectionFinder.setExtraClassLoaders(dexLoader.getClassLoaders());
       File initFile = new File(saynaaDir == null ? localDir : saynaaDir, "init.sa");
@@ -131,7 +116,6 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
         return;
       }
 
-      isCreate = true;
       Object[] launchArgs = null;
       Bundle launchBundle = null;
       Intent launchIntent = getIntent();
@@ -263,27 +247,6 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
     Log.w(TAG, msg);
   }
 
-  public ArrayList<ClassLoader> getClassLoaders() {
-    if (dexLoader == null)
-      return new ArrayList<>();
-    return dexLoader.getClassLoaders();
-  }
-
-  public SaynaaDexClassLoader loadDex(String path) throws SaynaaException {
-    if (dexLoader == null) {
-      dexLoader = new SaynaaDexLoader(this, saynaaDir);
-    }
-    SaynaaDexClassLoader loader = dexLoader.loadDex(path);
-    ReflectionFinder.setExtraClassLoaders(dexLoader.getClassLoaders());
-    return loader;
-  }
-
-  public HashMap<String, String> getLibrarys() {
-    if (dexLoader == null)
-      return new HashMap<>();
-    return dexLoader.getLibrarys();
-  }
-
   @Override
   protected void onActivityResult(int requestCode, int resultCode, Intent data) {
     // TODO: Implement this method
@@ -364,7 +327,6 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
 
   @Override
   public boolean onCreateOptionsMenu(Menu menu) {
-    optionsMenu = menu;
     Object ret = runFunc("onCreateOptionsMenu", menu);
     if (ret instanceof Boolean)
       return (Boolean) ret;
@@ -415,6 +377,29 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
     super.setContentView(view);
   }
 
+  public void setContentView(SaynaaMap layouts) {
+    if (SaynaaLoadLayout == null) {
+      Object global = saynaa.getGlobal("LoadLayout");
+      if (global instanceof SaynaaClass) {
+        SaynaaLoadLayout = (SaynaaClass) global;
+      } else {
+        return;
+      }
+    }
+
+    if (SaynaaInstance == null) {
+      SaynaaInstance = SaynaaLoadLayout.newInstance(this);
+      if (SaynaaInstance == null)
+        return;
+    }
+
+    SaynaaInstance.call("setModule", saynaa.getMainModule());
+    Object result = SaynaaInstance.call("createView", layouts);
+
+    if (result instanceof View)
+      setContentView((View) result);
+  }
+
   @Override
   public void setContentView(View view, ViewGroup.LayoutParams params) {
     super.setContentView(view, params);
@@ -447,59 +432,6 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
     saynaaDir = f.getParentFile();
 
     return path;
-  }
-
-  public void call(String func) {
-    push(2, func);
-  }
-
-  public void call(String func, Object[] args) {
-    if (args.length == 0)
-      push(2, func);
-    else
-      push(3, func, args);
-  }
-
-  public void set(String key, Object value) {
-    if (key == null || key.trim().isEmpty())
-      return;
-    try {
-      saynaa.setGlobal(key, value);
-    } catch (Exception e) {
-      sendMsg("set error: " + e.getMessage());
-    }
-  }
-
-  public Object get(String key) {
-    if (key == null || key.trim().isEmpty())
-      return null;
-    try {
-      return saynaa.getGlobal(key);
-    } catch (Exception e) {
-      sendMsg("get error: " + e.getMessage());
-      return null;
-    }
-  }
-
-  public void push(int what, String s) {
-    Message message = new Message();
-    Bundle bundle = new Bundle();
-    bundle.putString(DATA, s);
-    message.setData(bundle);
-    message.what = what;
-
-    handler.sendMessage(message);
-  }
-
-  public void push(int what, String s, Object[] args) {
-    Message message = new Message();
-    Bundle bundle = new Bundle();
-    bundle.putString(DATA, s);
-    bundle.putSerializable("args", args);
-    message.setData(bundle);
-    message.what = what;
-
-    handler.sendMessage(message);
   }
 
   public Object runFunc(String funcName, Object... args) {
@@ -649,30 +581,10 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
     newActivity(path, arg, false);
   }
 
-  public Menu getOptionsMenu() {
-    return optionsMenu;
-  }
-
   private int getThemeColor(int attr) {
     TypedValue value = new TypedValue();
     getTheme().resolveAttribute(attr, value, true);
     return getResources().getColor(value.resourceId, getTheme());
-  }
-
-  @SuppressLint("ShowToast")
-  public void showToast(String text) {
-    long now = System.currentTimeMillis();
-    if (toast == null || now - lastShow > 1000) {
-      toastbuilder.setLength(0);
-      toast = Toast.makeText(this, text, Toast.LENGTH_LONG);
-      toastbuilder.append(text);
-      toast.show();
-    } else {
-      toastbuilder.append("\n").append(text);
-      toast.setText(toastbuilder.toString());
-      toast.setDuration(Toast.LENGTH_LONG);
-    }
-    lastShow = now;
   }
 
   public void sendMsg(String msg) {
@@ -692,11 +604,6 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
       return;
     else
       sendMsg(title + ": " + msg.getMessage());
-  }
-
-  @Override
-  public Saynaa getSaynaa() {
-    return saynaa;
   }
 
   @Override
