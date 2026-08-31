@@ -7,6 +7,7 @@ import java.lang.reflect.Array;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
+import java.io.File;
 import java.util.Map;
 import java.util.function.Function;
 import android.content.Context;

@@ -271,7 +271,7 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
 
   public SaynaaDexClassLoader loadDex(String path) throws SaynaaException {
     if (dexLoader == null) {
-      dexLoader = new SaynaaDexLoader(this, new File(saynaaDir));
+      dexLoader = new SaynaaDexLoader(this, saynaaDir);
     }
     SaynaaDexClassLoader loader = dexLoader.loadDex(path);
     ReflectionFinder.setExtraClassLoaders(dexLoader.getClassLoaders());
