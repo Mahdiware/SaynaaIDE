@@ -57,7 +57,7 @@ public class FileUtil {
       PackageInfo info = context.getPackageManager().getPackageInfo(context.getPackageName(), 0);
       long updateTime = info.lastUpdateTime;
       SharedPreferences prefs = context.getSharedPreferences("saynaa_assets", Context.MODE_PRIVATE);
-      long savedTime = prefs.getLong("lastUpdateTime", -1);
+      long savedTime = prefs.getLong("last_update_time", -1);
 
       if (savedTime == updateTime) {
         return;
