@@ -21,9 +21,9 @@ public class SaynaaDexLoader {
   private final File saynaaDir;
   private final File odexDir;
 
-  public SaynaaDexLoader(Context context) {
+  public SaynaaDexLoader(Context context, File localDir) {
     this.context = context;
-    this.saynaaDir = context.getDir("saynaa", Context.MODE_PRIVATE);
+    this.saynaaDir = localDir;
     this.odexDir = context.getDir("odex", Context.MODE_PRIVATE);
   }
 

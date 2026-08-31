@@ -25,7 +25,7 @@ public class Main {
       new JavaModule(saynaa).create();
       saynaa.setGlobal("activity", context);
 
-      SaynaaDexLoader dexLoader = new SaynaaDexLoader(context);
+      SaynaaDexLoader dexLoader = new SaynaaDexLoader(context, localDir);
       dexLoader.loadLibs();
       ReflectionFinder.setExtraClassLoaders(dexLoader.getClassLoaders());
 

@@ -119,13 +119,13 @@
     </provider>
 
     <provider
-      android:name="androidx.core.content.FileProvider"
+      android:name="com.saynaa.FileProvider"
       android:authorities="com.saynaa.fileprovider"
       android:exported="false"
       android:grantUriPermissions="true">
-      <meta-data
-        android:name="android.support.FILE_PROVIDER_PATHS"
-        android:resource="@xml/filepaths" />
+          <meta-data
+              android:name="android.support.FILE_PROVIDER_PATHS"
+              android:resource="@xml/filepaths" />
     </provider>
   
   </application>

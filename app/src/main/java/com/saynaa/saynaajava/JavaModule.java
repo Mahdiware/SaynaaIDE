@@ -54,7 +54,7 @@ public class JavaModule {
   private SaynaaDexLoader dexLoader = null;
   public SaynaaDexClassLoader loadDex(String path) throws SaynaaException {
     if (dexLoader == null) {
-      dexLoader = new SaynaaDexLoader(saynaa.getContext());
+      dexLoader = new SaynaaDexLoader(saynaa.getContext(), new File(saynaa.getSaynaaDir()));
     }
     SaynaaDexClassLoader loader = dexLoader.loadDex(path);
     ReflectionFinder.setExtraClassLoaders(dexLoader.getClassLoaders());
