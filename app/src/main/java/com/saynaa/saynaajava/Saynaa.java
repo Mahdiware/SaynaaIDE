@@ -50,6 +50,14 @@ public class Saynaa {
     this.saynaadir = context.getApplicationContext().getDir("saynaa", Context.MODE_PRIVATE);
     this.dexLoader = new SaynaaDexLoader(context, saynaadir);
   }
+  
+  public Saynaa(Context context, File localDir) {
+    this.context = context;
+    this.vm = saynaa_open();
+    this.mainModule = newModule("main");
+    this.saynaadir = localDir;
+    this.dexLoader = new SaynaaDexLoader(context, localDir);
+  }
 
   // future will use these: when added multiple modules per VM
   public synchronized SaynaaModule newMainModule(String name) {

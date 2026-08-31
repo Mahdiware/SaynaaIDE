@@ -90,8 +90,7 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
       }
       saynaaDir = new File(saynaaPath).getParentFile();
 
-      saynaa = new Saynaa(this);
-      saynaa.setSaynaaDir(saynaaDir);
+      saynaa = new Saynaa(this, saynaaDir);
       new JavaModule(saynaa).create();
       saynaa.setGlobal("activity", this);
 

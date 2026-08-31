@@ -21,8 +21,7 @@ public class Main {
     }
 
     try {
-      Saynaa saynaa = new Saynaa(context);
-      saynaa.setSaynaaDir(localDir);
+      Saynaa saynaa = new Saynaa(context, localDir);
       saynaa.setGlobal("activity", context);
       saynaa.setGlobal("context", context);
 
