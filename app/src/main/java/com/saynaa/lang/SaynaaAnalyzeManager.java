@@ -10,11 +10,6 @@ import java.util.HashSet;
 import java.util.Set;
 
 public class SaynaaAnalyzeManager extends SimpleAnalyzeManager<Void> {
-  private static final Set<String> KEYWORDS = new HashSet<>(Arrays.asList("and", "break", "case",
-      "class", "continue", "delete", "default", "do", "else", "elif", "elseif", "end", "false",
-      "for", "function", "if", "import", "in", "is", "local", "module", "null", "nil", "not", "or",
-      "repeat", "return", "super", "switch", "then", "this", "true", "until", "while"));
-
   @Override
   protected Styles analyze(@NonNull StringBuilder text, Delegate<Void> delegate) {
     MappedSpans.Builder builder = new MappedSpans.Builder();
@@ -76,8 +71,12 @@ public class SaynaaAnalyzeManager extends SimpleAnalyzeManager<Void> {
       if (isWordStart(c)) {
         int wordEnd = scanWord(text, start, end, col);
         String word = text.substring(start + col, start + wordEnd);
-        if (KEYWORDS.contains(word)) {
+
+        if (Arrays.asList(SaynaaCompletionItems.KEYWORDS).contains(word)) {
           builder.addIfNeeded(line, col, EditorColorScheme.KEYWORD);
+          builder.addIfNeeded(line, wordEnd, EditorColorScheme.TEXT_NORMAL);
+        } else if ((Arrays.asList(SaynaaCompletionItems.FUNCTIONS).contains(word))) {
+          builder.addIfNeeded(line, col, EditorColorScheme.FUNCTION_NAME);
           builder.addIfNeeded(line, wordEnd, EditorColorScheme.TEXT_NORMAL);
         }
         col = wordEnd;

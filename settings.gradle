@@ -19,15 +19,10 @@ dependencyResolutionManagement {
 		google()
 		mavenCentral()
 	}
-	versionCatalogs {
-		libs {
-			from(files('sora-editor/gradle/libs.versions.toml'))
-		}
-	}
 }
 
 include ':app'
 include ':sora-editor'
 
-project(':sora-editor').projectDir = new File(rootDir, 'sora-editor/editor')
+project(':sora-editor').projectDir = new File(rootDir, 'sora-editor')
 rootProject.name = "Saynaa IDE"

@@ -5,6 +5,5 @@ package com.saynaa.view;
  * to the DrawerLayout itself.
  */
 public interface DrawerLayoutImpl {
-	void setChildInsets(Object insets, boolean drawStatusBar);
+  void setChildInsets(Object insets, boolean drawStatusBar);
 }
-

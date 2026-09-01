@@ -92,6 +92,15 @@ DemoLayout = {
       layout_height: 'wrap_content',
       layout_marginBottom: '12dp'
     },
+
+    {
+      CodeEditor,
+      id: 'DemoEditor',
+      layout_width: 'match_parent',
+      layout_height: '200dp',
+      text: 'function hello()\n  print("Hello, Saynaa!")\nend',
+      textSize: '16sp',
+    },
   
     {
       Button,

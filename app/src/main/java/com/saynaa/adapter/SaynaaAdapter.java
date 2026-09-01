@@ -96,7 +96,7 @@ public class SaynaaAdapter extends BaseAdapter implements Filterable {
 
   public SaynaaAdapter(SaynaaMap layoutSpec, SaynaaList data) {
     Saynaa saynaa = layoutSpec.getSaynaa();
-    
+
     Object global = saynaa.getGlobal("LoadLayout");
     if (global instanceof SaynaaClass) {
       LoadLayout = (SaynaaClass) global;
