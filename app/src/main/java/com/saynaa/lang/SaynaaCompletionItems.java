@@ -5,5 +5,7 @@ public final class SaynaaCompletionItems {
       "function", "do", "end", "as", "null", "in", "is", "and", "or", "not", "true", "false",
       "this", "super", "break", "while", "for", "continue", "return", "then"};
 
-  public static final String[] FUNCTIONS = {"print", "type", "str", "int", "loadfile", "error", "pcall"};
+  public static final String[] FUNCTIONS = {"help", "dir", "assert", "hash", "hashable", "bin",
+      "hex", "yield", "str", "type", "int", "chr", "ord", "min", "max", "print", "input", "exit",
+      "eval", "loadfile", "define", "delete", "pcall", "error"};
 }
