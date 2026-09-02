@@ -409,7 +409,8 @@ Module* importDL(VM* vm, String* resolved, String* name) {
 
   NativeLibCacheEntry* lib_entry = _dlCacheAcquire(vm, resolved);
   if (lib_entry == NULL) {
-    VM_SET_ERROR(vm, stringFormat(vm, "Error loading module at \"@\"", resolved));
+    if (!VM_HAS_ERROR(vm))
+      VM_SET_ERROR(vm, stringFormat(vm, "Error loading module at \"@\"", resolved));
     return NULL;
   }
 

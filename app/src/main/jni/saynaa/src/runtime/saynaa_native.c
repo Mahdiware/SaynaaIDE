@@ -7,6 +7,8 @@
 
 #define DL_IMPLEMENT
 #include "saynaa_native.h"
+#include "../runtime/saynaa_vm.h"
+#include "../shared/saynaa_value.h"
 
 #include <stdlib.h>
 
@@ -101,8 +103,11 @@ typedef struct {
 void* osLoadDL(VM* vm, const char* path) {
   // Lua uses RTLD_NOW and local visibility by default. Allow host override.
   void* os_handle = dlopen(path, SAYNAA_DL_FLAGS);
-  if (os_handle == NULL)
+  if (os_handle == NULL) {
+    const char* error = dlerror();
+    VM_SET_ERROR(vm, stringFormat(vm, "Error loading module at '$': $", path, error ? error : "unknown error"));
     return NULL;
+  }
 
   InitApiFn init_fn = (InitApiFn) dlsym(os_handle, API_INIT_FN_NAME);
   if (init_fn == NULL) {
