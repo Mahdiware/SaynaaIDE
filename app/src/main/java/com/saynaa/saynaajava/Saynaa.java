@@ -26,8 +26,7 @@ public class Saynaa {
   public static final int SLOT_TYPE_FIBER = 11;
   public static final int SLOT_TYPE_CLASS = 12;
   public static final int SLOT_TYPE_POINTER = 13;
-  public static final int SLOT_TYPE_CONTEXT = 14;
-  public static final int SLOT_TYPE_INSTANCE = 15;
+  public static final int SLOT_TYPE_INSTANCE = 14;
 
   private File saynaadir;
   private Context context;

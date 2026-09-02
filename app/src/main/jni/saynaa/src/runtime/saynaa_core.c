@@ -935,16 +935,6 @@ Var varOpRange(VM* vm, Var v1, Var v2) {
 #undef UNSUPPORTED_BINARY_OP
 
 bool varContains(VM* vm, Var elem, Var container) {
-  if (IS_NULL(container) || IS_UNDEF(container)) {
-    VM_SET_ERROR(vm, newString(vm, "Argument of type null is not iterable."));
-    return false;
-  }
-
-  if (!IS_OBJ(container)) {
-    VM_SET_ERROR(vm, stringFormat(vm, "'$' is not iterable.", varTypeName(container)));
-    return false;
-  }
-
   if (!IS_OBJ(container)) {
     VM_SET_ERROR(vm, stringFormat(vm, "'$' is not iterable.", varTypeName(container)));
     return false;

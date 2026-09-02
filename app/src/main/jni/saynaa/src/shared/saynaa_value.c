@@ -2039,8 +2039,6 @@ ObjectType getVarObjType(VarType type) {
       return OBJ_CLASS;
     case vPOINTER:
       return OBJ_POINTER;
-    case vCONTEXT:
-      return OBJ_CONTEXT;
     case vINSTANCE:
       return OBJ_INST;
   }

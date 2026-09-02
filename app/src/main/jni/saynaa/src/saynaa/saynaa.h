@@ -192,7 +192,6 @@ typedef enum VarType {
   vFIBER,
   vCLASS,
   vPOINTER,
-  vCONTEXT,
   vINSTANCE,
 } VarType;
 
