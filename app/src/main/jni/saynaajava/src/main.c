@@ -386,7 +386,7 @@ void android_stdout_write(VM* vm, const char* text) {
 }
 
 void android_stderr_write(VM* vm, const char* text) {
-  LOGE("%s", text == NULL ? "" : text);
+  //LOGE("%s", text == NULL ? "" : text);
   if (vm == NULL || text == NULL || text[0] == '\0')
     return;
 

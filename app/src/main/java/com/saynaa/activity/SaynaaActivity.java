@@ -55,10 +55,6 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
   protected String saynaaPath;
   protected File localDir;
 
-  protected Handler handler;
-  protected TextView status;
-  protected LinearLayout layout;
-
   private int activityFlags = 0;
   protected boolean DebugMode = true;
 
@@ -76,8 +72,6 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
     StrictMode.ThreadPolicy policy = new StrictMode.ThreadPolicy.Builder().permitAll().build();
     StrictMode.setThreadPolicy(policy);
     super.onCreate(savedInstanceState);
-
-    initUiShell();
 
     localDir = getDir("saynaa", Context.MODE_PRIVATE);
 
@@ -103,7 +97,6 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
         if (initResult != 0) {
           sendMsg("Startup failed @ " + initFile.getAbsolutePath() + "\n");
           Log.e(TAG, "Failed to run init.sa @ " + initFile.getAbsolutePath() + ", result: " + initResult);
-          setContentView(layout);
           return;
         }
       }
@@ -111,7 +104,6 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
       if (result != 0) {
         Log.e(TAG, "Failed to run main.sa @ " + saynaaPath + ", result: " + result);
         sendMsg("Startup failed @ " + saynaaPath + "\n");
-        setContentView(layout);
         return;
       }
 
@@ -138,7 +130,6 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
     } catch (Throwable t) {
       Log.e(TAG, "onCreate failed", t);
       sendMsg("onCreate error: " + t.toString());
-      setContentView(layout);
     }
   }
 
@@ -457,22 +448,6 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
     DebugMode = mode;
   }
 
-  public void onNativeError(String msg) {
-    if (msg == null || msg.trim().isEmpty()) {
-      return;
-    }
-
-    String error = msg;
-    if (!error.endsWith("\n")) {
-      error += "\n";
-    }
-
-    if (DebugMode) {
-      setContentView(layout);
-      sendMsg(error);
-    }
-  }
-
   public void addActivityFlag(int flag) {
     activityFlags |= flag;
   }
@@ -592,7 +567,6 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
     bundle.putString(DATA, msg);
     message.setData(bundle);
     message.what = 0;
-    handler.sendMessage(message);
     Log.i(TAG, msg);
   }
 
@@ -608,42 +582,5 @@ public class SaynaaActivity extends Activity implements SaynaaBroadcastReceiver.
   @Override
   public Context getContext() {
     return this;
-  }
-
-  private void initUiShell() {
-    handler = new MainHandler();
-
-    layout = new LinearLayout(this);
-    layout.setOrientation(LinearLayout.VERTICAL);
-
-    ScrollView scroll = new ScrollView(this);
-    scroll.setFillViewport(true);
-
-    status = new TextView(this);
-    status.setText("");
-    status.setTextIsSelectable(true);
-    scroll.addView(status, new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
-                               ViewGroup.LayoutParams.WRAP_CONTENT));
-
-    layout.addView(scroll, new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
-                               ViewGroup.LayoutParams.WRAP_CONTENT));
-  }
-
-  private final class MainHandler extends Handler {
-    @Override
-    public void handleMessage(Message msg) {
-      super.handleMessage(msg);
-      if (msg.what == 0) {
-        String data = msg.getData().getString(DATA);
-        if (data == null) {
-          data = "";
-        }
-        // Some sources send escaped newlines ("\\n") instead of real LF.
-        // Normalize before rendering so TextView shows proper line breaks.
-        data = data.replace("\\r\\n", "\n").replace("\\n", "\n").replace("\\r", "\n");
-        status.setTextColor(getThemeColor(android.R.attr.textColorPrimary));
-        status.append(data + "\n");
-      }
-    }
   }
 }

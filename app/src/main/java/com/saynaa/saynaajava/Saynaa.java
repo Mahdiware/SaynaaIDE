@@ -7,11 +7,13 @@ import com.saynaa.activity.SaynaaActivity;
 import com.saynaa.saynaajava.JavaMethodBinding;
 import com.saynaa.saynaajava.PCallResult;
 import com.saynaa.saynaajava.datatype.*;
+import com.saynaa.view.ErrorWindow;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 
 public class Saynaa {
+  // Constants for slot types
   public static final int SLOT_TYPE_OBJECT = 0;
   public static final int SLOT_TYPE_NULL = 1;
   public static final int SLOT_TYPE_BOOL = 2;
@@ -32,6 +34,9 @@ public class Saynaa {
   private Context context;
   private SaynaaModule mainModule;
   private SaynaaDexLoader dexLoader;
+  private SaynaaErrorListener errorListener;
+  private ErrorWindow errorWindow;
+  private boolean DebugMode = true;
 
   /**
    * Array with all mainModule's instances.
@@ -48,14 +53,41 @@ public class Saynaa {
     this.mainModule = newModule("main");
     this.saynaadir = context.getApplicationContext().getDir("saynaa", Context.MODE_PRIVATE);
     this.dexLoader = new SaynaaDexLoader(context, saynaadir);
+
+    this.errorWindow = new ErrorWindow(context);
   }
-  
+
   public Saynaa(Context context, File localDir) {
     this.context = context;
     this.vm = saynaa_open();
     this.mainModule = newModule("main");
     this.saynaadir = localDir;
     this.dexLoader = new SaynaaDexLoader(context, localDir);
+
+    this.errorWindow = new ErrorWindow(context);
+  }
+
+  public synchronized void setErrorListener(SaynaaErrorListener listener) {
+    this.errorListener = listener;
+  }
+
+  public synchronized void onNativeError(String message) {
+    if (!DebugMode)
+      return;
+
+    if (message == null || message.trim().isEmpty())
+      return;
+
+    errorWindow.appendMessage(message);
+    errorWindow.show();
+
+    if (errorListener != null) {
+      errorListener.onNativeError(message);
+    }
+  }
+
+  public synchronized void setDebugMode(boolean mode) {
+    this.DebugMode = mode;
   }
 
   // future will use these: when added multiple modules per VM
@@ -84,6 +116,7 @@ public class Saynaa {
 
   public synchronized void setSaynaaDir(File dir) {
     this.saynaadir = dir;
+    this.dexLoader.setDir(dir);
   }
 
   public synchronized File getSaynaaDir() {
@@ -379,18 +412,6 @@ public class Saynaa {
 
   public synchronized boolean isClosed() {
     return this.vm == 0;
-  }
-
-  // Called from native bridge when VM writes to stderr.
-  public synchronized void onNativeError(String message) {
-    if (message == null || message.trim().isEmpty())
-      return;
-
-    Log.e("saynaajava", message);
-
-    if (context instanceof SaynaaActivity) {
-      ((SaynaaActivity) context).onNativeError(message);
-    }
   }
 
   public synchronized long getCPtrPeer() {

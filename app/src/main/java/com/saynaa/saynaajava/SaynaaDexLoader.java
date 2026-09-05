@@ -18,13 +18,17 @@ public class SaynaaDexLoader {
   private final HashMap<String, String> libCache = new HashMap<>();
 
   private final Context context;
-  private final File saynaaDir;
-  private final File odexDir;
+  private File saynaaDir;
+  private File odexDir;
 
   public SaynaaDexLoader(Context context, File localDir) {
     this.context = context;
     this.saynaaDir = localDir;
     this.odexDir = context.getDir("odex", Context.MODE_PRIVATE);
+  }
+
+  public void setDir(File dir) {
+    this.saynaaDir = dir;
   }
 
   public ArrayList<ClassLoader> getClassLoaders() {
@@ -54,8 +58,32 @@ public class SaynaaDexLoader {
     }
   }
 
+  // Load all dex/jar files from the Saynaa directory.
   public void loadLibs() throws SaynaaException {
     File libsDir = new File(saynaaDir, "libs");
+    File[] libs = libsDir.listFiles();
+    if (libs == null) {
+      return;
+    }
+    for (File f : libs) {
+      if (f.isDirectory()) {
+        continue;
+      }
+      loadDex(f.getAbsolutePath());
+    }
+  }
+
+  // Load all dex/jar files from a directory. If the directory does not exist,
+  // try to load from the Saynaa directory.
+  public void loadLibs(String libDir) throws SaynaaException {
+    File libsDir = new File(libDir);
+
+    if (!libsDir.exists() || !libsDir.isDirectory()) {
+      libsDir = new File(saynaaDir, libDir);
+      if (!libsDir.exists() || !libsDir.isDirectory())
+        return;
+    }
+
     File[] libs = libsDir.listFiles();
     if (libs == null) {
       return;
@@ -125,8 +153,7 @@ public class SaynaaDexLoader {
 
       if (dex == null) {
         dex = new SaynaaDexClassLoader(internalDex.getAbsolutePath(), null,
-            context.getApplicationInfo().nativeLibraryDir,
-            context.getApplicationContext().getClassLoader());
+            context.getApplicationInfo().nativeLibraryDir, context.getApplicationContext().getClassLoader());
 
         dexCache.put(name, dex);
       }

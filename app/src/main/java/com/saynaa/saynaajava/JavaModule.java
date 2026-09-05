@@ -33,7 +33,6 @@ public class JavaModule {
       module.setGlobal("getField", FieldHelper.class, "getFieldValue");
       module.setGlobal("setField", FieldHelper.class, "setFieldValue");
       module.setGlobal("tostring", this, "javaToString");
-      module.setGlobal("testing", this, "testing");
       module.setGlobal("call", MethodHelper.class, "call");
       module.setGlobal("instanceof", this, "instanceOf");
       module.setGlobal("length", this, "lengthOf");
@@ -41,6 +40,7 @@ public class JavaModule {
       module.setGlobal("getClassName", this, "getClassName");
       module.setGlobal("getPackageName", this, "getPackageName");
       module.setGlobal("getSimpleClassName", this, "getSimpleClassName");
+      module.setGlobal("setDebugMode", this, "setDebugMode");
       module.register();
     } catch (Exception e) {
       return false;
@@ -48,8 +48,8 @@ public class JavaModule {
     return true;
   }
 
-  public Object testing(Object object) {
-    return object;
+  public void setDebugMode(boolean mode) {
+    saynaa.setDebugMode(mode);
   }
 
   public void loadDex(String path) throws SaynaaException {
