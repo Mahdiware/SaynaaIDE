@@ -61,7 +61,6 @@ public class ErrorWindow {
 
   private TextView titleView;
   private TextView subtitleView;
-  private TextView sourceView;
   private TextView messageView;
   private ScrollView scrollView; // Kept at class level for auto-scrolling
 
@@ -91,7 +90,6 @@ public class ErrorWindow {
   private int resizeStartWidth;
   private int resizeStartHeight;
 
-  private final int minWidth, minHeight;
   private final int screenWidth, screenHeight;
   private final int defaultWidth, defaultHeight;
 
@@ -111,9 +109,6 @@ public class ErrorWindow {
 
     defaultWidth = (int) (screenWidth * 0.80f);
     defaultHeight = (int) (screenHeight * 0.60f);
-
-    minWidth = dp(400);
-    minHeight = dp(320);
 
     createLayout();
   }
@@ -194,20 +189,6 @@ public class ErrorWindow {
     View errorLine = new View(context);
     errorLine.setBackgroundColor(ERROR);
     rootLayout.addView(errorLine, new LinearLayout.LayoutParams(-1, dp(2)));
-
-    // [Source Setup]
-    LinearLayout sourceContainer = new LinearLayout(context);
-    sourceContainer.setOrientation(LinearLayout.HORIZONTAL);
-    sourceContainer.setPadding(dp(14), dp(7), dp(14), dp(7));
-    sourceContainer.setBackgroundColor(CONTENT_BG);
-    rootLayout.addView(sourceContainer, new LinearLayout.LayoutParams(-1, dp(36)));
-
-    sourceView = new TextView(context);
-    sourceView.setTextColor(TEXT_SECONDARY);
-    sourceView.setTextSize(11);
-    sourceView.setTypeface(Typeface.MONOSPACE);
-    sourceView.setSingleLine(true);
-    sourceContainer.addView(sourceView, new LinearLayout.LayoutParams(-1, -1));
 
     // [Scroll View Setup]
     scrollView = new ScrollView(context);
@@ -325,8 +306,8 @@ public class ErrorWindow {
       case MotionEvent.ACTION_MOVE:
         int newWidth = resizeStartWidth + (int) (event.getRawX() - resizeDownX);
         int newHeight = resizeStartHeight + (int) (event.getRawY() - resizeDownY);
-        params.width = Math.max(minWidth, newWidth);
-        params.height = Math.max(minHeight, newHeight);
+        params.width = newWidth;
+        params.height = newHeight;
         manager.updateViewLayout(root, params);
         return true;
       }
@@ -418,11 +399,6 @@ public class ErrorWindow {
 
   public ErrorWindow setSubtitle(String subtitle) {
     subtitleView.setText(safe(subtitle));
-    return this;
-  }
-
-  public ErrorWindow setSource(String source) {
-    sourceView.setText(safe(source));
     return this;
   }
 
